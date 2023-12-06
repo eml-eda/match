@@ -19,6 +19,7 @@ if __name__=="__main__":
     #onnx_model=onnx.load(onnx_file)
     #print(onnx_model)
     #mod, params=relay.frontend.from_onnx(onnx_model)
+    #breakpoint()
     from relay_conv2d import create_model
     mod, params = create_model()
     print(mod)

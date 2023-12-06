@@ -1,0 +1,1 @@
+void match_init_platform(){}

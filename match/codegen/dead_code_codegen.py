@@ -841,7 +841,7 @@ class ZigZagWorkloadParser:
         try:
             # skip if not supported for testing purposes
             if len(self.workload.keys()) == 0:
-                return dory_gap9_compiler(self.mod)[1], False, 0, None
+                return "ERROR", False, 0, None
             self.template_data()
             temp = Template(filename="./templates/gap9_template.c")
             return temp.render(**self.temp_data), False, self.latency, self.cme
@@ -855,34 +855,32 @@ def generate_code(arch_def, mod, std_cost_model: bool = False, temp_mapping: boo
     parser.visit()
     parser.zigzag(temp_mapping, std_cost_model, forced_temporal_mapping)
     code, error_codegen, latency, cme = parser.get_code()
-    if profiling:
-        import hashlib
-
-        layer = hashlib.sha256(str(mod).encode("UTF-8")).hexdigest()
-        tm_shape = f"\nO cycles {cme.temporal_mapping.mapping_dic_stationary['O']}\nI cycles {cme.temporal_mapping.mapping_dic_stationary['I']}"
-        cme_data = f"\ntransfer_calls_per_time_from_to_l2 {cme.transfer_calls_per_time_from_to_l2}\nrelmap {cme.relmap}\nmultiplicity_l2{cme.multiplicity_l2}\nmultiplicity_rel_L2{cme.multiplicity_rel_L2}"
-        if not std_cost_model:
-            tm_data = f"and tm data like\ntotal cycles {cme.temporal_mapping.total_cycle}\ncontrib {cme.temporal_mapping.contrib}\nspatial_mapping_sizes {cme.temporal_mapping.spatial_mapping_sizes}"
-        else:
-            tm_data = f"and tm data like\ntotal cycles {cme.temporal_mapping.total_cycle}"
-        with open(
-            f"./outputs/zigzag-data/{mod.attrs.global_symbol}_data_{layer}.txt", "w"
-        ) as fw:
-            fw.write(
-                f"Latency for {layer} is {latency}\nwith latency divided like {cme.__jsonrepr__()['outputs']['latency']}\nworkload is {cme.layer.loop_dim_size}\n{tm_data} {tm_shape} {cme_data}"
-            )
-
+    #if profiling:
+    #    import hashlib
+    #    layer = hashlib.sha256(str(mod).encode("UTF-8")).hexdigest()
+    #    tm_shape = f"\nO cycles {cme.temporal_mapping.mapping_dic_stationary['O']}\nI cycles {cme.temporal_mapping.mapping_dic_stationary['I']}"
+    #    cme_data = f"\ntransfer_calls_per_time_from_to_l2 {cme.transfer_calls_per_time_from_to_l2}\nrelmap {cme.relmap}\nmultiplicity_l2{cme.multiplicity_l2}\nmultiplicity_rel_L2{cme.multiplicity_rel_L2}"
+    #    if not std_cost_model:
+    #        tm_data = f"and tm data like\ntotal cycles {cme.temporal_mapping.total_cycle}\ncontrib {cme.temporal_mapping.contrib}\nspatial_mapping_sizes {cme.temporal_mapping.spatial_mapping_sizes}"
+    #    else:
+    #        tm_data = f"and tm data like\ntotal cycles {cme.temporal_mapping.total_cycle}"
+    #    with open(
+    #        f"./outputs/zigzag-data/{mod.attrs.global_symbol}_data_{layer}.txt", "w"
+    #    ) as fw:
+    #        fw.write(
+    #            f"Latency for {layer} is {latency}\nwith latency divided like {cme.__jsonrepr__()['outputs']['latency']}\nworkload is {cme.layer.loop_dim_size}\n{tm_data} {tm_shape} {cme_data}"
+    #        )
     return code, error_codegen
 
 
 def codegen(mod: tvm.ir.IRModule):
-    device_name = mod.attrs.global_symbol.split("_")[1]
-    code, error_codegen = generate_code(device_name, mod)
-    with open(
-        f'./outputs/{mod.attrs.global_symbol}.{"html" if error_codegen else "c"}',
-        "wb" if error_codegen else "w",
-    ) as fw:
-        fw.write(code)
+    device_name,pattern_name = mod.body.op.attrs["Composite"].split(".")[1].split("_")
+    code, error_codegen = generate_code(device_name, pattern_name, mod)
+    #with open(
+    #    f'./outputs/{mod.attrs.global_symbol}.{"html" if error_codegen else "c"}',
+    #    "wb" if error_codegen else "w",
+    #) as fw:
+    #    fw.write(code)
     if error_codegen:
         raise Exception("Couldn't generate output")
     return code

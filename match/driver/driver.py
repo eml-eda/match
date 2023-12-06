@@ -1,10 +1,10 @@
 from tvm.driver.tvmc.model import TVMCModel
 import os
-from typing import Dict
+from typing import Dict,List
 from abc import ABC, abstractmethod
 import tvm
 import numpy as np
-from utils import utils
+from match.utils import utils
 import subprocess
 import pathlib
 import shutil
@@ -125,10 +125,11 @@ class MatchDriver(Driver):
                  byoc_path: pathlib.Path = "/match/src/gap9byoc",
                  dory_path: pathlib.Path = "/dory",
                  no_of_inputs: int = 1,
+                 devices: List[str] = ["gap9cluster",],
                  tvmzigzag_path: pathlib.Path = "/match/src/gap9byoc/templates/gap9"):
         super(MatchDriver, self).__init__(mod, params, build_dir, byoc_path, no_of_inputs)
-        self.device = "gap9"
-        self.build_dir = os.path.join(self.build_dir, self.device)
+        self.devices=devices
+        self.build_dir = os.path.join(self.build_dir, "-".join(self.devices))
         ## Placeholders in case profiling code is added
         #self.kernels = None
         #self.measurement = None
@@ -137,7 +138,7 @@ class MatchDriver(Driver):
         #utils.copy_tvmzigzag_files(tvmzigzag_path, self.build_dir)
 
     def tvm_compile(self, 
-                    target: str = "match -requant_transform=0 -device=gap9, c",
+                    target_additional_info: str = "",
                     fusion: bool = True,
                     init_value: int = 1,
                     indefinite: bool = False,
@@ -158,8 +159,9 @@ class MatchDriver(Driver):
         :param boot_cluster: put cluster cores boot code in C wrapper before
             calling TVM generated code.
         """
+        devices_target=f'-devices="{",".join(self.devices)}"' if len(self.devices)>0 else ""
         utils.tvmc_compile_and_unpack(self.model, 
-                                      target=target,
+                                      target=f'match -requant_transform=0 {devices_target} {target_additional_info} ,c',
                                       fuse_layers=fusion,
                                       byoc_path=self.byoc_path,
                                       build_path=self.build_dir)
@@ -237,7 +239,8 @@ def driver(mod: tvm.ir.IRModule,
            out_channels: int = 1,
            out_height: int = 1,
            out_width: int = 1,
-           profiling: list[str] = ['correct']):
+           profiling: List[str] = ['correct'],
+           devices: List[str]=["gap9cluster"]):
     """
     Compile (and run) a model for DIANA for testing purposes
 
@@ -246,10 +249,11 @@ def driver(mod: tvm.ir.IRModule,
     Afterwards an x86 compiled model is used to compare outputs
     """
     # Create the model library format file and unpack
-    breakpoint()
+    #breakpoint()
     d_gap9 = MatchDriver(mod, params, build_dir=build_dir,
                           byoc_path=byoc_path,
-                          no_of_inputs= no_of_inputs)
+                          no_of_inputs= no_of_inputs,
+                          devices=devices)
     d_gap9.tvm_compile(fusion=True)
     d_gap9.add_profiler(measurement="individual")
     d_gap9.gcc_compile(gcc_opt=3)
