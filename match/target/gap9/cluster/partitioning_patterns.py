@@ -36,6 +36,7 @@ proposed_pattern_matcher={
 import tvm
 import logging
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
+from match.partition.partitioning_pattern import PartitioningPattern
 
 logger = logging.getLogger("Gap9Cluster")
 
@@ -63,7 +64,33 @@ def conv2d_pattern():
     )
     return _biasadd_requant_pattern(conv2d)
 
+def only_conv_2d_pattern():
+    """Create pattern for conv2D"""
+    conv2d = is_op("nn.conv2d")(
+            wildcard(), wildcard()
+    )
+    return conv2d
 
+def check_only_conv2d(pattern):
+    """Check if the Conv2D is supported by the arch accelerator"""
+    breakpoint()
+
+    return True
+
+def only_bias_pattern():
+    """Create pattern for conv2D"""
+    #conv2d = is_op("nn.conv2d")(
+    #        wildcard(), wildcard()
+    #)
+    #bias_add = wildcard()
+    bias_add = is_op("nn.bias_add")(wildcard(), wildcard()) | is_op("add")(wildcard(), wildcard())
+    return bias_add
+
+def check_only_bias(pattern):
+    """Check if the bias is supported by the arch accelerator"""
+    breakpoint()
+
+    return True
 def fully_connected_pattern():
     """Create pattern for nn.dense with optional fused relu."""
 
@@ -123,7 +150,6 @@ def _check_biasadd_requant(pattern):
         return None
 
     return bias_add.args[0]
-
 
 def check_conv2d(pattern):
     """Check if the Conv2D is supported by the soma dory accelerator"""
@@ -235,20 +261,21 @@ def check_element_wise_add(pattern):
     return True
 
 def partitioning_patterns():
-    return [
-        {   
-            "name":"gap9cluster_conv2d",
-            "pattern_matcher":conv2d_pattern,
-            "pattern_limitations":check_conv2d,
+    testing_pts=[
+        {
+            "name":"gapcluster_onlybias",
+            "pattern_matcher":only_bias_pattern,
+            "pattern_limitations":check_only_bias,
         },
         {
-            "name":"gap9cluster_dense",
-            "pattern_matcher":fully_connected_pattern,
-            "pattern_limitations":check_fully_connected,
+            "name":"gapcluster_onlyconv2d",
+            "pattern_matcher":only_conv_2d_pattern,
+            "pattern_limitations":check_only_conv2d,
         },
-        {
-            "name":"gap9cluster_add",
-            "pattern_matcher":element_wise_add_pattern,
-            "pattern_limitations":check_element_wise_add,
-        },
+    ]
+    testing_pts=[]
+    return testing_pts+[
+        PartitioningPattern(name="gap9cluster_conv2d",pattern=conv2d_pattern,additional_checks=check_conv2d),
+        PartitioningPattern(name="gap9cluster_dense",pattern=fully_connected_pattern,additional_checks=check_fully_connected),
+        PartitioningPattern(name="gap9cluster_add",pattern=element_wise_add_pattern,additional_checks=check_element_wise_add),
     ]

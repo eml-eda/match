@@ -6,35 +6,39 @@ import numpy as np
 import tvm
 from match.codegen.layer_data import LayerData
 
-from match.hwmodel.hwmodel import HwModel
+from match.target.exec_module import ExecModule
 
 REQUIRED_HW_DEPENDENT_PARAMS=("weights")
 
 class TemplateDataGenerator:
-    def __init__(self,mod:tvm.ir.IRModule,temporal_mapping:List=[],layer_data:LayerData=None,hwmodel:HwModel=None,pattern_name:str=""):
+    def __init__(self,mod:tvm.ir.IRModule,temporal_mapping:List=[],layer_data:LayerData=None,exec_module:ExecModule=None,pattern_name:str=""):
         self.mod=mod
         self.temporal_mapping=temporal_mapping
         self.layer_data=layer_data
-        self.hwmodel=hwmodel
+        self.exec_module=exec_module
         self.pattern_name=pattern_name
         self.template_data=dict()
             
     def generate_hw_dependent_template_data(self):
         hw_dependent_template_data = dict()
-        hw_dependent_template_data["weights"] = self.hwmodel.weights_and_constants(self.layer_data.layer_arguments)
-        hw_dependent_template_data["apis"] = self.hwmodel.apis_names()
-        hw_dependent_template_data["kernel_params"] = self.hwmodel.additional_kernel_parameters()
-        hw_dependent_template_data["ordered_operand_memories"] = self.hwmodel.operand_memories(self.layer_data.operands)
+        hw_dependent_template_data["weights_and_constants"] = self.exec_module.weights_and_constants(self.layer_data.layer_arguments)
+        hw_dependent_template_data["apis"] = self.exec_module.match_apis()
+        hw_dependent_template_data["sync_apis"] = self.exec_module.match_sync_apis()
+        hw_dependent_template_data["types"] = self.exec_module.match_types()
+        hw_dependent_template_data["kernel_params"] = self.exec_module.additional_kernel_parameters()
+        hw_dependent_template_data["ordered_operand_memories"] = self.exec_module.operand_memories(self.layer_data.operands)
         self.template_data={**self.template_data,**hw_dependent_template_data}
 
     def generate_general_template_data(self):
         general_template_data=dict()
         ## layer data
+        general_template_data["layer_data"] = self.layer_data
         general_template_data["operands"] = self.layer_data.operands
         general_template_data["input_operands"] = self.layer_data.input_operands
         general_template_data["padded_dims"] = self.layer_data.padded_dims
         general_template_data["input_dim_mapping"] = self.layer_data.input_dim_mapping
         general_template_data["ordered_relevant_loops"] = self.layer_data.ordered_relevant_loops
+        general_template_data["pattern_operations"]=self.layer_data.pattern_operations
         general_template_data["layer_attrs"] = self.layer_data.layer_attrs
         general_template_data["default_mem"] = {operand: self.template_data["ordered_operand_memories"][operand][0] for operand in self.layer_data.operands}
         ## function details
@@ -54,7 +58,7 @@ class TemplateDataGenerator:
             self.temporal_mapping=[one_sized_loop_to_add]+self.temporal_mapping
         
         general_template_data["for_loops"] = self.temporal_mapping
-        general_template_data["workload_name"] = self.layer_data.workload_name
+        general_template_data["pattern_name"] = self.pattern_name
 
         ## get loops that are managed by back-end kernels, so lower level memory ones
         general_template_data["kernel_loops"] = set(
@@ -80,39 +84,31 @@ class TemplateDataGenerator:
             lp["fullname"]: {**lp, "idx_loops": idx}
             for idx, lp in enumerate(general_template_data["sw_for_loops"])
         }
-        tiling_sizes = dict()
+        tiling_sizes = {operand:dict() for operand in general_template_data["operands"]}
         tiled_dimensions = set(
             [
                 mfl["fullname"]
                 for mfl in self.temporal_mapping
-                if mfl["index"] > 0
+                if mfl["index"] > 0 and (mfl["fullname"] in general_template_data["sw_for_loops_dict"])
             ]
         )
-        for fl in self.temporal_mapping:
-            if fl["index"]==0:
-                for dim_name in set(
-                    [
-                        fl["name"] if operand not in general_template_data["input_operands"] else general_template_data["input_dim_mapping"][fl["name"]]
-                        for operand in general_template_data["operands"]
-                        if fl["name"] in general_template_data["ordered_relevant_loops"][operand]
-                    ]
-                ):
-                    tiling_sizes[dim_name]={"name":fl["name"],"size":1,"index":fl["index"]}
+        # we don't need "virtual" tiles of size 1 I think
+        #for fl in self.temporal_mapping:
+        #    if fl["index"]==0:
+        #        for operand in [op for op in general_template_data["operands"] if fl["name"] in general_template_data["ordered_relevant_loops"][op]]:
+        #            dim_name=fl["name"] if operand not in general_template_data["input_operands"] else general_template_data["input_dim_mapping"][fl["name"]]
+        #            tiling_sizes[operand][dim_name]={"name":fl["name"],"size":1,"index":fl["index"]}
         
-        current_dims = copy.deepcopy(general_template_data["layer_attrs"]["loop_sizes"])
-        for fl in self.temporal_mapping:
+        current_dims = {operand:copy.deepcopy(general_template_data["layer_attrs"]["loop_sizes"]) for operand in general_template_data["operands"]}
+        for fl in general_template_data["sw_for_loops"]:
             if fl["fullname"] in tiled_dimensions:
-                for dim_name in set(
-                    [
-                        fl["name"] if operand not in general_template_data["input_operands"] else general_template_data["input_dim_mapping"][fl["name"]]
-                        for operand in general_template_data["operands"]
-                        if fl["name"] in general_template_data["ordered_relevant_loops"][operand]
-                    ]
-                ):
+                for operand in [op for op in general_template_data["operands"] if fl["name"] in general_template_data["ordered_relevant_loops"][op]]:
+                    dim_name=fl["name"] if operand not in general_template_data["input_operands"] else general_template_data["input_dim_mapping"][fl["name"]]
                     fl_fullname = dim_name if fl["index"] == 0 else f'{dim_name}_{fl["index"]}'
-                    size_ = current_dims[dim_name] / fl["size"]
-                    tiling_sizes[fl_fullname] = {"name":fl["name"],"size":size_,"index":fl["index"]}
-                    current_dims[dim_name] = size_
+                    size_ = current_dims[operand][dim_name] / fl["size"]
+                    tiling_sizes[operand][fl_fullname] = {"name":fl["name"],"size":size_,"index":fl["index"]}
+                    current_dims[operand][dim_name] = size_
+        
         general_template_data["tiling_sizes"] = tiling_sizes
         general_template_data["memory_transfers"] = {
             sl["fullname"]: [
@@ -126,13 +122,13 @@ class TemplateDataGenerator:
             ]
             for idx, sl in enumerate(general_template_data["sw_for_loops"])
         }
-        general_template_data["last_movements"] = {operand: 0 for operand in self.layer_data.operands}
+        general_template_data["last_movements"] = {operand: -1 for operand in self.layer_data.operands}
         general_template_data["size_loops_mem"] = {
             operand: {
                 rel_dim: {
                     general_template_data["default_mem"][operand]: general_template_data["layer_attrs"]["loop_sizes"][
                         rel_dim
-                        if self.layer_data.workload_name == "depthwise_conv_2d"
+                        if "conv_2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["conv_2d_depthwise"]
                         or operand not in general_template_data["input_operands"]
                         else general_template_data["input_dim_mapping"][rel_dim]
                     ],
@@ -140,7 +136,7 @@ class TemplateDataGenerator:
                         general_template_data["sw_for_loops_dict"][fl_mem_t_fn][f"mem_{operand}"]: int(
                             general_template_data["layer_attrs"]["loop_sizes"][
                                 rel_dim
-                                if self.layer_data.workload_name == "depthwise_conv_2d"
+                                if "conv_2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["conv_2d_depthwise"]
                                 or operand not in general_template_data["input_operands"]
                                 else general_template_data["input_dim_mapping"][rel_dim]
                             ]
@@ -164,11 +160,58 @@ class TemplateDataGenerator:
             for operand in general_template_data["operands"]
         }
 
-        def calc_overlap():
-            ##{(attrs['loop_sizes'][ordim]+attrs['loop_sizes'][trdim['partial_relevancy']]-1-(attrs['loop_sizes'][trdim['mapping']]//attrs['strides'][trdim['mapping']]))//2};
-            pass
-
-        calc_overlap()
+        # calc overlap
+        ##{(attrs['loop_sizes'][ordim]+attrs['loop_sizes'][trdim['partial_relevancy']]-1-(attrs['loop_sizes'][trdim['mapping']]//attrs['strides'][trdim['mapping']]))//2};
+        general_template_data["overlaps"]={"OX":[0,0],"OY":[0,0]}
+        # calc db opportunites
+        general_template_data["db_opportunities"]={
+            operand:general_template_data["sw_for_loops"][::-1][0][f'mem_{operand}']!=\
+            general_template_data["sw_for_loops"][0][f'mem_{operand}']
+            for operand in general_template_data["operands"]
+        }
+        # calc size at each level
+        #% for init_mem_idx_reldim,init_mem_reldim in enumerate(ordered_relevant_loops[init_mem_op]):
+        #% if init_mem_idx_reldim>0:
+        #*
+        #% endif
+        #% if init_mem_op in input_operands and init_mem_reldim in padded_dims:
+        #(${size_loops_mem[init_mem_op][init_mem_reldim]['shared_l1']}+2*dim_${init_mem_op}.accel_dim.addsize_${inp_dim_mapping[init_mem_reldim]})
+        #% else:
+        #${size_loops_mem[init_mem_op][init_mem_reldim]['shared_l1']}
+        #% endif
+        #% endfor
+        #% if init_mem_op=='W' and 'batchnorm' in attrs and attrs['batchnorm']:
+        #+8*dim_${init_mem_op}.accel_dim.size_K[shared_l1]
+        #% endif
+        def c_friendly_npvalue(arr):
+            # params: arr is expected to be a numpy version of the value, it should be an array but it may be also just a single value
+            if len(arr.shape)>0:
+                # this is actually an array and not a single value
+                arr=arr.reshape([arr.shape[0]]).astype(np.uint8)
+                return f'{{{str(list(arr))[1:len(str(list(arr)))-1]}}}'
+            else:
+                return str(arr)
+        
+        general_template_data["size_each_level"]={
+            operand:c_friendly_npvalue(
+                np.array(
+                    [np.prod(
+                        [general_template_data["size_loops_mem"][operand][dim][op_mem] + 
+                        (np.sum(general_template_data["overlaps"][dim]) if operand in general_template_data["input_operands"] and dim in general_template_data["padded_dims"] else 0)
+                         for dim in general_template_data["size_loops_mem"][operand].keys()]
+                    )
+                for op_mem in self.template_data['ordered_operand_memories'][operand][::-1]
+                ]))
+            for operand in general_template_data["operands"]
+        }
+        #calc_size_at_each_memory_level()
+        #calc_db_opportunities()
+        #calc_overlap()
+        general_template_data["layer_has_padding"]=any([v!=0 for v in np.array([v for v in general_template_data["layer_data"].padding.values()]).flatten().tolist()])
+        general_template_data["layer_has_weights"]=True
+        general_template_data["padding_c_array"]=c_friendly_npvalue(np.array([v for v in general_template_data["layer_data"].padding.values()]).flatten())
+        general_template_data["strides_c_array"]=c_friendly_npvalue(np.array([v for v in general_template_data["layer_attrs"]["strides"].values()]).flatten())
+        
         self.template_data={**self.template_data,**general_template_data}
 
     def get_template_data(self):

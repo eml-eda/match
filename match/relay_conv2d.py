@@ -23,6 +23,7 @@ def create_model(weight_bits: int = 8,
     """
     # Using input_0 to be used with create_demo_file
     x = relay.var("input_0", relay.TensorType(input_shape, 'uint8'))
+    y = relay.var("input_1", relay.TensorType(input_shape, "uint8"))
     # Get or generate weight_values
     if weights_values is None:
         weights = utils.create_random_array(weights_shape, 
@@ -40,8 +41,15 @@ def create_model(weight_bits: int = 8,
                                          strides=strides,
                                          act=act, 
                                          shift_bits=shift_bits)
+    y, params2 = utils.relay_gap9_conv2d(y, 'conv2', weights, bias, 
+                                         padding=padding, 
+                                         strides=strides,
+                                         act=act, 
+                                         shift_bits=shift_bits)
+    z = utils.relay_gap9_add(x,y,"add")
+    params1.update(params2)
     params = params1
     # create an IR module from the relay expression
     mod = tvm.ir.IRModule()
-    mod = mod.from_expr(x)
+    mod = mod.from_expr(z)
     return mod, params

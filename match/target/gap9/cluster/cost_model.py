@@ -19,17 +19,12 @@ def calc_computational_cycles(spec_cost_model: SpecializedLatencyCostModel):
     lsize = spec_cost_model.cost_model.temporal_mapping.layer_node.loop_dim_size
     lpsize = spec_cost_model.cost_model.temporal_mapping.layer_node.pr_loop_dim_size
     latency=0
-    #breakpoint()
     ch_in = spec_cost_model.cost_model.dmaconfstruct[spec_cost_model.cost_model.layer.input_operands[0]]['len_1d_copy']
     ch_out = spec_cost_model.cost_model.dmaconfstruct['O']['len_1d_copy']
-    #print(f"\n\nDma conf struct {spec_cost_model.cost_model.dmaconfstruct}\n\n")
     kernel_size_x = lsize['FX']
     kernel_size_y = lsize['FY']
-    #input_shape=[lsize['B'],spec_cost_model.cost_model.dmaconfstruct['I']['len_1d_copy'],spec_cost_model.cost_model.dmaconfstruct['I']['num_2d_copies'],spec_cost_model.cost_model.dmaconfstruct['I']['num_1d_copies']]
     output_shape=[lsize['B'],spec_cost_model.cost_model.dmaconfstruct['O']['len_1d_copy'],spec_cost_model.cost_model.dmaconfstruct['O']['num_2d_copies'],spec_cost_model.cost_model.dmaconfstruct['O']['num_1d_copies']]
-    #breakpoint()
     strides=[spec_cost_model.cost_model.layer.layer_attrs["attrs"]["strides"]['IY'],spec_cost_model.cost_model.layer.layer_attrs["attrs"]["strides"]['IX']]
-    #print(f"\n\nCh in {ch_in} ch out {ch_out} i shape {input_shape} strides {strides}")
     if spec_cost_model.cost_model.layer.layer_attrs['operator_type']=="conv_2d":
         iterations = _floor(int(output_shape[2]*strides[0]), 8)* _floor(int(output_shape[3]*strides[1]), 2) * _floor(int(ch_out), 4)
         im2col = kernel_size_x * kernel_size_y * ch_in * 2
@@ -42,23 +37,18 @@ def calc_computational_cycles(spec_cost_model: SpecializedLatencyCostModel):
         latency += _floor(ch_in, 2) * _floor(ch_out, 4)
     else:
         latency += _floor(ch_in, 2) * _floor(ch_out, 4)
-    #print(f"\n\nLatency is{latency}\n\n")
-    # save in latency 0
-    #latency=1
     spec_cost_model.cost_model.mapping_int.temporal_mapping.total_cycle=latency*spec_cost_model.cost_model.multiplicity_l2['O']
     spec_cost_model.cost_model.ideal_temporal_cycle = (
         spec_cost_model.cost_model.mapping_int.temporal_mapping.total_cycle
     )
     spec_cost_model.cost_model.ideal_cycle = spec_cost_model.cost_model.ideal_temporal_cycle
     spec_cost_model.cost_model.single_comp = spec_cost_model.cost_model.ideal_temporal_cycle//spec_cost_model.cost_model.multiplicity_l2['O'] + 250
-    #print(f"\n\nSingle comp is {spec_cost_model.cost_model.single_comp} for {spec_cost_model.cost_model.multiplicity_l2['O']} so total comp is {spec_cost_model.cost_model.ideal_temporal_cycle}\n\n")
-
+    
 def calc_multiplicity_l2_and_transfer_overheads(spec_cost_model: SpecializedLatencyCostModel):
     spec_cost_model.cost_model.multiplicity_l2 = {
         key: prod([v[1] for v in val[len(val) - 1]])
         for (key, val) in spec_cost_model.cost_model.temporal_mapping.mapping_dic_stationary.items()
     }
-    # diana contrib
     def layout_sorted(operand):
         if operand in ['I','X','Y']:
             return ["OY","OX",'C' if spec_cost_model.cost_model.layer.layer_attrs['operator_type']!='depthwise_conv_2d' else 'K']
@@ -92,7 +82,6 @@ def calc_multiplicity_l2_and_transfer_overheads(spec_cost_model: SpecializedLate
         }
         for operand in spec_cost_model.cost_model.temporal_mapping.operand_list
     }
-    #breakpoint()
     for comm in set(relmap["O"]["r"]).intersection(
         set(
             [
@@ -167,9 +156,6 @@ def calc_multiplicity_l2_and_transfer_overheads(spec_cost_model: SpecializedLate
         if operand=='O':
             return spec_cost_model.cost_model.data_offloading_cc_pair_combined[0]+spec_cost_model.cost_model.overhead_per_op['O']
         else:
-            #if operand=='I' and spec_cost_model.cost_model.layer.layer_attrs['operator_type']=='depthwise_conv_2d':
-                #return spec_cost_model.cost_model.dmaconfstruct['I']['len_1d_copy']*(2*spec_cost_model.cost_model.dmaconfstruct['I']['num_2d_copies']*spec_cost_model.cost_model.dmaconfstruct['I']['num_1d_copies'])+spec_cost_model.cost_model.overhead_per_op['I']
-            #else:
             return (spec_cost_model.cost_model.data_loading_cc_pair_combined_per_op[operand][0]*(2 if spec_cost_model.cost_model.dmaconfstruct[operand]['hwc_to_cwh'] else 1))+spec_cost_model.cost_model.overhead_per_op[operand]
     spec_cost_model.cost_model.multiplicity_rel_L2=multiplicity_rel_L2
     spec_cost_model.cost_model.relmap=relmap
@@ -177,49 +163,24 @@ def calc_multiplicity_l2_and_transfer_overheads(spec_cost_model: SpecializedLate
     
 
 
-def calc_loading_and_latency1(spec_cost_model: SpecializedLatencyCostModel):
-    #spec_cost_model.cost_model.total_loading_cycles = sum(
-    #    [spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if operand!='O']
-    #)
-    cyc=0
-    cyc_1=0
+
+def calc_latency(spec_cost_model: SpecializedLatencyCostModel):
+    spec_cost_model.cost_model.latency_total1=spec_cost_model.cost_model.latency_total0
+    cyc,cyc_2=(0,0)
     mults=sorted(set(spec_cost_model.cost_model.multiplicity_l2.values()))
     prev_mult_=0
     for idx,mult_ in enumerate(mults):
         if idx==0:
             cyc+=max([0]+[spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if operand!='O' and spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])
-            cyc_1+=max([0]+[spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if operand!='O' and spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])
+            cyc_2+=max([0]+[spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if operand!='O' and spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])
             prev_mult_=1
-        cyc+=(mult_-prev_mult_)*max([spec_cost_model.cost_model.single_comp]+[spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if operand!='O' and spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])
-        cyc_1+=(mult_-prev_mult_)*max([0]+[spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if operand!='O' and spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])
+        cyc+=(mult_-prev_mult_)*max([spec_cost_model.cost_model.single_comp,max([spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])+300])
+        cyc_2+=(mult_-prev_mult_)*max([0,max([spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])+300])
         prev_mult_=mult_
-    spec_cost_model.cost_model.cyc_1=cyc_1
-    spec_cost_model.cost_model.latency_total0=spec_cost_model.cost_model.single_comp*spec_cost_model.cost_model.multiplicity_l2['O']
-    spec_cost_model.cost_model.latency_total1=cyc+spec_cost_model.cost_model.single_comp
+    spec_cost_model.cost_model.cyc_2=cyc_2+spec_cost_model.cost_model.transfer_cost_per_op['O']
+    spec_cost_model.cost_model.latency_total2=cyc+spec_cost_model.cost_model.single_comp+spec_cost_model.cost_model.transfer_cost_per_op['O']
 
-
-def calc_offloading_and_latency2(spec_cost_model: SpecializedLatencyCostModel):
-    cme_execution=True
-    if cme_execution:
-        cyc=0
-        cyc_2=0
-        mults=sorted(set(spec_cost_model.cost_model.multiplicity_l2.values()))
-        prev_mult_=0
-        for idx,mult_ in enumerate(mults):
-            if idx==0:
-                cyc+=max([0]+[spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if operand!='O' and spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])
-                cyc_2+=max([0]+[spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if operand!='O' and spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])
-                prev_mult_=1
-            cyc+=(mult_-prev_mult_)*max([spec_cost_model.cost_model.single_comp,max([spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])+300])
-            cyc_2+=(mult_-prev_mult_)*max([0,max([spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list if spec_cost_model.cost_model.multiplicity_l2[operand]>=mult_])+300])
-            prev_mult_=mult_
-        spec_cost_model.cost_model.cyc_2=cyc_2+spec_cost_model.cost_model.transfer_cost_per_op['O']
-        spec_cost_model.cost_model.latency_total2=cyc+spec_cost_model.cost_model.single_comp+spec_cost_model.cost_model.transfer_cost_per_op['O']
-    else:
-        spec_cost_model.cost_model.latency_total2=spec_cost_model.cost_model.latency_total0+sum([spec_cost_model.cost_model.transfer_cost_per_op[operand] for operand in spec_cost_model.cost_model.temporal_mapping.operand_list] )
-    spec_cost_model.cost_model.energy_total=0
-    #print(f"\n\nLatency for {spec_cost_model.cost_model.temporal_mapping.mapping_dic_stationary} was Comp {spec_cost_model.cost_model.latency_total0} total {spec_cost_model.cost_model.latency_total2}\n\n")
-
+    
 
 def buffer_size_and_db_mem_func(mem_all: MemoryAllocator, mem_instance: MemoryInstance):
     buff_mem=0
@@ -248,8 +209,7 @@ def cost_model():
             #default_ideal_temporal_cycles,
             calc_multiplicity_l2_and_transfer_overheads,
             calc_computational_cycles,
-            calc_loading_and_latency1,
-            calc_offloading_and_latency2,
+            calc_latency,
         ],
         buffer_size_and_db_mem_func
     )

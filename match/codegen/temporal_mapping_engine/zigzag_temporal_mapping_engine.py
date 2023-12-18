@@ -4,8 +4,8 @@ from typing import Any, Dict, List
 import numpy as np
 from match.codegen.temporal_mapping_engine.temporal_mapping_engine import TemporalMappingEngine
 from match.codegen.layer_data import LayerData
-from match.hwmodel.hwmodel import HwModel
-from match.hwmodel.memory_inst import MemoryInst, PortConnection
+from match.target.exec_module import ExecModule
+from match.target.memory_inst import MemoryInst, PortConnection
 from zigzag import api
 from zigzag.visualization.results.print_mapping import print_mapping
 from zigzag.classes.hardware.architecture.memory_hierarchy import MemoryHierarchy
@@ -16,14 +16,27 @@ from zigzag.classes.hardware.architecture.accelerator import Accelerator
 from zigzag.classes.hardware.architecture.core import Core
 
 class ZigZagEngine(TemporalMappingEngine):
-    def __init__(self,workload:Dict[str,Any]={},hwmodel:HwModel=None,pattern_name:str="",layer_data:LayerData=None):
-        super(ZigZagEngine, self).__init__(workload=workload,hwmodel=hwmodel,pattern_name=pattern_name,layer_data=layer_data)
+    def __init__(self,exec_module:ExecModule=None,pattern_name:str="",layer_data:LayerData=None):
+        super(ZigZagEngine, self).__init__(exec_module=exec_module,pattern_name=pattern_name,layer_data=layer_data)
         self.lpf_limit=13
         self.debuglayer=True
         self.zigzag_temporal_mapping=dict()
 
     def transform_workload_for_engine(self):
-        self.workload={1:self.workload}
+        self.workload={
+            1: {
+                "operator_type": self.pattern_name,
+                "equation": self.layer_data.equation,
+                "dimension_relations": self.layer_data.dimension_relations,
+                "loop_dim_size": self.layer_data.loop_dim_size,
+                "operand_precision": self.layer_data.operand_precision,
+                "pr_loop_dim_size": self.layer_data.pr_loop_dim_size,
+                "padding": self.layer_data.padding,
+                "operand_source": self.layer_data.operand_source,
+                "constant_operands": self.layer_data.constant_operands,
+                'operand_source_dimension_mapping': self.layer_data.operand_source_dimension_mapping,
+            }
+        }
 
     def generate_accelerator(self,platform_memories:List[MemoryInst]=[],optimal_spatial_mapping:List[Any]=[]):
 
@@ -115,7 +128,7 @@ class ZigZagEngine(TemporalMappingEngine):
         self.workload[1]["cost_model"] = cost_model
         self.workload[1]["attrs"] = self.layer_data.layer_attrs
         self.spatial_mapping = spatial_mapping
-        energy, latency, cme = api.get_hardware_performance_zigzag(
+        self.energy, self.latency, cme = api.get_hardware_performance_zigzag(
             workload=self.workload,
             accelerator=self.accelerator,
             mapping=spatial_mapping,
@@ -128,10 +141,8 @@ class ZigZagEngine(TemporalMappingEngine):
         self.zigzag_temporal_mapping = self.cme.temporal_mapping.mapping_dic_stationary
         if self.debuglayer:
             print(f"\n\nOur result Latency was Comp {self.cme.latency_total0} total {self.cme.latency_total2}\n\n")
-            self.energy = energy
-            self.latency = latency
-            print(f"Total network energy = {energy:.2e} pJ")
-            print(f"Total network latency = {latency:.2e} cycles")
+            print(f"Total network energy = {self.energy:.2e} pJ")
+            print(f"Total network latency = {self.latency:.2e} cycles")
             print("Mapping")
             print_mapping(self.cme)
 
@@ -167,7 +178,7 @@ class ZigZagEngine(TemporalMappingEngine):
                         ] = mem_name[layer_op][idx]
         # reverse it and add spatial dimensions
         self.temporal_mapping=self.temporal_mapping[::-1]
-        for (spatial_dim,spatial_val) in self.spatial_mapping[self.layer_data.workload_name]["spatial_mapping"].values():
+        for (spatial_dim,spatial_val) in self.spatial_mapping[self.pattern_name]["spatial_mapping"].values():
             for idxox in range(len(self.temporal_mapping)):
                     if self.temporal_mapping[idxox]["name"] == spatial_dim:
                         self.temporal_mapping[idxox]["index"] += 1

@@ -29,22 +29,25 @@ from tvm.relay.build_module import bind_params_by_name
 # don't remove this import even if it does not seem to be used
 # because this is the point where the match backend is registered
 import tvm.relay.backend.contrib.match
-from match.hwmodel.hwmodel import HwModel
+from match.target.target import MatchTarget
 
-from match.matchutils import get_hw_model
+#from match.matchutils import get_target
+from match.target import get_target
 
-logger = logging.getLogger("Match")
+logger = logging.getLogger("match")
 
-def pattern_table(devices_models:List[HwModel]=[]):
+def pattern_table(target:MatchTarget=None):
     """
     Registers the patterns we want to match.
     Returns
     -------
         The patterns.
     """
-    patterns=[]
-    for device_model in devices_models:
-        patterns+=[(f"match.{dev_pat['name']}", dev_pat["pattern_matcher"](), partial(dev_pat["pattern_limitations"])) for dev_pat in device_model.partitioning_patterns()]
+    patterns=[(
+        f"match.{target_pattern.name}", 
+        target_pattern.pattern(), 
+        target_pattern.additional_checks) 
+        for target_pattern in target.partitioning_patterns()]
     return patterns
 
 
@@ -64,20 +67,20 @@ def partition(mod, params, dpu, opts):
     if params:
         mod["main"] = bind_params_by_name(mod["main"], params)
 
-    if "devices" in opts:
-        devices=opts["devices"].split(",")
-    else:
-        devices=[]
-    devices_models=[get_hw_model(device_name=dev_name) for dev_name in devices]
+    target_name="" if "target" not in opts else opts["target"]
+    
+    target=get_target(target_name=target_name)
 
     pipeline = []
 
-    for device_model in devices_models:
-        pipeline+=device_model.network_transformations(opts)
+    pipeline+=target.adjust_network(opts)
 
     pipeline.append(transform.InferType())
-    pipeline.append(transform.MergeComposite(pattern_table(devices_models=devices_models)))
+    pipeline.append(transform.MergeComposite(pattern_table(target=target)))
     pipeline.append(transform.AnnotateTarget(["match"]))
+
+    pipeline+=target.network_transformations(opts)
+
     pipeline.append(transform.InferType())
     pipeline.append(transform.PartitionGraph())
     pipeline.append(transform.InferType())

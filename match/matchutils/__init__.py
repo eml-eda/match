@@ -1,1 +1,1 @@
-from match.matchutils.utils import get_hw_model,mock_func
+from match.matchutils.utils import mock_func

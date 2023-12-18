@@ -1,2 +1,2 @@
-from .get_hwmodel import get_model
+from .get_target import get_target
 from .memory_inst import MemoryInst,PortConnection

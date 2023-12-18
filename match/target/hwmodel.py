@@ -7,12 +7,8 @@ from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
 import tvm
 import numpy as np
 import sys
-#from match.codegen.layer_data import LayerData,TWO_INPUTS_WORKLOADS
 from zigzag.classes.cost_model.specialized_latency_cost_model import SpecializedLatencyCostModel
 
-TWO_INPUTS_WORKLOADS=(
-    "element_wise_sum"
-)
 
 class HwModel(ABC):
     """
@@ -22,26 +18,17 @@ class HwModel(ABC):
         self.FULL_DIM = sys.maxsize
         self.optimal_spatial_mapping = None
         self.platform_memories = None
-
-    def weights_def(self,layer_arguments):
-        def c_friendly_npvalue(arr):
-            # params: arr is expected to be a numpy version of the value, it should be an array but it may be also just a single value
-            if len(arr.shape)>0:
-                # this is actually an array and not a single value
-                arr=arr.reshape([arr.shape[0]]).astype(np.uint8)
-                return f'{{{str(list(arr))[1:len(str(list(arr)))-1]}}}'
-            else:
-                return str(arr)
-        def bytaze(value):
-            return np.frombuffer(value.tobytes(),dtype='uint8')
-        arguments=np.array()
-        for layer_arg in layer_arguments:
-            arguments=np.concatenate(arguments,bytaze(layer_arg))
-        return {
-            "value":c_friendly_npvalue(arguments),
-            "shape":f"[{ceil(arguments.shape[0])}]"
+        self.apis= {
+            "startup_memory":"match_startup_memory",
+            "shutdown_mem":"match_shutdown_mem",
+            "init_platform":"match_init_platform",
+            "init_other_kernel_params":"match_init_other_kernel_params",
         }
-    
+        self.types= {
+            "mem_data_macro":"",
+            "kernel_struct":"match_kernel"
+        }
+
     def partitioning_patterns(self):
 
         def conv2d_pattern():
@@ -104,6 +91,7 @@ class HwModel(ABC):
         ]
 
     def limit_spatial_mapping_to(self,dim_size:int=1,optimal_spat:int=1):
+        # find greater common denominator that is smaller than the optimal spatial mapping
         spatial_dim=dim_size
         if dim_size>optimal_spat:
             for div_val in [_+1 for _ in range(optimal_spat)][::-1]:
@@ -112,7 +100,7 @@ class HwModel(ABC):
                     break
         return spatial_dim
 
-    def optimal_spatial_mapping_def(self, workload_name: str = "conv_2d",dim_sizes:Dict[str,int]={}):
+    def optimal_spatial_mapping_def(self, pattern_name: str = "conv_2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
         self.optimal_spatial_mapping = [ ("K",1), ("OY",1) ]
 
     def get_optimal_spat_size(self,optimal_spat:int=1,dim_size:int=1):
@@ -121,23 +109,32 @@ class HwModel(ABC):
         else:
             return optimal_spat
 
-    def spatial_mapping(self,dim_sizes:Dict[str,int]={},workload_name:str="conv_2d",operands:List[str]=["O","W","I"]):
+    def spatial_mapping(self,dim_sizes:Dict[str,int]={},pattern_name:str="conv_2d",operands:List[str]=["O","W","I"],pattern_operations:List[str]=["nn.conv2d"],layer_attrs:Dict={}):
         if self.optimal_spatial_mapping is None:
-            self.optimal_spatial_mapping_def(workload_name=workload_name,dim_sizes=dim_sizes)
+            self.optimal_spatial_mapping_def(pattern_name=pattern_name,dim_sizes=dim_sizes,layer_attrs=layer_attrs)
+            if self.optimal_spatial_mapping is None:
+                self.optimal_spatial_mapping = [ ("K",1), ("OY",1) ]
+        def op_link_name(operand: str="O"):
+            if operand=="O":
+                return "O"
+            elif operand in ["I","X"]:
+                return "I1"
+            else:
+                return "I2"
         return {
-            workload_name:
+            pattern_name:
                 {
                     "core_allocation": 1,
                     "spatial_mapping":  {f"D{opt_idx+1}":(opt_sptmap[0],self.limit_spatial_mapping_to(\
                         dim_size=dim_sizes[opt_sptmap[0]],optimal_spat=self.get_optimal_spat_size(opt_sptmap[1],dim_sizes[opt_sptmap[0]])))\
                                         for opt_idx,opt_sptmap in enumerate(self.optimal_spatial_mapping)},
-                    "memory_operand_links": {"O": "O", "I": "I1", "W": "I2"} if workload_name not in TWO_INPUTS_WORKLOADS else {'O': 'O', 'X': 'I1', 'Y': 'I2'},#{op:op for op in operands},
-                    "fixed_loops":["FX","FY"]+(["C"] if workload_name!="dense" else []),
+                    "memory_operand_links": {op:op_link_name(op) for op in operands},
+                    "fixed_loops":["FX","FY"]+(["C"] if "dense" not in pattern_operations else []),
                 }
         }
     
     def adjust_dimensions_and_precision(self,loop_dim_size:Dict[str,int]={},pr_loop_dim_size:Dict[str,int]={},
-                                        operand_precision:Dict[str,int]={}, strides:List[int]=[1,1], workload_name:str="conv2d"):
+                                        operand_precision:Dict[str,int]={}, strides:List[int]=[1,1], pattern_name:str="conv2d"):
         return loop_dim_size,pr_loop_dim_size,operand_precision,operand_precision
     
     def cost_model(self):
@@ -161,24 +158,40 @@ class HwModel(ABC):
         def bytaze(value):
             return np.frombuffer(value.tobytes(),dtype='uint8')
         arguments=np.array([],dtype=np.uint8)
-        for layer_arg_val in layer_arguments.values():
+        single_constants=dict()
+        for layer_arg_name,layer_arg_val in layer_arguments.items():
             if isinstance(layer_arg_val, tvm.relay.Constant):
-                constbytes=bytaze(layer_arg_val.data.numpy())
-                arguments=np.concatenate((arguments,constbytes))
+                if len(layer_arg_val.data.shape)==0:
+                    single_constants[layer_arg_name]=str(layer_arg_val.data)
+                else:
+                    constbytes=bytaze(layer_arg_val.data.numpy())
+                    arguments=np.concatenate((arguments,constbytes))
         return {
             "value":c_friendly_npvalue(arguments),
-            "shape":f"[{ceil(arguments.shape[0])}]"
+            "len":arguments.shape[0],
+            "shape":f"[{ceil(arguments.shape[0])}]",
+            "single_costants":single_constants,
         }
     
     def additional_kernel_parameters(self):
         return dict()
     
-    def apis_names(self):
-        return {
-            "memory":"match_memory",
-            "kernel":"match_kernel",
-        }
-    
+    def apis_def(self):
+        # TODO: definire lista di API che servono
+        # flusso di programma:
+        # init platform -> init memory (alloc l1) -> calc indexes -> DMA transfers -> bias? -> batchnorm? -> pooling? ->
+        # computation
+        return
+    def types_def(self):
+        return
+    def match_types(self):
+        self.types_def()
+        return self.types
+
+    def match_apis(self):
+        self.apis_def()
+        return self.apis
+
     def operand_memories(self,operands):
         return {
             operand:[mem.name for mem in self.platform_memories if operand in mem.operands][::-1]

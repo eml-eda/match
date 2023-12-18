@@ -1,7 +1,7 @@
-import match.hwmodel as hwmodel
+#from match.target.get_target import get_target as target_get_target
 
-def get_hw_model(device_name:str=""):
-    return hwmodel.get_model(device_name=device_name)
+#def get_target(target_name:str=""):
+#    return target_get_target(target_name=target_name)
 
 def mock_func(*args):
     return None
