@@ -203,9 +203,6 @@ def check_fully_connected(pattern):
     if fc is None:
         return False
 
-    #fc_input = fc.args[0]
-    #fc_weight = fc.args[1]
-
     return True
 
 

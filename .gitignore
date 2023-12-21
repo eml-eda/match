@@ -6,3 +6,5 @@ __tmp__
 docker-gap
 tmp
 outputs
+match.egg-info
+dist
