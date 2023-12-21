@@ -8,7 +8,7 @@ class Gap9Cluster(ExecModule):
     def __init__(self):
         super(Gap9Cluster, self).__init__(name="cluster")
     
-    def optimal_spatial_mapping_def(self, pattern_name: str = "conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
+    def optimal_spatial_mapping_def(self, pattern_name: str = "gap9cluster_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
         if pattern_name=='gap9cluster_conv2d' and (dim_sizes['FY']*dim_sizes['FX'])==1:
             self.optimal_spatial_mapping = [
                 ("OY",4),("OX",4),("K",4)

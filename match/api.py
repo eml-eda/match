@@ -9,9 +9,22 @@ import logging
 import argparse
 
 def with_relay(mod,params,target_name):
+    """Compile a network defined already in TVM Relay IR for target
+
+    Args:
+        mod (tvm.ir.IRModule): network to compile
+        params (List[Any]): arguments of the network(weights etc.)
+        target_name (str): name of the target
+    """
     driver(mod,params,target=target_name)
 
 def with_onnx(onnx_model,target_name):
+    """_summary_
+
+    Args:
+        onnx_model (ONNXModel): network representes in ONNX format
+        target_name (str): name of the target
+    """
     mod, params=relay.frontend.from_onnx(onnx_model)
     driver(mod,params,target=target_name)
 

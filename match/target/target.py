@@ -7,6 +7,8 @@ from functools import partial
 import tvm 
 
 class PatternResult:
+    """Class that stores all the information that may be relevant to cache a result of a node that we want to compile
+    """
     def __init__(self,match_target_pattern,layer_data,temporal_mapping=None,latency=0,energy=0):
         self.match_target_pattern=match_target_pattern
         self.layer_data=layer_data
@@ -46,6 +48,8 @@ def get_lenght_pattern(pattern):
     return 0
 
 class MatchTargetPattern:
+    """Support pattern class that includes information about the execution module
+    """
     def __init__(self,exec_module,module_pattern,name:str="conv2d",match_additional_checks=mock_func,idx=0):
         self.exec_module=exec_module
         self.name=name
@@ -61,6 +65,8 @@ class MatchTargetPattern:
         self.idx=idx
 
 class MatchTarget(ABC):
+    """Class that represents a heterogeneous target, this implementation defines this class through the singleton pattern
+    """
     def __init__(self,exec_modules,name:str="match",optimize_param:str="latency"):
         if self.singleton_instantiated():
             return
@@ -88,6 +94,15 @@ class MatchTarget(ABC):
         return None
 
     def get_layer_from_module(self,mod:tvm.ir.IRModule,pattern_name:str="conv2d"):
+        """Function to retrieve the temporal mapping with caching of a certain TVM module
+
+        Args:
+            mod (tvm.ir.IRModule): module to compile
+            pattern_name (str, optional): Name of the pattern that partitioned this module. Defaults to "conv2d".
+
+        Returns:
+            Temporal mapping as a list, the data of the fused layer and the module used to compile it
+        """
         node=mod.body.op.body
         match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{pattern_name}")
         tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=pattern_name)
@@ -112,6 +127,15 @@ class MatchTarget(ABC):
             self.add_exec_module(exec_module)
 
     def evaluate_pattern(self,node,match_pt):
+        """Search for the temporal mapping of a fused layer and its expected latency and energy performances
+
+        Args:
+            node (tvm.relay.Call): Node that can be partitioned
+            match_pt (MatchTargetPattern): Pattern used to partition the node
+
+        Returns:
+            Number,Number: latency and energy consumption results of the node with the given pattern
+        """
         tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.pattern)
         tmapgen.generate_workload()
         layer_data=tmapgen.get_layer_data()
@@ -132,6 +156,17 @@ class MatchTarget(ABC):
             return latency,energy
 
     def is_better_result(self,old_latency,old_energy,new_latency,new_energy):
+        """Evaluate if the new results are better than the old ones based on a preference
+
+        Args:
+            old_latency (Number)
+            old_energy (Number)
+            new_latency (Number)
+            new_energy (Number)
+
+        Returns:
+            bool: New etter than old?
+        """
         if self.optimize_param=="latency":
             return new_latency<old_latency or (new_latency==old_latency and new_energy<old_energy) 
         elif self.optimize_param=="energy":
@@ -140,7 +175,16 @@ class MatchTarget(ABC):
             return new_latency<old_latency or (new_latency==old_latency and new_energy<old_energy) 
 
     def match_additional_checks_(self,node,match_pt:MatchTargetPattern=None):
-        #breakpoint()
+        """Function used to evaluate if the node is fully supported by the pattern, and if so if this is the best pattern wholly supporting
+        this node
+
+        Args:
+            node (tvm.relay.Call): node to partition
+            match_pt (MatchTargetPattern): pattern to evaluate
+
+        Returns:
+            bool: is this the best pattern supporting this node?
+        """
         # is pattern fully supported?
         if match_pt.additional_checks(node):
             # if supported get latency and energy of pattern
@@ -160,11 +204,18 @@ class MatchTarget(ABC):
         return False
     
     def sort_match_patterns(self):
+        """Sort the pattern list based on the number of operators present on the pattern itself
+        """
         self.match_patterns=sorted(self.match_patterns,key=lambda m_pt:-get_lenght_pattern(m_pt.pattern))
         for idx,m_pt in enumerate(self.match_patterns):
             m_pt.set_idx(idx)
         
     def add_exec_module(self,exec_module):
+        """Add a single exec module to the target, and add its patterns
+
+        Args:
+            exec_module (ExecModule): unit to add to the target
+        """
         for module_pt in exec_module.partitioning_patterns():
             match_pt=MatchTargetPattern(exec_module,module_pt,name=f"{self.name}.{module_pt.name}",)
             match_additional_checks=partial(self.match_additional_checks_,match_pt=match_pt)
@@ -175,6 +226,11 @@ class MatchTarget(ABC):
         self.sort_match_patterns()
 
     def partitioning_patterns(self):
+        """patterns of the whole target
+
+        Returns:
+            List[PartitioningPattern]: list of pattern supported by the target sorted
+        """
         return [
             PartitioningPattern(m_pt.name,m_pt.pattern,m_pt.match_additional_checks)
             for m_pt in self.match_patterns

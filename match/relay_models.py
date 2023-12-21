@@ -16,9 +16,7 @@ def create_model_conv_2d(weight_bits: int = 8,
                  strides: Tuple[int, int] = (1, 1),
                  shift_bits: int = 4
                  ):
-    """
-    Generate a small relay graph that performs a DIANA-accelerator-
-    eligible convolution pattern with various parameters
+    """Generate a small network in TVM Relay IR that performs a requantized convolution
     """
     # Using input_0 to be used with create_demo_file
     x = relay.var("input_0", relay.TensorType(input_shape, 'uint8'))
@@ -55,9 +53,7 @@ def create_model_add_convs(weight_bits: int = 8,
                  strides: Tuple[int, int] = (1, 1),
                  shift_bits: int = 4
                  ):
-    """
-    Generate a small relay graph that performs a DIANA-accelerator-
-    eligible convolution pattern with various parameters
+    """Generate a small network in TVM Relay IR that does 2 requantized convolutions and add their results
     """
     # Using input_0 to be used with create_demo_file
     x = relay.var("input_0", relay.TensorType(input_shape, 'uint8'))

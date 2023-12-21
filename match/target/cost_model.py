@@ -5,6 +5,8 @@ from zigzag.classes.cost_model.cost_model import CostModelEvaluation
 from zigzag.classes.mapping.temporal.temporal_mapping import TemporalMapping
 
 class ZigZagMatchCostModel(CostModelEvaluation):
+    """MATCH implementation of the cost model that will be used by ZigZag
+    """
     def __init__(
         self,
         *,
@@ -25,6 +27,16 @@ class ZigZagMatchCostModel(CostModelEvaluation):
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
 
     def adjust_temporal_mapping(self,temporal_mapping_dict,operand_list):
+        """Fix the temporal mapping of a schedule to match the requirements of the platform, the default implementation will
+        move loops of the output to permit the computation to happen as soon as the output has been allocated
+
+        Args:
+            temporal_mapping_dict (Dict[List[List[Tuple]]]): dictionary containing per each operator the list of memories with the loops assigned
+            operand_list (List[Str]): operands used for the specific pattern
+
+        Returns:
+            Dict[List[List[Tuple]]]: the new temporal mapping satisfying each constraint
+        """
         min_innermost_loops=min([len(temporal_mapping_dict[operand][0]) for operand in operand_list])
         temporal_mapping_dict["O"][1]=temporal_mapping_dict["O"][0][min_innermost_loops:]+temporal_mapping_dict["O"][1]
         temporal_mapping_dict["O"][0]=temporal_mapping_dict["O"][0][:min_innermost_loops]
@@ -41,6 +53,11 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.layer_data = self.layer.layer_attrs["match_layer_data"]
 
     def def_innermost_loops_cost(self):
+        """This function computes the cost of each single iteration of the kernel
+
+        Returns:
+            number: The cost of each iteration of the inner computation
+        """
         return prod([self.loop_iters_per_mem_level[operand][0] for operand in self.operands])
 
     def calc_innermost_loops_cost(self):
@@ -72,7 +89,15 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         }
 
     def def_transfer_cost(self):
-        return sum([sum(inp_costs) for inp_costs in self.input_transfer_costs.values()]+self.output_transfer_costs)
+        """This function computes the cost of an iteration of memory transfer per each operand
+
+        Returns:
+            Dict[Str,Number]: Cost of transfer per each iteration for every single operand
+        """
+        return {
+            operand:self.input_transfer_costs[operand][1] if operand in self.input_operands else self.output_transfer_costs[1]
+            for operand in self.operands
+        }
 
     def calc_transfer_costs(self):
         self.input_transfer_costs=self.data_loading_cc_pair_combined_per_op
@@ -98,7 +123,6 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.overall_latency_async()
 
     def calc_match_overall_latency(self):
-        #breakpoint()
         self.set_match_params()
         self.calc_loop_iters_per_mem_level()
         self.calc_relevancy_map()
@@ -108,6 +132,9 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.def_overall_execution()
     
     def calc_overall_latency(self):
+        # use default ZigZag implementation (just to compute some necessary parameters)
         super().calc_overall_latency()
+        # call user defined latency function
         self.calc_match_overall_latency()
+        # set overall latency
         self.latency_total2=self.match_overall_latency

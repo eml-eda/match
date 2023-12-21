@@ -11,6 +11,8 @@ import numpy as np
 import sys
 
 class MemoryApis:
+    """All the memory APIs that are used by MATCH on the templates
+    """
     def __init__(self):
         self.startup_memory_and_set_pattern="match_startup_memory_and_set_pattern"
         self.shutdown_mem="match_shutdown_mem"
@@ -33,15 +35,21 @@ class MemoryApis:
         self.pattern_constants_loading="match_pattern_constants_loading"
 
 class ComputationalApis:
+    """All the APIs relating to the computational part that are used later by MATCH templates
+    """
     def __init__(self):
         self.init_other_kernel_params="match_init_other_kernel_params"
         self.innermost_computation="match_innermost_computation"
 
 class PlatformApis:
+    """All the APIs for the management of the platform that are used by templates of MATCH
+    """
     def __init__(self):
         self.init_platform="match_init_platform"
 
 class SyncApis:
+    """All the APIs for the synchronization that are used by templates of MATCH
+    """
     def __init__(self):
         self.async_transfers="match_async_transfers"
         self.prev_computation="match_prev_computation"
@@ -49,13 +57,14 @@ class SyncApis:
         self.sync_multilevel_transfer="match_sync_multilevel_transfer"
 
 class MatchTypes:
+    """MACROS and types that can be used by MATCH
+    """
     def __init__(self):
         self.mem_data_macro_and_type="unsigned int"
         self.kernel_struct="match_kernel"
 
 class ExecModule(ABC):
-    """
-    Abstract base class for a temporal engine
+    """Unit that will handle the compuation of a layer
     """
     def __init__(self,name:str="default_exec_module"):
         self.name=name
@@ -81,27 +90,24 @@ class ExecModule(ABC):
         def conv2d_pattern():
             """Create pattern for conv2D with optional fused relu."""
             #breakpoint()
-            conv2d = is_op("nn.conv2d")(
+            return is_op("nn.conv2d")(
                     wildcard(), wildcard()
             )
-            return conv2d is not None
 
 
         def fully_connected_pattern():
             """Create pattern for nn.dense with optional fused relu."""
 
-            fc = is_op("nn.dense")(
+            return is_op("nn.dense")(
                 wildcard(), wildcard()
             )
-            return fc is not None
         
         def element_wise_add_pattern():
             """Create pattern for element-wise-add with optional fused relu."""
 
             cast_a = is_op("cast")(wildcard()).has_attr({"dtype": "int32"})
             cast_b = is_op("cast")(wildcard()).has_attr({"dtype": "int32"})
-            add = is_op("add")(cast_a, cast_b)
-            return add is not None
+            return is_op("add")(cast_a, cast_b)
         
         def no_checks(pattern):
             return True
@@ -119,6 +125,11 @@ class ExecModule(ABC):
         raise dict()
     
     def memories_def(self,operands):
+        """define the memory hierarchy of the unit by setting self.platform_memories
+
+        Args:
+            operands (List[Str]): list of operands
+        """
         self.platform_memories = [
             # from lower level to higher level memories
             MemoryInst(name="l1_mem",k_bytes=32,operands=operands),
@@ -136,6 +147,13 @@ class ExecModule(ABC):
         return spatial_dim
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "conv_2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
+        """Define the optimal spatial mapping for the current node
+
+        Args:
+            pattern_name (str, optional): analyzed pattern. Defaults to "conv_2d".
+            dim_sizes (Dict[str,int], optional): sizes of each dimension. Defaults to {}.
+            layer_attrs (Dict, optional): attributes specific to the layer. Defaults to {}.
+        """
         self.optimal_spatial_mapping = [ ("K",1), ("OY",1) ]
 
     def get_optimal_spat_size(self,optimal_spat:int=1,dim_size:int=1):
@@ -173,6 +191,11 @@ class ExecModule(ABC):
         return loop_dim_size,pr_loop_dim_size,operand_precision,operand_precision
     
     def cost_model(self):
+        """Function that defines the used cost model to guide the schedule search
+
+        Returns:
+            Class: class itself(not an instance) of the used cost model
+        """
         return ZigZagMatchCostModel
     
     def adjust_temporal_mapping(self,temporal_mapping:List=[],layer_data:Any=None):
@@ -182,6 +205,11 @@ class ExecModule(ABC):
         return {}
     
     def weights_and_constants(self,layer_arguments:Dict={}):
+        """define how the weights and constants of a layer must be saved in C on the generated code
+
+        Args:
+            layer_arguments (Dict, optional): Dict of the arguments(parameters) for the node. Defaults to {}.
+        """
         def c_friendly_npvalue(arr):
             # params: arr is expected to be a numpy version of the value, it should be an array but it may be also just a single value
             if len(arr.shape)>0:
@@ -219,10 +247,8 @@ class ExecModule(ABC):
         return self.types
 
     def mem_apis_def(self):
-        # TODO: definire lista di API che servono
-        # flusso di programma:
-        # init platform -> init memory (alloc l1) -> calc indexes -> DMA transfers -> bias? -> batchnorm? -> pooling? ->
-        # computation
+        """Functions that set the memory related APIs of the unit
+        """
         return
 
     def match_mem_apis(self):
@@ -230,6 +256,8 @@ class ExecModule(ABC):
         return self.mem_apis
     
     def sync_apis_def(self):
+        """Functions that set the synchronization related APIs of the unit
+        """
         return
     
     def match_sync_apis(self):
@@ -237,6 +265,8 @@ class ExecModule(ABC):
         return self.sync_apis
     
     def comp_apis_def(self):
+        """Functions that set the computation related APIs of the unit
+        """
         return
     
     def match_comp_apis(self):
@@ -244,6 +274,8 @@ class ExecModule(ABC):
         return self.comp_apis
     
     def platform_apis_def(self):
+        """Functions that set the platform related APIs of the unit
+        """
         return
     
     def match_platform_apis(self):
@@ -251,6 +283,8 @@ class ExecModule(ABC):
         return self.platform_apis
 
     def def_include_list(self):
+        """Functions that sets the list of headers to include additionally in the template
+        """
         return
     
     def match_include_list(self):

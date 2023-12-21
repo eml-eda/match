@@ -53,7 +53,7 @@ def pattern_table(target:MatchTarget=None):
 
 def partition(mod, params, dpu, opts):
     """
-    The partitioning sequence for the match byoc
+    The partitioning sequence for the MATCH byoc
     Parameters
     ----------
     mod The module to use

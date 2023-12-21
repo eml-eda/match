@@ -61,11 +61,13 @@ class MatchDriver:
 def driver(mod: tvm.ir.IRModule, 
            params: Dict[str, tvm.nd.array],
            target: str="gap9"):
+    """Compile a model for MATCH
+
+    Args:
+        mod (tvm.ir.IRModule): network to compile in TVM Relay IR format
+        params (Dict[str, tvm.nd.array]): params of the network
+        target (str, optional): name of the target for the compilation. Defaults to "gap9".
     """
-    Compile (and run) a model for MATCH
-    """
-    # Create the model library format file and unpack
-    #breakpoint()
     match_driver = MatchDriver(mod, params,
                           target=target)
     match_driver.tvm_compile(fusion=True)
