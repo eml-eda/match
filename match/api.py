@@ -29,12 +29,12 @@ def with_onnx(onnx_model,target_name):
     driver(mod,params,target=target_name)
 
 def relay_conv(target):
-    from relay_models import create_model_conv2d
-    mod, params = create_model_conv2d()
+    from match.relay_models import create_model_conv_2d
+    mod, params = create_model_conv_2d()
     driver(mod,params,target=target)
 
 def relay_add_convs(target):
-    from relay_models import create_model_add_convs
+    from match.relay_models import create_model_add_convs
     mod, params = create_model_add_convs()
     driver(mod,params,target=target)
 

@@ -18,7 +18,7 @@ class MatchDriver:
     def __init__(self,
                  mod: tvm.ir.IRModule,
                  params: Dict[str, tvm.nd.array],
-                 build_dir: pathlib.Path = "/match/outputs/last_build",
+                 build_dir: pathlib.Path = "./outputs/last_build",
                  no_of_inputs: int = 1,
                  target: str = "gap9",):
         self.model = TVMCModel(mod, params)

@@ -24,7 +24,7 @@ class TemplateEngine:
         except:
             code=exceptions.html_error_template().render()
             error_codegen=True
-        with open(f"/match/outputs/last_out.{'html' if error_codegen else 'c'}",
+        with open(f"./outputs/last_out.{'html' if error_codegen else 'c'}",
             "wb" if error_codegen else "w") as fw:
             fw.write(code)
         return code,error_codegen
