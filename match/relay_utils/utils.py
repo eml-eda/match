@@ -12,11 +12,9 @@ import numpy as np
 from tvm.driver.tvmc.compiler import compile_model
 from tvm.driver.tvmc.model import TVMCModel
 from tvm.relay.backend import Executor, Runtime
-import dory
 
 from typing import Tuple, Dict, Optional, Union
 import numpy.typing as npt
-from dory.Hardware_targets.PULP.Backend_Kernels.BackendKernelsAdapter import PulpNNAdapter
 from match.target.target import MatchTarget
 
 
@@ -342,7 +340,7 @@ def create_build_dir(build_path: str = "./build",
     # Copy over other necessary files
     src_dir = pathlib.Path("src")
     include_dir = pathlib.Path("include")
-    # Copy over src, include and dory folders
+    # Copy over src, include folders
     shutil.copytree(src=match_lib_path / src_dir, 
                     dst=build_path / src_dir, dirs_exist_ok=True)
     shutil.copytree(src=match_lib_path / include_dir, 
