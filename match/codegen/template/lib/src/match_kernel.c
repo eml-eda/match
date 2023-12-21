@@ -11,22 +11,11 @@ void init_common_kernel_params(common_kernel* kernel){
     kernel->fy=0;
     kernel->ox=0;
     kernel->oy=0;
-    /*
-    kernel->activation_function=0;
-    kernel->right_shift=0;
-    */
     // pads
-    kernel->pad_ix_x=0;
-    kernel->pad_ix_y=0;
-    kernel->pad_iy_x=0;
-    kernel->pad_iy_y=0;
-    /*
-    kernel->dilatation_x=0;
-    kernel->dilatation_y=0;
-    */
-    // strides
-    kernel->stride_x=0;
-    kernel->stride_y=0;
+    kernel->pad_IX_x=0;
+    kernel->pad_IX_y=0;
+    kernel->pad_IY_x=0;
+    kernel->pad_IY_y=0;
     // fused layers pts
     kernel->bias_pt=0x0;
     kernel->batchnorm_mul=0x0;
@@ -50,4 +39,32 @@ void init_common_kernel_params(common_kernel* kernel){
     kernel->dim_W=0x0;
     kernel->mem_W=0;
     kernel->W_pt=0x0;
+}
+
+void init_kernel_dimension_params(
+    common_kernel* kernel,dimension_I* dim_I,unsigned int innermost_I_mem_level,
+    dimension_W* dim_W,unsigned int innermost_W_mem_level,
+    dimension_O* dim_O,unsigned int innermost_O_mem_level
+){
+    kernel->dim_I=dim_I;
+    kernel->dim_W=dim_W;
+    kernel->dim_O=dim_O;
+    kernel->c_w=dim_W->size_C[innermost_W_mem_level];kernel->c_i=dim_I->size_C[innermost_I_mem_level];
+    kernel->k_o=dim_O->size_K[innermost_O_mem_level];kernel->k_w=dim_W->size_K[innermost_W_mem_level];
+    kernel->ix_i=dim_I->size_IX[innermost_I_mem_level];kernel->iy_i=dim_I->size_IY[innermost_I_mem_level];
+    kernel->fx=dim_W->size_FX[innermost_W_mem_level];
+    kernel->fy=dim_W->size_FY[innermost_W_mem_level];
+    kernel->ox=dim_O->size_OX[innermost_O_mem_level];
+    kernel->oy=dim_O->size_OY[innermost_O_mem_level];
+}
+
+void match_innermost_computation(match_kernel* kernel,unsigned int pattern_name){
+    return;
+}
+
+void kernel_set_padding(common_kernel* kernel,dimension_I* dim){
+    kernel->pad_IX_x=dim->pad_IX_x;
+    kernel->pad_IX_y=dim->pad_IX_y;
+    kernel->pad_IY_x=dim->pad_IY_x;
+    kernel->pad_IY_y=dim->pad_IY_y;
 }

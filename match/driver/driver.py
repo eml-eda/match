@@ -5,7 +5,7 @@ from abc import ABC, abstractmethod
 import tvm
 import numpy as np
 from match.target import get_target
-from match.utils import utils
+from match.relay_utils import utils
 import subprocess
 import pathlib
 import shutil

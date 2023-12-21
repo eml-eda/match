@@ -1,4 +1,6 @@
-#include <match_params.h>
+#ifndef _MATCH_DIMENSIONS_H
+#define _MATCH_DIMENSIONS_H
+#include <match_target_params.h>
 // output dimension
 typedef struct dimension_O_t
 {
@@ -50,3 +52,4 @@ typedef struct dimension_I_t
 
 typedef dimension_I dimension_X;
 typedef dimension_I dimension_Y;
+#endif

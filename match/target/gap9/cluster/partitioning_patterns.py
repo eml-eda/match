@@ -1,37 +1,3 @@
-
-proposed_pattern_matcher={
-    "conv2d-gap9":{
-        "pattern":[
-            ("nn.conv2d",{
-                "support_conditions":{
-
-                }
-            }),
-            ("nn.bias_add",{
-                "support_conditions":{
-                    "type_in":["int32"],
-                }
-            }),
-            ("right_shift",{
-                "pattern_conditions":{
-                    "args":{
-                        "constant":True,
-                    }       
-                },
-                "support_conditions":{
-                    "value_not_gt":31,
-                    "value_not_lt":0,
-                }
-            }),
-            ("clip",{}),
-            ("cast",{
-                "pattern_conditions":{
-                    "type":"int8",
-                }
-            })
-        ]
-    }
-}
 # Imports
 import tvm
 import logging

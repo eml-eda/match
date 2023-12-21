@@ -57,7 +57,7 @@ class ZigZagEngine(TemporalMappingEngine):
 
                 mem_inst = MemoryInstance(
                     name = plat_mem.name,
-                    size = floor(plat_mem.k_bytes * 1024 * 8) ,  # Size of L2 memory
+                    size = floor(( plat_mem.k_bytes * 1024 - plat_mem.buffer_for_layer_func(self.layer_data,self.pattern_name))* 8) ,
                     r_bw=floor(plat_mem.r_bw),
                     w_bw=floor(plat_mem.w_bw),
                     r_cost=100,
@@ -67,6 +67,7 @@ class ZigZagEngine(TemporalMappingEngine):
                     w_port=floor(plat_mem.w_ports),
                     rw_port=floor(plat_mem.rw_ports),
                     latency=1, # TODO: Non usato dentro Zigzag, dovrebbe essere > 1
+                    double_buffering_support=plat_mem.double_buffering_support
                 )
                 port_alloc=tuple([
                     {
@@ -125,8 +126,7 @@ class ZigZagEngine(TemporalMappingEngine):
     def generate_temporal_mapping(self,spatial_mapping:Dict={},platform_memories:Dict={},optimal_spatial_mapping:List=[],cost_model:Any=None): 
         self.accelerator = self.generate_accelerator(platform_memories=platform_memories,
                                                      optimal_spatial_mapping=optimal_spatial_mapping,)
-        self.workload[1]["cost_model"] = cost_model
-        self.workload[1]["attrs"] = self.layer_data.layer_attrs
+        self.workload[1]["match_layer_data"] = self.layer_data
         self.spatial_mapping = spatial_mapping
         self.energy, self.latency, cme = api.get_hardware_performance_zigzag(
             workload=self.workload,
@@ -135,7 +135,8 @@ class ZigZagEngine(TemporalMappingEngine):
             opt="latency",
             dump_filename_pattern=f"tmp/match-layer_?.json",
             pickle_filename=f"tmp/match-saved_list_of_cmes.pickle",
-            lpf_limit=self.lpf_limit
+            lpf_limit=self.lpf_limit,
+            cost_model_class= cost_model
         )
         self.cme = cme[0][0]
         self.zigzag_temporal_mapping = self.cme.temporal_mapping.mapping_dic_stationary

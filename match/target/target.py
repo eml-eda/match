@@ -90,7 +90,7 @@ class MatchTarget(ABC):
     def get_layer_from_module(self,mod:tvm.ir.IRModule,pattern_name:str="conv2d"):
         node=mod.body.op.body
         match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{pattern_name}")
-        tmapgen = TemporalMappingGenerator(node=node,exec_module=match_pt.exec_module,pattern_name=match_pt.pattern)
+        tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=pattern_name)
         tmapgen.generate_workload()
         layer_data=tmapgen.get_layer_data()
         tmapgen.set_exec_module_for_layer()
@@ -112,11 +112,10 @@ class MatchTarget(ABC):
             self.add_exec_module(exec_module)
 
     def evaluate_pattern(self,node,match_pt):
-        tmapgen = TemporalMappingGenerator(node=node,exec_module=match_pt.exec_module,pattern_name=match_pt.pattern)
+        tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.pattern)
         tmapgen.generate_workload()
         layer_data=tmapgen.get_layer_data()
         pt_res=PatternResult(match_pt,layer_data)
-        #breakpoint()
         temporal_mapping,latency,energy=self.find_in_cached_list(pt_res)
         if temporal_mapping is not None:
             return latency,energy

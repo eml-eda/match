@@ -11,7 +11,8 @@ from match.target.exec_module import ExecModule
 REQUIRED_HW_DEPENDENT_PARAMS=("weights")
 
 class TemplateDataGenerator:
-    def __init__(self,mod:tvm.ir.IRModule,temporal_mapping:List=[],layer_data:LayerData=None,exec_module:ExecModule=None,pattern_name:str=""):
+    def __init__(self,mod:tvm.ir.IRModule,temporal_mapping:List=[],
+            layer_data:LayerData=None,exec_module:ExecModule=None,pattern_name:str=""):
         self.mod=mod
         self.temporal_mapping=temporal_mapping
         self.layer_data=layer_data
@@ -22,9 +23,12 @@ class TemplateDataGenerator:
     def generate_hw_dependent_template_data(self):
         hw_dependent_template_data = dict()
         hw_dependent_template_data["weights_and_constants"] = self.exec_module.weights_and_constants(self.layer_data.layer_arguments)
-        hw_dependent_template_data["apis"] = self.exec_module.match_apis()
+        hw_dependent_template_data["mem_apis"] = self.exec_module.match_mem_apis()
+        hw_dependent_template_data["comp_apis"] = self.exec_module.match_comp_apis()
+        hw_dependent_template_data["platform_apis"] = self.exec_module.match_platform_apis()
         hw_dependent_template_data["sync_apis"] = self.exec_module.match_sync_apis()
         hw_dependent_template_data["types"] = self.exec_module.match_types()
+        hw_dependent_template_data["include_list"] = self.exec_module.match_include_list()
         hw_dependent_template_data["kernel_params"] = self.exec_module.additional_kernel_parameters()
         hw_dependent_template_data["ordered_operand_memories"] = self.exec_module.operand_memories(self.layer_data.operands)
         self.template_data={**self.template_data,**hw_dependent_template_data}
@@ -187,10 +191,16 @@ class TemplateDataGenerator:
             # params: arr is expected to be a numpy version of the value, it should be an array but it may be also just a single value
             if len(arr.shape)>0:
                 # this is actually an array and not a single value
-                arr=arr.reshape([arr.shape[0]]).astype(np.uint8)
-                return f'{{{str(list(arr))[1:len(str(list(arr)))-1]}}}'
+                arr=arr.reshape([arr.shape[0]])
+                return {
+                    "value":f'{{{str(list(arr))[1:len(str(list(arr)))-1]}}}',
+                    "shape":f"[{ceil(arr.shape[0])}]"
+                }
             else:
-                return str(arr)
+                return {
+                    "value":str(arr),
+                    "shape":"[1]",
+                }
         
         general_template_data["size_each_level"]={
             operand:c_friendly_npvalue(
@@ -200,7 +210,7 @@ class TemplateDataGenerator:
                         (np.sum(general_template_data["overlaps"][dim]) if operand in general_template_data["input_operands"] and dim in general_template_data["padded_dims"] else 0)
                          for dim in general_template_data["size_loops_mem"][operand].keys()]
                     )
-                for op_mem in self.template_data['ordered_operand_memories'][operand][::-1]
+                for op_mem in self.template_data['ordered_operand_memories'][operand]
                 ]))
             for operand in general_template_data["operands"]
         }

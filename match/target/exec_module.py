@@ -2,14 +2,56 @@
 from abc import ABC,abstractmethod
 from math import ceil
 from typing import Any, Dict,List,Type
+from match.target.cost_model import ZigZagMatchCostModel
 from match.partition.partitioning_pattern import PartitioningPattern
 from match.target.memory_inst import MemoryInst
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
 import tvm
 import numpy as np
 import sys
-from zigzag.classes.cost_model.specialized_latency_cost_model import SpecializedLatencyCostModel
 
+class MemoryApis:
+    def __init__(self):
+        self.startup_memory_and_set_pattern="match_startup_memory_and_set_pattern"
+        self.shutdown_mem="match_shutdown_mem"
+        self.copy_out_curr_computation="match_copy_out_curr_computation"
+        self.copy_out_prev_computation="match_copy_out_prev_computation"
+        self.pointer_offset={
+            "O":"match_pointer_offset_O",
+            "W":"match_pointer_offset_W",
+            "I":"match_pointer_offset_I",
+            "X":"match_pointer_offset_X",
+            "Y":"match_pointer_offset_Y",
+        }
+        self.mem_transfer={
+            "O":"match_mem_transfer_O",
+            "W":"match_mem_transfer_W",
+            "I":"match_mem_transfer_I",
+            "X":"match_mem_transfer_X",
+            "Y":"match_mem_transfer_Y",
+        }
+        self.pattern_constants_loading="match_pattern_constants_loading"
+
+class ComputationalApis:
+    def __init__(self):
+        self.init_other_kernel_params="match_init_other_kernel_params"
+        self.innermost_computation="match_innermost_computation"
+
+class PlatformApis:
+    def __init__(self):
+        self.init_platform="match_init_platform"
+
+class SyncApis:
+    def __init__(self):
+        self.async_transfers="match_async_transfers"
+        self.prev_computation="match_prev_computation"
+        self.curr_computation="match_curr_computation"
+        self.sync_multilevel_transfer="match_sync_multilevel_transfer"
+
+class MatchTypes:
+    def __init__(self):
+        self.mem_data_macro_and_type="unsigned int"
+        self.kernel_struct="match_kernel"
 
 class ExecModule(ABC):
     """
@@ -20,32 +62,19 @@ class ExecModule(ABC):
         self.FULL_DIM = sys.maxsize
         self.optimal_spatial_mapping = None
         self.platform_memories = None
-        self.apis= {
-            "startup_memory":"match_startup_memory",
-            "shutdown_mem":"match_shutdown_mem",
-            "init_platform":"match_init_platform",
-            "init_other_kernel_params":"match_init_other_kernel_params",
-            "copy_out_computation":"match_copy_out_computation",
-            "computation":"match_computation",
-            "pointer_offset_O":"match_pointer_offset_O",
-            "pointer_offset_W":"match_pointer_offset_W",
-            "pointer_offset_I":"match_pointer_offset_I",
-            "pointer_offset_X":"match_pointer_offset_X",
-            "pointer_offset_Y":"match_pointer_offset_Y",
-            "mem_transfer_O":"match_mem_transfer_O",
-            "mem_transfer_W":"match_mem_transfer_W",
-            "mem_transfer_I":"match_mem_transfer_I",
-            "mem_transfer_X":"match_mem_transfer_X",
-            "mem_transfer_Y":"match_mem_transfer_Y",
-        }
-        self.sync_apis= {
-            "all_mem_transfers":"match_all_mem_transfers",
-            "prev_computation":"match_prev_computation",
-        }
-        self.types= {
-            "mem_data_macro":"",
-            "kernel_struct":"match_kernel"
-        }
+        self.mem_apis= MemoryApis()
+        self.sync_apis= SyncApis()
+        self.comp_apis= ComputationalApis()
+        self.platform_apis= PlatformApis()
+        self.types= MatchTypes()
+        self.include_list=[
+            "match_dimensions.h",
+            "match_kernel.h",
+            "match_tile_indexes.h",
+            "match_mem.h",
+            "match_sync.h",
+            "match_target_params.h",
+        ]
 
     def partitioning_patterns(self):
 
@@ -135,7 +164,7 @@ class ExecModule(ABC):
                         dim_size=dim_sizes[opt_sptmap[0]],optimal_spat=self.get_optimal_spat_size(opt_sptmap[1],dim_sizes[opt_sptmap[0]])))\
                                         for opt_idx,opt_sptmap in enumerate(self.optimal_spatial_mapping)},
                     "memory_operand_links": {op:op_link_name(op) for op in operands},
-                    "fixed_loops":["FX","FY"]+(["C"] if "dense" not in pattern_operations else []),
+                    "unordered_loops":["FX","FY"]+(["C"] if "dense" not in pattern_operations else []),
                 }
         }
     
@@ -144,7 +173,7 @@ class ExecModule(ABC):
         return loop_dim_size,pr_loop_dim_size,operand_precision,operand_precision
     
     def cost_model(self):
-        return SpecializedLatencyCostModel([])
+        return ZigZagMatchCostModel
     
     def adjust_temporal_mapping(self,temporal_mapping:List=[],layer_data:Any=None):
         return temporal_mapping
@@ -182,21 +211,23 @@ class ExecModule(ABC):
     def additional_kernel_parameters(self):
         return dict()
     
-    def apis_def(self):
+    def types_def(self):
+        return
+
+    def match_types(self):
+        self.types_def()
+        return self.types
+
+    def mem_apis_def(self):
         # TODO: definire lista di API che servono
         # flusso di programma:
         # init platform -> init memory (alloc l1) -> calc indexes -> DMA transfers -> bias? -> batchnorm? -> pooling? ->
         # computation
         return
-    def types_def(self):
-        return
-    def match_types(self):
-        self.types_def()
-        return self.types
 
-    def match_apis(self):
-        self.apis_def()
-        return self.apis
+    def match_mem_apis(self):
+        self.mem_apis_def()
+        return self.mem_apis
     
     def sync_apis_def(self):
         return
@@ -204,10 +235,28 @@ class ExecModule(ABC):
     def match_sync_apis(self):
         self.sync_apis_def()
         return self.sync_apis
-
-    def include_list(self):
-        return []
     
+    def comp_apis_def(self):
+        return
+    
+    def match_comp_apis(self):
+        self.comp_apis_def()
+        return self.comp_apis
+    
+    def platform_apis_def(self):
+        return
+    
+    def match_platform_apis(self):
+        self.platform_apis_def()
+        return self.platform_apis
+
+    def def_include_list(self):
+        return
+    
+    def match_include_list(self):
+        self.def_include_list()
+        return self.include_list
+
     def operand_memories(self,operands):
         return {
             operand:[mem.name for mem in self.platform_memories if operand in mem.operands][::-1]

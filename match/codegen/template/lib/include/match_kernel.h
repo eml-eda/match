@@ -1,3 +1,5 @@
+#ifndef _MATCH_KERNEL_H
+#define _MATCH_KERNEL_H
 #include <match_dimensions.h>
 
 typedef struct common_kernel_t {
@@ -21,38 +23,38 @@ typedef struct common_kernel_t {
   int activation_function;
   unsigned int right_shift;
   // pads
-  unsigned int pad_ix_x;
-  unsigned int pad_ix_y;
-  unsigned int pad_iy_x;
-  unsigned int pad_iy_y;
+  unsigned int pad_IX_x;
+  unsigned int pad_IX_y;
+  unsigned int pad_IY_x;
+  unsigned int pad_IY_y;
   unsigned int dilatation_x;
   unsigned int dilatation_y;
   // strides
   unsigned int stride_x;
   unsigned int stride_y;
   // fused layers pts
-  void* bias_pt;
-  void* batchnorm_mul;
-  void* batchnorm_add;
+  unsigned int bias_pt;
+  unsigned int batchnorm_mul;
+  unsigned int batchnorm_add;
   // output dim
   dimension_O* dim_O;
   int mem_O;
-  void* O_pt;
+  unsigned int O_pt;
   // 1 input
   dimension_I* dim_I;
   int mem_I;
-  void* I_pt;
+  unsigned int I_pt;
   // 2 inputs
   dimension_X* dim_X;
   int mem_X;
-  void* X_pt;
+  unsigned int X_pt;
   dimension_Y* dim_Y;
   int mem_Y;
-  void* Y_pt;
+  unsigned int Y_pt;
   // weights
   dimension_W* dim_W;
   int mem_W;
-  void* W_pt;
+  unsigned int W_pt;
 } common_kernel;
 
 typedef struct match_kernel_t
@@ -62,3 +64,9 @@ typedef struct match_kernel_t
 
 
 void init_common_kernel_params(common_kernel* kernel);
+
+void match_innermost_computation(match_kernel* kernel,unsigned int pattern_name);
+
+void kernel_set_padding(common_kernel* kernel,dimension_I* dim);
+
+#endif

@@ -1,7 +1,6 @@
 import numpy as np
 from match.codegen.temporal_mapping_engine import get_temporal_mapping_engine
 from match.codegen.workload_parser import WorkloadParser
-from match.codegen.workload_parser import WorkloadParser
 # TVM imports
 import tvm
 from math import ceil
@@ -12,11 +11,12 @@ from typing import Any, Dict,List,Type
 from match.target.exec_module import ExecModule
 
 class TemporalMappingGenerator:
-    def __init__(self,node:tvm.ir.IRModule,exec_module:ExecModule=None,pattern_name:str="",temporal_mapping_engine:str="zigzag"):
+    def __init__(self,node:tvm.ir.IRModule,args_list:List=[],exec_module:ExecModule=None,pattern_name:str="",temporal_mapping_engine:str="zigzag"):
         self.node=node
+        self.args_list=args_list
         self.exec_module=exec_module
         self.pattern_name=pattern_name
-        self.workload_parser=WorkloadParser(node=self.node,exec_module=self.exec_module,pattern_name=self.pattern_name)
+        self.workload_parser=WorkloadParser(node=self.node,args_list=self.args_list,exec_module=self.exec_module,pattern_name=self.pattern_name)
         self.temporal_mapping_engine_class=get_temporal_mapping_engine(temporal_mapping_engine)
         self.workload=dict()
         self.temporal_mapping=[]

@@ -10,8 +10,9 @@ from match.target.exec_module import ExecModule
 from match.codegen.layer_data import LayerData
 
 class WorkloadParser:
-    def __init__(self, node:tvm.ir.IRModule, exec_module:ExecModule=None, pattern_name:str=""):
+    def __init__(self, node:tvm.ir.IRModule, args_list:List=[],exec_module:ExecModule=None, pattern_name:str=""):
         self.exec_module=exec_module
+        self.args_list=args_list
         self.pattern_name=pattern_name
         self.node = node
         self.visit_router = {
@@ -309,7 +310,7 @@ class WorkloadParser:
             "groups": groups,
             "loop_sizes": {**self.layer_data.loop_dim_size, **self.layer_data.pr_loop_dim_size},
             "nn.conv2d_prec": self.layer_data.operand_precision,
-            "nn.conv2d_dephtwise": depthwise,
+            "nn.conv2d_depthwise": depthwise,
         }
         self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
 
@@ -334,23 +335,23 @@ class WorkloadParser:
             # fit variables and constants
             for a in c.args:
                 if isinstance(a, tvm.relay.Var):
-                    ## this can be either a constant or the input still so let's check the real type
-                    #if isinstance(
-                    #    self.node.body.args[len(var_and_consts_not_unrolled)], tvm.relay.Var
-                    #):
-                    #    var_and_consts_not_unrolled[a.name_hint] = self.node.body.args[
-                    #        len(var_and_consts_not_unrolled)
-                    #    ]
-                    #else:
-                    #   var_and_consts_not_unrolled[
-                    #       c.op.name
-                    #       + f".param.{sum([c.op.name in k for k in var_and_consts_not_unrolled.keys()])}"
-                    #   ] = self.node.body.args[len(var_and_consts_not_unrolled)]
-
-                    # idk why up was needed? 
-                    var_and_consts_not_unrolled[
-                        a.name_hint
-                    ] = a
+                    if len(self.args_list)>len(var_and_consts_not_unrolled):
+                        ## this can be either a constant or the input still so let's check the real type
+                        if isinstance(
+                            self.args_list[len(var_and_consts_not_unrolled)], tvm.relay.Var
+                        ):
+                            var_and_consts_not_unrolled[a.name_hint] = self.args_list[
+                                len(var_and_consts_not_unrolled)
+                            ]
+                        else:
+                            var_and_consts_not_unrolled[
+                            c.op.name
+                            + f".param.{sum([c.op.name in k for k in var_and_consts_not_unrolled.keys()])}"
+                            ] = self.args_list[len(var_and_consts_not_unrolled)]
+                    else:
+                        var_and_consts_not_unrolled[
+                            a.name_hint
+                        ] = a
                 elif isinstance(a, tvm.relay.Constant):
                     var_and_consts_unrolled[
                         c.op.name

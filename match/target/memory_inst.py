@@ -1,5 +1,5 @@
 
-from typing import Dict, List, NamedTuple, Tuple
+from typing import Callable, Dict, List, NamedTuple, Tuple
 
 class PortConnection:
     def __init__(self,rw_port_number:int=1,r_port_number:int=0,w_port_number:int=0):
@@ -32,9 +32,13 @@ class PortConnection:
         }
         assert ((bool(self.r_port_number) + bool(self.w_port_number)) == 2) or bool(self.rw_port_number)
 
+def no_buffer(*args):
+    return 0
+
 class MemoryInst:
     def __init__(self,name:str="l1_mem",k_bytes:int=1,r_bw:int=32,w_bw:int=32,r_ports:int=0,w_ports:int=0,
-                 rw_ports:int=1,operands:List[str]=[],used_ports:Dict[str,Tuple[PortConnection]]={}):
+                 rw_ports:int=1,operands:List[str]=[],double_buffering_support:bool=False,
+                 buffer_for_layer_func:Callable=no_buffer,used_ports:Dict[str,Tuple[PortConnection]]={}):
         self.name=name
         self.k_bytes=k_bytes
         self.r_bw=r_bw
@@ -43,6 +47,8 @@ class MemoryInst:
         self.w_ports=w_ports
         self.rw_ports=rw_ports
         self.operands=operands
+        self.double_buffering_support=double_buffering_support
+        self.buffer_for_layer_func=buffer_for_layer_func
         self.used_ports=dict()
         assert ((bool(self.r_ports) + bool(self.w_ports)) == 2) or bool(self.rw_ports)
         for port_op in [op for op in self.operands if op not in self.used_ports]:

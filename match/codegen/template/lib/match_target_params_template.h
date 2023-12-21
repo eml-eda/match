@@ -1,5 +1,9 @@
+#ifndef _MATCH_TARGET_PARAMS_H
+#define _MATCH_TARGET_PARAMS_H
+
+#define NUM_MEMORY_LEVELS ${max([1]+[len(memory_names[exec_module.name]) for exec_module in exec_modules])}
+
 % for exec_module in exec_modules:
-#define NUM_MEMORY_LEVELS_${exec_module.name} ${len(memory_names[exec_module.name])}
 typedef enum{
     % if len(memory_names[exec_module.name])>0:
     ${memory_names[exec_module.name][0]}
@@ -18,3 +22,5 @@ typedef enum{
     % endfor
 }patterns_${exec_module.name};
 % endfor
+
+#endif

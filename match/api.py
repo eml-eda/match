@@ -8,16 +8,26 @@ from match.driver.driver import driver
 import logging
 import argparse
 
-def with_relay(mod,params,device):
-    driver(mod,params)
+def with_relay(mod,params,target_name):
+    driver(mod,params,target=target_name)
+
+def with_onnx(onnx_model,target_name):
+    mod, params=relay.frontend.from_onnx(onnx_model)
+    driver(mod,params,target=target_name)
+
+def relay_conv(target):
+    from relay_models import create_model_conv2d
+    mod, params = create_model_conv2d()
+    driver(mod,params,target=target)
+
+def relay_add_convs(target):
+    from relay_models import create_model_add_convs
+    mod, params = create_model_add_convs()
+    driver(mod,params,target=target)
 
 def main(onnx_filename,target):
-    #onnx_model=onnx.load(onnx_file)
-    #print(onnx_model)
-    #mod, params=relay.frontend.from_onnx(onnx_model)
-    #breakpoint()
-    from relay_conv2d import create_model
-    mod, params = create_model()
+    onnx_model=onnx.load(onnx_filename)
+    mod, params=relay.frontend.from_onnx(onnx_model)
     driver(mod,params,target=target)
 
 if __name__ == "__main__" :
