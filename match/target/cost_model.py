@@ -113,11 +113,11 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         prev_mult_=0
         for idx,mult_ in enumerate(sorted_multiplicities):
             if idx==0:
-                cycles+=max([0]+[self.input_transfer_costs[operand][0] for operand in self.operands if operand!='O' and self.outermost_loop_iters[operand]>=mult_])
+                cycles+=max([0]+[self.transfer_costs[operand] for operand in self.operands if operand!='O' and self.outermost_loop_iters[operand]>=mult_])
                 prev_mult_=1
-            cycles+=(mult_-prev_mult_)*max([self.innermost_loops_cost_per_it,max([self.input_transfer_costs[operand][0] if operand!="O" else self.output_transfer_costs[0] for operand in self.operands if self.outermost_loop_iters[operand]>=mult_])])
+            cycles+=(mult_-prev_mult_)*max([self.innermost_loops_cost_per_it,max([self.transfer_costs[operand] for operand in self.operands if self.outermost_loop_iters[operand]>=mult_])])
             prev_mult_=mult_
-        self.match_overall_latency=cycles+self.innermost_loops_cost_per_it+self.output_transfer_costs[0]
+        self.match_overall_latency=cycles+self.innermost_loops_cost_per_it+self.transfer_costs["O"]
 
     def def_overall_execution(self):
         self.overall_latency_async()

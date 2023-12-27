@@ -9,7 +9,7 @@ The compilation in MATCH is guided by a temporal mapping engine, which searches 
 
 Finally MATCH will output all the generated code, for each fused layer separetely
 
-# Usage
+# Target definition example
 To use MATCH a user can use one of the defined APIs. The main 2 ones are; with_relay and with_onnx. The first one expects a network and its parameters expressed in the TVM Relay IR language, and the name of the target to use. The second one instead expects an ONNX model and the name of target used.
 
 To define a new target the user may extend a class, MatchTarget.
@@ -71,11 +71,14 @@ def optimal_spatial_mapping_def(self, pattern_name: str = "default_conv2d",dim_s
 To guide the temporal mapping engine research the user may deploy a customized cost model, which computes the expected latency and energy of each solution. The default temporal mapping engine used currently is ZigZag so it is encouraged to extend the ZigZagMatchCostModel class and 2 of its methods; def_transfer_cost that shall return the transfer cost of each operand for every memory transfer iteration and def_innermost_loops_cost, that instead computes the cost of a single call to the innermost loops(back-end kernels). def_transfer_cost is called previously with respect to def_innermost_loops_cost so the user can set some parameters for the class earlier and use them later for the loops cost calculation.
 
 Finally to complete the definition of an executional model the user must define the names of the apis used by MATCH, that are divided into memory related ones, computational ones, synchronization ones, platform ones and also the definition of some specific types used by MATCH, such as the kernel structure used.
+
+With a defined target the user currently to extend MATCH has to add the target to the target list in match/target/get_target.py .
 # Requirements
 These instructions will consider a Ubuntu installation that satify these constraints:
 - a C++ compiler with C++17 support, like GCC 7.1 or Clang 5.0
 - CMake 3.18 or higher
-- python
+- python3
+- pip3
 
 A fresh install of Ubuntu 22.04 should satify all this requirements beforehand.
 
@@ -87,5 +90,24 @@ $ git clone --recursive https://github.com/eml-eda/match
 $ make all
 ```
 
+When using a new fresh terminal the user may have to run "source sourceme.sh" on top of the directory to set correctly the environment. 
+
+# Usage
+
+Considering a target the user may try 2 simple networks with some predefined apis, to do so the user can run one of the following commands:
+
+```
+$ python3 match/api.py -c -t target_name
+$ python3 match/api.py -a -t target_name
+```
+
+Where the first command issues a 2d requantized convolution with a bias add operation, while the second does an addition between 2 2d convolutions as the previous ones.
+
+The user can also import match in a python script and define a network in the TVM Relay IR language as follows:
+```python
+import match.api.with_relay as match_relay
+mod,params=define_network()
+match_relay(mod,params,target_name)
+```
 # License
 MATCH entire codebase is released under [Apache License 2.0](LICENSE).

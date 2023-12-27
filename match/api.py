@@ -62,12 +62,18 @@ if __name__ == "__main__" :
     parser.add_argument('-t','--target', dest='target', type=str,
                         help='Target platform for the inference of the DNN.')
 
-    args = parser.parse_args()
-    #if args.verbose == 0:
-    #    logging.getLogger().setLevel(level=logging.WARNING)
-    #elif args.verbose == 1:
-    #    logging.getLogger().setLevel(level=logging.INFO)
-    #elif args.verbose == 2:
-    #    logging.getLogger().setLevel(level=logging.DEBUG)
+    parser.add_argument('-c','--convexample',dest='convexample',action="store_true",
+                        help="compile a simple conv example, that contains a con2d, a bias add and a requantization step")
 
-    main(args.onnx_filename,args.target)
+    parser.add_argument('-a','--addexample',dest='addexample',action="store_true",
+                        help="compile a simple add example between 2 2d convs like the ones in the convexample,"+\
+                        "with a final requantization step")
+
+    args = parser.parse_args()
+
+    if args.convexample:
+        relay_conv(args.target)
+    elif args.addexample:
+        relay_add_convs(args.target)
+    else:
+        main(args.onnx_filename,args.target)
