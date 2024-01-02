@@ -1,19 +1,26 @@
+<div align="center">
+<img src=".assets/match_logo.png" width="700"/>
+</div>
+---
+
 # MATCH
-MATCH is a DNN compiler that exploits the TVM BYOC framework to extend the capacity of the former tool.
+**MATCH** (**M**odel-**A**ware **T**VM-based **C**ompiler for **H**eterogeneous hardware) is a DNN compiler that exploits [Apache TVM](https://tvm.apache.org/)'s BYOC framework, targeting the optimized deployment of DNN applications onto heterogeneous edge System-on-Chip (SoC) platforms.
 
-This project targets users who may want to deploy optimally a DNN application onto a heterogeneous edge platform.
+MATCH partitions a DNN isolating (or _matching_) patterns supported by each hardware module in the target system. It then manages the compilation process for layers supported by the available accelerators, and exploits the baseline TVM to generate code for unsupported layers on the main host core.
 
-MATCH partitions a network with patterns for a specific module of the target or the host core(a normal CPU). With a partioned network MATCH manages then the compilation process of the layers supported by the targeted platform, and exploits TVM for the compilation process of the layers assigned to the host core.
+Compilation in MATCH is guided by a temporal mapping engine, which searches for the optimal schedule (i.e. loop ordering and memory allocation) of each layer. MATCH currently supports [ZigZag](https://github.com/KULeuven-MICAS/zigzag) as the default temporal mapping engine.
 
-The compilation in MATCH is guided by a temporal mapping engine, which searches for the optimal schedule(i.e. loop ordering and memory allocation). MATCH currently supports ZigZag as the temporal mapping engine.
+At the end of the compilation process, MATCH produces C code to execute all layers of the network, which users can invoke from their own "main" program to implement a complete inference.
 
-Finally MATCH will output all the generated code, for each fused layer separetely
+# Extending MATCH to new SoCs
+To use MATCH, a user can select among two main APIs: `with_relay` and `with_onnx`. The first one expects a DNN defined in the TVM Relay IR language, whereas the second one expects an ONNX model.
 
-# Target definition example
-To use MATCH a user can use one of the defined APIs. The main 2 ones are; with_relay and with_onnx. The first one expects a network and its parameters expressed in the TVM Relay IR language, and the name of the target to use. The second one instead expects an ONNX model and the name of target used.
+## Targets
 
-To define a new target the user may extend a class, MatchTarget.
-The extension process is quite simple since the only thing that the user must provide is the list of execution module in the __init__ to the original MatchTarget class. For example to define a target which contains a digital accelerator and an analog one a user must declare a class as following:
+To define a new target (i.e.,  a new heterogeneous SoC), users shall extend the `MatchTarget` class.
+The extension process is quite simple, since the only thing that the user must provide is a list of _execution modules_, passed to the constructor of the base `MatchTarget` class. Execution modules are classes that represent all hardware modules in the target SoC that MATCH should consider to implement the inference of DNN layers, except for the main host CPU (which is handled by TVM). So, execution modules might include GPUs, dataflow accelerators, slave CPU clusters, etc.
+
+For example to define a target SoC which contains a digital accelerator and an analog one, a user could use the following code:
 ```python
 from match.target.target import MatchTarget
 
@@ -25,13 +32,22 @@ class ExampleTarget(MatchTarget):
         ],name="example")
 ```
 
-The execution modules are classes that represent each component that will be used for the inference of a DNN fused layer. So it may represent a CPU, GPU, a dedicated accelerator, a cluster of CPUs or any computational component.
+## Execution Modules
 
-Also for their definition the user must extend a Match class. This one is ExecModule, which contains the definition of all the necessary information of a module, with a default implementation to allow the user to customize only the relevant ones.
+Each execution module essentially defines a **model-based hardware abstraction** of a specific accelerator.
 
-Each ExecModule should support a list of patterns, a pattern in MATCH defines a fused layer, where there should be a computational layer and supporting ones, such as cast,clip,shift and many others. An ExecModule defines the supported patterns by extending the partitioning_patterns function.
+Execution modules shall inherit from the `ExecModule` class. The latter contains a default implementation of all the functions needed by MATCH to target a new accelerator, allowing users to only customize the relevant ones.
 
-Patterns are defined through the PartitioningPattern class, that contains the name of the pattern(which should be unique throughout the target, and will be used for the rest of the process), the pattern itself, which is a function that returns a pattern defined in the TVM Relay IR language and finally a function that receives the matched patterns and issues all the remaining necessary conditions to support it. An example of a pattern can be shown below:
+### Supported Patterns
+First of all, each `ExecModule` should define a list of supported DNN layer _patterns_, by extending the `partitioning_patterns` method.
+A pattern in MATCH is a Relay IR expression corresopnding to a sequence of DNN operations. For instance, a given accelerator might match a sequence consisting of a convolution followed by cast, clip, and shift, to implement re-quantization.
+
+Patterns themselves are defined through the `PartitioningPattern` class, whose parameters are:
+* The pattern name, which should be unique within the target.
+* A function returning the pattern in Relay
+* A function that optionally checks for supplementary conditions that shall be true in order for the pattern to be supported by the target accelerator (e.g., a specific convolution kernel size).
+
+An example of pattern definition is shown below:
 ```python
 from match.partition.partitioning_pattern import PartitioningPattern
 
@@ -46,15 +62,28 @@ def no_checks(pattern):
 pattern = PartitioningPattern(name="default_conv2d",pattern=conv2d_pattern,additional_checks=no_checks)
 ```
 
-MATCH considers each module separately, containing each an independent memory hierarchy, that can be defined setting self.platform_mem extending the memories_def class function. The default implementation is a 2 level memory hierarchy of shared memories, the lower level one of 32kB and the higher level one of 128kB.
+### Memory Hierarchy
+MATCH also requires a definition of the _memory hierarchy_ of each execution module. This is needed because MATCH considers the execution of a layer to happen inside the lowest memory-level. Thanks to ZigZag's temporal mapping engine, when the L1 is not large enough to entirely contain the inputs/outputs of a layer, the latter is tiled appropriately.
 
-MATCH considers the execution of a fused layer to happen inside of the lowest memory level defined, so each instance should contain at least a 2(or more) level memory hierarchy, since the optimization stops there.
+<!--So, each hierarchy definition should contain at least a 2 (or more) levels since the optimization stops there (TBC).-->
 
-A memory hierarchy is defined as a Python list of MemoryInst classes. The list should be ordered from lower level memories to higher level ones.
+Hierarchies can be defined extending the `memories_def` method, and setting the `self.platform_mem` from therein. A memory hierarchy is defined as a Python list of `MemoryInst` objects, ordered from lower level to higher level.
 
-MemoryInst defines a memory instance and contains the name of the memory, its size in kB, the operands that are targeted by this memory and many more data that can be customized as preferred. These vary from the double buffering support to a function that computes the number of bytes that are allocated on the memory for buffers used for a specific pattern.
+Each `MemoryInst` constructor receives the name of the memory, its size in kB, and the types of operand supported (DNN weights, activations, or both). Optionally, users can also specify double-buffering support, or indicate a size in bytes to be reserved for pattern-specific memory buffers.
 
-The user is also advised to extend the definition of the optimal spatial mapping, by setting self.optimal_spatial_mapping in the function optimal_spatial_mapping_def. The optimal spatial mapping is used to compute the actual spatial mapping and so the number of virtual units that should be executing the layer. This definition may depend on the pattern, an example of an optimal spatial mapping definition can be found below:
+For example, the following code defines a memory with ....(TBD):
+```python
+ADD EXAMPLE
+```
+
+The default hierarchy implementation is a 2-level one, with a 32kB L1 and a 128kB L2, each accepting both weights and activations.
+
+### Optimal Spatial Mapping
+Users can also extend the definition of the optimal spatial mapping for an execution module, by setting the `self.optimal_spatial_mapping` attribute within the function `optimal_spatial_mapping_def`.
+
+The optimal spatial mapping is used to compute the actual spatial mapping and so the number of virtual execution units that will be processing the layer in parallel. This definition may depend on the pattern.
+
+An example of an optimal spatial mapping definition can be found below:
 ```python
 def optimal_spatial_mapping_def(self, pattern_name: str = "default_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
     if pattern_name=='default_conv2d' and (dim_sizes['FY']*dim_sizes['FX'])==1:
