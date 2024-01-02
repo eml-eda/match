@@ -41,6 +41,8 @@ When using a new fresh terminal, users can run `source sourceme.sh` to correctly
 
 # Usage
 
+To use MATCH, a user can select among two main APIs: `with_relay` and `with_onnx`. The first one expects a DNN defined in the TVM Relay IR language, whereas the second one expects an ONNX model.
+
 Considering a target the user may try 2 simple networks with some predefined apis, to do so the user can run one of the following commands:
 
 ```
@@ -58,9 +60,6 @@ match_relay(mod,params,target_name)
 ```
 
 # Extending MATCH to target new SoCs
-To use MATCH, a user can select among two main APIs: `with_relay` and `with_onnx`. The first one expects a DNN defined in the TVM Relay IR language, whereas the second one expects an ONNX model.
-
-## Targets
 
 To define a new target (i.e.,  a new heterogeneous SoC), users shall extend the `MatchTarget` class.
 The extension process is quite simple, since the only thing that the user must provide is a list of _execution modules_, passed to the constructor of the base `MatchTarget` class. Execution modules are classes that represent all hardware modules in the target SoC that MATCH should consider to implement the inference of DNN layers, except for the main host CPU (which is handled by TVM). So, execution modules might include GPUs, dataflow accelerators, slave CPU clusters, etc.
@@ -81,13 +80,15 @@ class ExampleTarget(MatchTarget):
 
 Each execution module essentially defines a **model-based hardware abstraction** of a specific accelerator.
 
-Execution modules shall inherit from the `ExecModule` class. The latter contains a default implementation of all the functions needed by MATCH to target a new accelerator, allowing users to only customize the relevant ones.
+Execution modules shall inherit from the `ExecModule` class. The latter contains a default for all the pieces of information needed by MATCH to support a new accelerator, allowing users to only customize the relevant ones. 
+
+The main items that require customization are the following.
 
 ### Supported Patterns
 First of all, each `ExecModule` should define a list of supported DNN layer _patterns_, by extending the `partitioning_patterns` method.
-A pattern in MATCH is a Relay IR expression corresopnding to a sequence of DNN operations. For instance, a given accelerator might match a sequence consisting of a convolution followed by cast, clip, and shift, to implement re-quantization.
+A pattern in MATCH is a Relay IR expression corresponding to a sequence of DNN operations. For instance, a given accelerator might match a sequence consisting of a convolution followed by cast, clip, and shift, to implement re-quantization.
 
-Patterns themselves are defined through the `PartitioningPattern` class, whose parameters are:
+Patterns are defined through the `PartitioningPattern` class, whose parameters are:
 * The pattern name, which should be unique within the target.
 * A function returning the pattern in Relay
 * A function that optionally checks for supplementary conditions that shall be true in order for the pattern to be supported by the target accelerator (e.g., a specific convolution kernel size).
@@ -128,7 +129,7 @@ Users can also extend the definition of the optimal spatial mapping for an execu
 
 The optimal spatial mapping is used to compute the _actual_ spatial mapping and so the number of virtual execution units that will be processing the layer in parallel. For a simple accelerator, optimal and actual spatial mapping are the same thing. However, for more complex platforms, such as multi-core CPU clusters, they might differ. Check the paper for more details.
 
-Importantly, the optimal spatial mapping definition may be different for each supported pattern, to support accelerators that use different types of spatial unrolling for different DNN ops.An example of an optimal spatial mapping definition is shown below:
+Importantly, the optimal spatial mapping definition may be different for each supported pattern, to support accelerators that use different types of spatial unrolling for different DNN ops. An example of an optimal spatial mapping definition is shown below:
 ```python
 def optimal_spatial_mapping_def(self, pattern_name: str = "default_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
     if pattern_name=='default_conv2d' and (dim_sizes['FY']*dim_sizes['FX'])==1:
@@ -156,7 +157,7 @@ ADD EXAMPLE
 
 
 ### C Backend APIs
-Lastly, to complete the definition of an execution module, the user must define the names of the C backend functions that MATCH should invoke to use the accelerators. The functions that MATCH requires are organized in flexible templates, some of which can optionally be empty for accelerators that do not require a certain step (e.g., an initialization prior to starting an inference). In detail, MATCH APis are divided into:
+Lastly, to complete the definition of an execution module, the user must define the names of the C backend functions that MATCH should invoke to use the accelerator. The functions that MATCH requires are organized in flexible templates, some of which can optionally be empty for accelerators that do not require a certain step (e.g., an initialization prior to starting an inference). In detail, MATCH APis are divided into:
 * Memory functions
 * Computation functions
 * Synchronization functions
