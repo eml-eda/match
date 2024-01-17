@@ -1,7 +1,9 @@
+import copy
 import onnx
 import numpy as np
 import tvm
 from tvm import te
+from tvm.contrib.target.onnx import to_onnx
 import tvm.relay as relay
 from tvm.contrib.download import download_testdata
 from match.driver.driver import driver
@@ -44,6 +46,17 @@ def relay_add_convs(target):
     mod, params = create_model_add_convs()
     driver(mod, params, target=target)
 
+def sanitize_onnx_only_remove(onnx_model: onnx.ModelProto):
+    for node in onnx_model.graph.node:
+        atts_to_pop = list()
+        for idx_att, attribute in enumerate(node.attribute):
+            # probably precisions to fix
+            if attribute.name=="out_dtype":
+                atts_to_pop.append(idx_att)
+            if "_" in attribute.name and attribute.name.split("_")[1]=="bits":
+                atts_to_pop.append(idx_att)
+        for idx_att, att_ref in enumerate(atts_to_pop):
+            node.attribute.pop(att_ref - idx_att)
 
 def sanitize_onnx(onnx_model: onnx.ModelProto):
     def create_initializer_tensor(
@@ -91,8 +104,7 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
         if op_type=="Conv":
             return 3
         return 3
-
-    nodes = list()
+    
     nodes_with_new_ops = list()
     nodes_to_append = list()
     output_to_graph_idx= dict()
@@ -100,6 +112,7 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
     input_names = list()
     input_names_to_idx= dict()
     graph_input_types=dict()
+    original_out_to_new_node_version=dict()
     for inp_idx,input_t in enumerate(onnx_model.graph.input):
         input_names.append(input_t.name)
         input_names_to_idx[input_t.name]=inp_idx
@@ -107,7 +120,6 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
     for idx_node, node in enumerate(onnx_model.graph.node):
         refactored_idx = int(node.output[0]) + len(nodes_with_new_ops)
         refactored_idx_node = idx_node + len(nodes_with_new_ops)
-        nodes.append(node)
         weights_bits = -1
         op_bits = -1
         bias_bits = -1
@@ -119,13 +131,13 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
             if attribute.name=="value":
                 nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(attribute.t.data_type)
             # probably precisions to fix
-            if "_" in attribute.name:
+            if "_" in attribute.name and attribute.name.split("_")[1]=="bits":
                 att = attribute.name.split("_")
                 if att[0] == "weight":
                     weights_bits = attribute.i
                     atts_to_pop["weight"]=idx_att
                     nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int",weights_bits))
-                if hasattr(node, "op_type") and node.op_type.lower() in att[0].lower() and att[1] == "bits":
+                if hasattr(node, "op_type") and node.op_type.lower() in att[0].lower():
                     op_bits = attribute.i
                     atts_to_pop["op"]=idx_att
                     nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int",op_bits))
@@ -134,11 +146,12 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
                     atts_to_pop["out"]=idx_att
                     nodes_with_new_ops.append(idx_node)
                     nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int",cast_bits))
-                if att[0] == "bias" and node.op_type=="Conv":
-                    bias_bits = attribute.i
+                if att[0] == "bias":
                     atts_to_pop["bias"]=idx_att
-                    #nodes_with_new_ops.append(idx_node)
-                    nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int",bias_bits))
+                    if node.op_type=="Conv":
+                        bias_bits = attribute.i
+                        #nodes_with_new_ops.append(idx_node)
+                        nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int",bias_bits))
         op_channels = 32
         inputs_types=list()
         for input_idx, node_input in enumerate(node.input):
@@ -302,9 +315,9 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
                         (
                             refactored_idx-1,
                             onnx.helper.make_node(
-                                name=f"{node.name}/input_node/cast",
+                                name=f"{node.name}/input_node_{input_added_nodes}/cast",
                                 op_type="Cast",
-                                inputs=[node_input["name"]],
+                                inputs=[original_out_to_new_node_version[node_input["name"]]],
                                 outputs=[str(refactored_idx+input_added_nodes)],
                                 to=onnx.helper.np_dtype_to_tensor_dtype(more_restrictive_dtype),
                             ),
@@ -383,12 +396,13 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
             #        node.input[inp_idx] = str(new_node_input_ref)
         node.output.append(str(refactored_idx + input_added_nodes))
         output_to_graph_idx[int(node.output[0])]=idx_node
+        original_out_to_new_node_version[node.output[0]]=str(refactored_idx + input_added_nodes)
         node.output.pop(0)
         for idx_att, att_ref in enumerate(atts_to_pop.values()):
             node.attribute.pop(att_ref - idx_att)
     for idx_node,new_node in enumerate(nodes_to_append):
         onnx_model.graph.node.insert(new_node[0],new_node[1])
-    return nodes_out_types
+    return {"out_types":nodes_out_types,"to_append":nodes_to_append,"out_to_graph_idx":output_to_graph_idx,"new_ops_at":nodes_with_new_ops}
 
 
 def main(onnx_filename, target):
@@ -396,8 +410,7 @@ def main(onnx_filename, target):
     try:
         onnx.checker.check_model(onnx_model)
     except Exception as e:
-        nodes_out_types=sanitize_onnx(onnx_model)
-        print(e)
+        sanitize_onnx(onnx_model)
     mod, params = relay.frontend.from_onnx(onnx_model)
     driver(mod, params, target=target)
 

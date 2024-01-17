@@ -146,8 +146,8 @@ static void init_common_kernel_static_params(
     % endif
     &(dim_O->common_dim),${sw_for_loops[::-1][0][f"mem_O"]}
     );
-    //kernel->dilation_x=${layer_attrs["dilation"][0]};kernel->dilation_y=${layer_attrs["dilation"][1]};
-    //kernel->activation_function=${layer_attrs["activation"]};
+    //kernel->dilation_x=----layer_attrs["dilation"][0]---;kernel->dilation_y=---layer_attrs["dilation"][1]---;
+    //kernel->activation_function=---layer_attrs["activation"]---;
     kernel->stride_x=${layer_attrs["strides"]["IX"]};kernel->stride_y=${layer_attrs["strides"]["IY"]};
     kernel->right_shift=${0 if "right_shift.param.0" not in weights_and_constants["single_costants"] else weights_and_constants["single_costants"]["right_shift.param.0"]};
 }
