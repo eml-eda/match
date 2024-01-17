@@ -11,12 +11,12 @@ from typing import Any, Dict,List,Type
 from match.target.exec_module import ExecModule
 
 class TemporalMappingGenerator:
-    def __init__(self,node:tvm.ir.IRModule,args_list:List=[],exec_module:ExecModule=None,pattern_name:str="",temporal_mapping_engine:str="zigzag"):
+    def __init__(self,node:tvm.ir.IRModule,args_list:List=[],exec_module:ExecModule=None,pattern_name:str="",pattern_inst=None,temporal_mapping_engine:str="zigzag"):
         self.node=node
         self.args_list=args_list
         self.exec_module=exec_module
         self.pattern_name=pattern_name
-        self.workload_parser=WorkloadParser(node=self.node,args_list=self.args_list,exec_module=self.exec_module,pattern_name=self.pattern_name)
+        self.workload_parser=WorkloadParser(node=self.node,args_list=self.args_list,exec_module=self.exec_module,pattern_name=self.pattern_name,pattern_inst=pattern_inst)
         self.temporal_mapping_engine_class=get_temporal_mapping_engine(temporal_mapping_engine)
         self.workload=dict()
         self.temporal_mapping=[]
@@ -41,8 +41,11 @@ class TemporalMappingGenerator:
         temporal_mapping_engine.transform_workload_for_engine()
         self.set_exec_module_for_layer()
         self.optimal_spatial_mapping=self.exec_module.optimal_spatial_mapping
-        temporal_mapping_engine.generate_temporal_mapping(spatial_mapping=self.spatial_mapping,platform_memories=self.platform_memories,
+        try:
+            temporal_mapping_engine.generate_temporal_mapping(spatial_mapping=self.spatial_mapping,platform_memories=self.platform_memories,
                                                           optimal_spatial_mapping=self.optimal_spatial_mapping,cost_model=self.cost_model)
+        except Exception as exc:
+            raise Exception("No valid loop ordering found")
         temporal_mapping_engine.transform_temporal_mapping()
         self.temporal_mapping=temporal_mapping_engine.get_temporal_mapping()
         self.latency=temporal_mapping_engine.get_latency()

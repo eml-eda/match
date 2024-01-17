@@ -1,7 +1,7 @@
 # Imports
 import tvm
 import logging
-from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
+from tvm.relay.dataflow_pattern import wildcard, is_op, is_var, is_constant
 from match.partition.partitioning_pattern import PartitioningPattern
 
 logger = logging.getLogger("Gap9Cluster")
@@ -37,9 +37,17 @@ def only_conv_2d_pattern():
     )
     return conv2d
 
+def only_conv_2d_and_bias_pattern():
+    """Create pattern for conv2D"""
+    conv2d = is_op("nn.conv2d")(
+        wildcard(),wildcard()
+    )
+    bias_add = is_op("nn.bias_add")(conv2d, wildcard())
+    return bias_add
+
 def check_only_conv2d(pattern):
     """Check if the Conv2D is supported by the arch accelerator"""
-    breakpoint()
+    #breakpoint()
 
     return True
 
@@ -225,18 +233,14 @@ def check_element_wise_add(pattern):
 
 def partitioning_patterns():
     testing_pts=[
-        {
-            "name":"gapcluster_onlybias",
-            "pattern_matcher":only_bias_pattern,
-            "pattern_limitations":check_only_bias,
-        },
-        {
-            "name":"gapcluster_onlyconv2d",
-            "pattern_matcher":only_conv_2d_pattern,
-            "pattern_limitations":check_only_conv2d,
-        },
+        PartitioningPattern(name="gap9cluster_basic_conv",pattern=only_conv_2d_and_bias_pattern,additional_checks=check_only_conv2d),
+        #{
+        #    "name":"gapcluster_onlyconv2d",
+        #    "pattern_matcher":only_conv_2d_and_bias_pattern,
+        #    "pattern_limitations":check_only_conv2d,
+        #},
     ]
-    testing_pts=[]
+    #testing_pts=[]
     return testing_pts+[
         PartitioningPattern(name="gap9cluster_conv2d",pattern=conv2d_pattern,additional_checks=check_conv2d),
         PartitioningPattern(name="gap9cluster_dense",pattern=fully_connected_pattern,additional_checks=check_fully_connected),

@@ -9,8 +9,14 @@ from typing import Any, Dict,List,Type
 from match.target.exec_module import ExecModule
 from match.codegen.layer_data import LayerData
 
+def get_depth_arr_pattern(pattern_inst_):
+    if isinstance(pattern_inst_,tvm.relay.dataflow_pattern.CallPattern):
+        return [get_depth_arr_pattern(arg_) for arg_ in pattern_inst_.args]
+    else:
+        return 0
+
 class WorkloadParser:
-    def __init__(self, node:tvm.ir.IRModule, args_list:List=[],exec_module:ExecModule=None, pattern_name:str=""):
+    def __init__(self, node:tvm.ir.IRModule, args_list:List=[],exec_module:ExecModule=None, pattern_name:str="", pattern_inst=None):
         self.exec_module=exec_module
         self.args_list=args_list
         self.pattern_name=pattern_name
@@ -33,7 +39,9 @@ class WorkloadParser:
         self.energy = 0
         self.latency = 0
         self.layer_data=LayerData()
-
+        self.depth_limits=get_depth_arr_pattern(pattern_inst_=pattern_inst)
+        print(self.depth_limits)
+        
     def get_io_from_layout(self,layout, data):
         if layout == "NCHW":
             n = data[0]
@@ -314,20 +322,22 @@ class WorkloadParser:
         }
         self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
 
-    def visit_calls(self,call):
+    def visit_calls(self,call,depth_limit=[]):
+        if not isinstance(depth_limit,list):
+            return
         if not isinstance(call, tvm.relay.Call):
             return
         # the call is just a function pre partitioned
         elif not isinstance(call.op,tvm.ir.Op):
             return
         self.calllist.append(call)
-        for arg_ in call.args:
-            self.visit_calls(arg_)
+        for idx_arg_,arg_ in enumerate(call.args):
+            self.visit_calls(arg_,depth_limit=depth_limit[idx_arg_])
 
     def visit(self):
         call = self.node
         self.calllist=[]
-        self.visit_calls(call)
+        self.visit_calls(call,self.depth_limits)
         self.calllist.reverse()
         var_and_consts_not_unrolled = dict()
         var_and_consts_unrolled = dict()

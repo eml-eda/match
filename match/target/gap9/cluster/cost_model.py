@@ -19,14 +19,14 @@ class Gap9ClusterCostModel(ZigZagMatchCostModel):
     def def_transfer_cost(self):
         def get_stride_2_op(operand):
             if operand in ['I','X','Y']:
-                return self.loop_sizes['C' if self.pattern_name!='depthwise_conv_2d' else 'K']*self.partial_relevant_loop_sizes['IX']
+                return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']*self.partial_relevant_loop_sizes['IX']
             elif operand=='W':
                 return self.loop_sizes['C']*self.loop_sizes['FY']*self.loop_sizes['FX']
             elif operand=='O':
                 return self.loop_sizes['K']*self.loop_sizes['OX']
         def get_stride_1_op(operand):
             if operand in ['I','X','Y']:
-                return self.loop_sizes['C' if self.pattern_name!='depthwise_conv_2d' else 'K']
+                return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']
             elif operand=='W':
                 return self.loop_sizes['C']
             elif operand=='O':
@@ -47,7 +47,7 @@ class Gap9ClusterCostModel(ZigZagMatchCostModel):
                 return self.loop_sizes['OX']//self.size_per_mem_level["O"]["OX"][0]
         def get_len_1d_copy_op(operand):
             if operand in ['I','X','Y']:
-                return self.loop_sizes['C' if self.pattern_name!='depthwise_conv_2d' else 'K']//self.size_per_mem_level[operand]['C' if self.pattern_name!='depthwise_conv_2d' else 'K'][0]
+                return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']//self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
             elif operand=='W':
                 return self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else (self.loop_sizes['K']//self.size_per_mem_level["W"]["K"][0])*self.loop_sizes['FY']*self.loop_sizes['FX']
             elif operand=='O':

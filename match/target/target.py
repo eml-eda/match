@@ -105,7 +105,7 @@ class MatchTarget(ABC):
         """
         node=mod.body.op.body
         match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{pattern_name}")
-        tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=pattern_name)
+        tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.name,pattern_inst=match_pt.pattern())
         tmapgen.generate_workload()
         layer_data=tmapgen.get_layer_data()
         tmapgen.set_exec_module_for_layer()
@@ -136,7 +136,7 @@ class MatchTarget(ABC):
         Returns:
             Number,Number: latency and energy consumption results of the node with the given pattern
         """
-        tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.pattern)
+        tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.name,pattern_inst=match_pt.pattern())
         tmapgen.generate_workload()
         layer_data=tmapgen.get_layer_data()
         pt_res=PatternResult(match_pt,layer_data)
@@ -144,7 +144,10 @@ class MatchTarget(ABC):
         if temporal_mapping is not None:
             return latency,energy
         else:
-            tmapgen.generate_temporal_mapping()
+            try:
+                tmapgen.generate_temporal_mapping()
+            except Exception as exc:
+                raise Exception("No valid loop ordering found")
             tmapgen.constraint_temporal_mapping()
             temporal_mapping=tmapgen.get_temporal_mapping()
             latency=tmapgen.get_latency()
@@ -188,12 +191,18 @@ class MatchTarget(ABC):
         # is pattern fully supported?
         if match_pt.additional_checks(node):
             # if supported get latency and energy of pattern
-            latency,energy=self.evaluate_pattern(node,match_pt)
+            try:
+                latency,energy=self.evaluate_pattern(node,match_pt)
+            except Exception as exc:
+                return False
             # check all the patterns that are after me
             for other_pt in self.match_patterns[match_pt.idx+1:]:
                 # if pattern is fully matching get results
                 if is_pattern_matching(other_pt.pattern(),node) and other_pt.additional_checks(node):
-                    other_pt_latency,other_pt_energy=self.evaluate_pattern(node,other_pt)
+                    try:
+                        other_pt_latency,other_pt_energy=self.evaluate_pattern(node,other_pt)
+                    except Exception as exc:
+                        continue
                     # if the result gathered by this other matching pattern is better break all
                     # this is due to the fact that this pattern will be matched later and finally
                     # the best pattern will return True
@@ -244,3 +253,8 @@ class MatchTarget(ABC):
     
     def network_transformations(self,opts):
         return []
+    
+class DefaultMatchTarget(MatchTarget):
+    def __init__(self):
+        super(DefaultMatchTarget,self).__init__([
+        ],name="default")

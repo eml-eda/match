@@ -14,6 +14,7 @@ from zigzag.classes.hardware.architecture.operational_array import MultiplierArr
 from zigzag.classes.hardware.architecture.memory_instance import MemoryInstance
 from zigzag.classes.hardware.architecture.accelerator import Accelerator
 from zigzag.classes.hardware.architecture.core import Core
+from zigzag.classes.opt.temporal.loma.engine import NoValidLoopOrderingFoundException
 
 class ZigZagEngine(TemporalMappingEngine):
     def __init__(self,exec_module:ExecModule=None,pattern_name:str="",layer_data:LayerData=None):
@@ -128,16 +129,22 @@ class ZigZagEngine(TemporalMappingEngine):
                                                      optimal_spatial_mapping=optimal_spatial_mapping,)
         self.workload[1]["match_layer_data"] = self.layer_data
         self.spatial_mapping = spatial_mapping
-        self.energy, self.latency, cme = api.get_hardware_performance_zigzag(
-            workload=self.workload,
-            accelerator=self.accelerator,
-            mapping=spatial_mapping,
-            opt="latency",
-            dump_filename_pattern=f"tmp/match-layer_?.json",
-            pickle_filename=f"tmp/match-saved_list_of_cmes.pickle",
-            lpf_limit=self.lpf_limit,
-            cost_model_class= cost_model
-        )
+        try:
+            self.energy, self.latency, cme = api.get_hardware_performance_zigzag(
+                workload=self.workload,
+                accelerator=self.accelerator,
+                mapping=spatial_mapping,
+                opt="latency",
+                dump_filename_pattern=f"tmp/match-layer_?.json",
+                pickle_filename=f"tmp/match-saved_list_of_cmes.pickle",
+                lpf_limit=self.lpf_limit,
+                cost_model_class= cost_model
+            )
+        except NoValidLoopOrderingFoundException as exc:
+            self.energy=-1
+            self.latency=-1
+            self.cme=None
+            raise Exception("No valid loop ordering found")
         self.cme = cme[0][0]
         self.zigzag_temporal_mapping = self.cme.temporal_mapping.mapping_dic_stationary
         if self.debuglayer:
