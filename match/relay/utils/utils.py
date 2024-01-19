@@ -107,8 +107,8 @@ def relay_gap9_conv2d(input_tensor: relay.Var, layer_name: str,
     along with a parameter dictionary
     '''
     # define weights and bias variables
-    weights_name = layer_name + '.weights'
-    bias_name = layer_name + '.bias'
+    weights_name = layer_name + '_weights'
+    bias_name = layer_name + '_bias'
 
     # define relay input vars
     w = relay.var(weights_name, relay.TensorType(w_value.shape, w_value.dtype))
@@ -125,8 +125,8 @@ def relay_gap9_conv2d(input_tensor: relay.Var, layer_name: str,
     if batchnorm:
         input_shape=simple_basic_type_checker(input_tensor,w_value.shape)
         #input_shape = [int(x) for x in input_tensor.type_annotation.shape]
-        lambda_name = layer_name + '.lambda'
-        k_name = layer_name + '.k' 
+        lambda_name = layer_name + '_lambda'
+        k_name = layer_name + '_k' 
         lambda_var=relay.var(lambda_name, relay.TensorType(input_shape, 'int32'))
         k_var=relay.var(k_name,  relay.TensorType(input_shape, 'int32'))
         params[lambda_name]=numpy_to_array(np.zeros(input_shape, dtype = np.int32), 'int32')
@@ -164,8 +164,8 @@ def relay_gap9_dense(input_tensor: relay.Var, layer_name: str,
     :shift_bits: int that sets amount of bits to shift right. Value must be between [0,31]
     """
     # define weights and bias variables
-    weights_name = layer_name + '.weights'
-    bias_name = layer_name + '.bias'
+    weights_name = layer_name + '_weights'
+    bias_name = layer_name + '_bias'
     # define relay input vars
     w = relay.var(weights_name, relay.TensorType(w_value.shape, w_value.dtype))
     b = relay.var(bias_name, relay.TensorType(b_value.shape, b_value.dtype))
@@ -179,8 +179,8 @@ def relay_gap9_dense(input_tensor: relay.Var, layer_name: str,
     if batchnorm:
         input_shape=simple_basic_type_checker(input_tensor,w_value.shape)
         #input_shape = [int(x) for x in input_tensor.type_annotation.shape]
-        lambda_name = layer_name + '.lambda'
-        k_name = layer_name + '.k' 
+        lambda_name = layer_name + '_lambda'
+        k_name = layer_name + '_k' 
         lambda_var=relay.var(lambda_name, relay.TensorType(input_shape, 'int32'))
         k_var=relay.var(k_name,  relay.TensorType(input_shape, 'int32'))
         params[lambda_name]=numpy_to_array(np.zeros(input_shape, dtype = np.int32), 'int32')
@@ -296,9 +296,7 @@ def tvmc_wrapper(model: TVMCModel, target: str = "gap9, c",
 
 def tvmc_compile_and_unpack(model: TVMCModel, target: str = "gap9, c",
                             fuse_layers: bool = True,
-                            build_path: str = "./build",
-                            byoc_path: str = ".",
-                            device="pulp"):
+                            build_path: str = "./build"):
     '''
     Utility function that calls tvmc_wrapper and extracts output mlf
     (= TVM model library format) file.

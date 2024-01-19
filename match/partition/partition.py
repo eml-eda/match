@@ -96,10 +96,8 @@ def partition(mod, params, dpu, opts):
     #breakpoint()
     if params:
         mod["main"] = bind_params_by_name(mod["main"], params)
-
-    target_name="" if "target" not in opts else opts["target"]
     
-    target=get_target(target_name=target_name)
+    target=get_target()
 
     pipeline = []
 

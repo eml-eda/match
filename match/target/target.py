@@ -1,7 +1,7 @@
 from abc import ABC,abstractmethod
 from tvm.relay.dataflow_pattern import match as is_pattern_matching
 from match.partition.partitioning_pattern import PartitioningPattern
-from tvm.relay.dataflow_pattern import CallPattern,AttrPattern
+from tvm.relay.dataflow_pattern import CallPattern,AttrPattern,AltPattern
 from match.codegen.temporal_mapping_generator import TemporalMappingGenerator
 from functools import partial
 import tvm 
@@ -45,6 +45,8 @@ def get_lenght_pattern(pattern):
         return 1+get_lenght_pattern(pattern.args[0])
     elif isinstance(pattern,AttrPattern):
         return get_lenght_pattern(pattern.pattern)
+    elif isinstance(pattern,AltPattern):
+        return max(get_lenght_pattern(pattern.left),get_lenght_pattern(pattern.right))
     return 0
 
 class MatchTargetPattern:
@@ -105,7 +107,7 @@ class MatchTarget(ABC):
         """
         node=mod.body.op.body
         match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{pattern_name}")
-        tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.name,pattern_inst=match_pt.pattern())
+        tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.name,partitioned=True,pattern_inst=match_pt.pattern())
         tmapgen.generate_workload()
         layer_data=tmapgen.get_layer_data()
         tmapgen.set_exec_module_for_layer()
@@ -136,7 +138,7 @@ class MatchTarget(ABC):
         Returns:
             Number,Number: latency and energy consumption results of the node with the given pattern
         """
-        tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.name,pattern_inst=match_pt.pattern())
+        tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.name,partitioned=False,pattern_inst=match_pt.pattern())
         tmapgen.generate_workload()
         layer_data=tmapgen.get_layer_data()
         pt_res=PatternResult(match_pt,layer_data)
@@ -215,7 +217,7 @@ class MatchTarget(ABC):
     def sort_match_patterns(self):
         """Sort the pattern list based on the number of operators present on the pattern itself
         """
-        self.match_patterns=sorted(self.match_patterns,key=lambda m_pt:-get_lenght_pattern(m_pt.pattern))
+        self.match_patterns=sorted(self.match_patterns,key=lambda m_pt:-get_lenght_pattern(m_pt.pattern()))
         for idx,m_pt in enumerate(self.match_patterns):
             m_pt.set_idx(idx)
         

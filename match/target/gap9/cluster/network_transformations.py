@@ -189,7 +189,7 @@ class FindLayoutTransformShape(ExprVisitor):
 
 def network_transformations(opts):
     pipeline=[]
-    #if 'requant_transform' not in opts or opts['requant_transform'] != '0':
-    #    pipeline.append(Gap9ClusterOnnxRequantTransform())   
-    #pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))
+    if 'requant_transform' not in opts or opts['requant_transform'] != '0':
+        pipeline.append(Gap9ClusterOnnxRequantTransform())   
+    pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))
     return pipeline

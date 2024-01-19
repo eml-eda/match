@@ -11,12 +11,13 @@ from typing import Any, Dict,List,Type
 from match.target.exec_module import ExecModule
 
 class TemporalMappingGenerator:
-    def __init__(self,node:tvm.ir.IRModule,args_list:List=[],exec_module:ExecModule=None,pattern_name:str="",pattern_inst=None,temporal_mapping_engine:str="zigzag"):
+    def __init__(self,node:tvm.ir.IRModule,args_list:List=[],exec_module:ExecModule=None,pattern_name:str="",partitioned:bool=False,pattern_inst=None,temporal_mapping_engine:str="zigzag"):
         self.node=node
         self.args_list=args_list
         self.exec_module=exec_module
         self.pattern_name=pattern_name
-        self.workload_parser=WorkloadParser(node=self.node,args_list=self.args_list,exec_module=self.exec_module,pattern_name=self.pattern_name,pattern_inst=pattern_inst)
+        self.partitioned=partitioned
+        self.workload_parser=WorkloadParser(node=self.node,args_list=self.args_list,exec_module=self.exec_module,pattern_name=self.pattern_name,partitioned=self.partitioned,pattern_inst=pattern_inst)
         self.temporal_mapping_engine_class=get_temporal_mapping_engine(temporal_mapping_engine)
         self.workload=dict()
         self.temporal_mapping=[]

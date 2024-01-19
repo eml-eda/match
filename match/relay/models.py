@@ -1,4 +1,4 @@
-import match.relay_utils.utils as utils
+import match.relay.utils.utils as utils
 import tvm
 import tvm.relay as relay
 from tvm.driver.tvmc.model import TVMCModel
