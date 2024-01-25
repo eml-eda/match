@@ -93,15 +93,15 @@ class Gap9ClusterCostModel(ZigZagMatchCostModel):
         kernel_size_y = self.loop_sizes['FY']
         output_shape=[1,self.dmaconfstruct['O']['len_1d_copy'],self.dmaconfstruct['O']['num_2d_copies'],self.dmaconfstruct['O']['num_1d_copies']]
         strides=[1,1]
-        if self.pattern_name=="gap9cluster_conv2d":
+        if self.layer_data.specific_pattern in ["conv2d","pointwise_conv2d"]:
             iterations = _floor(int(output_shape[2]*strides[0]), 8)* _floor(int(output_shape[3]*strides[1]), 2) * _floor(int(ch_out), 4)
             im2col = kernel_size_x * kernel_size_y * ch_in * 2
             matmul = (5 + _floor(kernel_size_x * kernel_size_y * ch_in, 4) * (6 + 8) + 10)
             latency += iterations * (im2col + matmul)
-        elif self.pattern_name=='depthwise_conv_2d':
+        elif self.layer_data.specific_pattern in ['depthwise_conv2d','depthwise_conv2d_less_4']:
             # 1 MAC/cycle
             latency = 4 * _floor(ch_out, 8)  * _floor(output_shape[3]*strides[1],4) * kernel_size_x * kernel_size_y * int(output_shape[2]*strides[0])
-        elif self.pattern_name=='gap9cluster_dense':
+        elif self.layer_data.specific_pattern=='dense':
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)
         else:
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)

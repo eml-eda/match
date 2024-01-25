@@ -13,17 +13,17 @@ import sys
 class MemoryApis:
     """All the memory APIs that are used by MATCH on the templates
     """
-    def __init__(self):
-        self.startup_memory_and_set_pattern="match_startup_memory_and_set_pattern"
+    def __init__(self, pattern_name="conv2d",layout_per_operand={"O":"NCHW","I":"NCHW","W":"NCHW","X":"NCHW","Y":"NCHW"}):
+        self.startup_memory="match_startup_memory"
         self.shutdown_mem="match_shutdown_mem"
         self.copy_out_curr_computation="match_copy_out_curr_computation"
         self.copy_out_prev_computation="match_copy_out_prev_computation"
         self.pointer_offset={
-            "O":"match_pointer_offset_O",
-            "W":"match_pointer_offset_W",
-            "I":"match_pointer_offset_I",
-            "X":"match_pointer_offset_X",
-            "Y":"match_pointer_offset_Y",
+            "O":f"match_pointer_offset_{layout_per_operand['O']}_O",
+            "W":f"match_pointer_offset_{layout_per_operand['W']}_W",
+            "I":f"match_pointer_offset_{layout_per_operand['I']}_I",
+            "X":f"match_pointer_offset_{layout_per_operand['X']}_X",
+            "Y":f"match_pointer_offset_{layout_per_operand['Y']}_Y",
         }
         self.mem_transfer={
             "O":"match_mem_transfer_O",
@@ -37,20 +37,21 @@ class MemoryApis:
 class ComputationalApis:
     """All the APIs relating to the computational part that are used later by MATCH templates
     """
-    def __init__(self):
+    def __init__(self, pattern_name="conv2d"):
         self.init_other_kernel_params="match_init_other_kernel_params"
         self.innermost_computation="match_innermost_computation"
+        self.specific_pattern=pattern_name
 
 class PlatformApis:
     """All the APIs for the management of the platform that are used by templates of MATCH
     """
-    def __init__(self):
+    def __init__(self, pattern_name="conv2d"):
         self.init_platform="match_init_platform"
 
 class SyncApis:
     """All the APIs for the synchronization that are used by templates of MATCH
     """
-    def __init__(self):
+    def __init__(self, pattern_name="conv2d"):
         self.async_transfers="match_async_transfers"
         self.prev_computation="match_prev_computation"
         self.curr_computation="match_curr_computation"
@@ -59,24 +60,22 @@ class SyncApis:
 class MatchTypes:
     """MACROS and types that can be used by MATCH
     """
-    def __init__(self):
+    def __init__(self, pattern_name="conv2d"):
         self.mem_data_macro_and_type="unsigned int"
         self.kernel_struct="match_kernel"
 
 class ExecModule(ABC):
     """Unit that will handle the compuation of a layer
     """
-    def __init__(self,name:str="default_exec_module"):
+    def __init__(self,name:str="default_exec_module",
+                 specific_patterns=[],
+                 src_path:str="",
+                 inc_path:str=""):
         self.name=name
         self.FULL_DIM = sys.maxsize
         self.optimal_spatial_mapping = None
         self.platform_memories = None
-        self.mem_apis= MemoryApis()
-        self.sync_apis= SyncApis()
-        self.comp_apis= ComputationalApis()
-        self.platform_apis= PlatformApis()
-        self.types= MatchTypes()
-        self.include_list=[
+        self.default_include_list=[
             "match_dimensions.h",
             "match_kernel.h",
             "match_tile_indexes.h",
@@ -84,6 +83,11 @@ class ExecModule(ABC):
             "match_sync.h",
             "match_target_params.h",
         ]
+        self.specific_patterns=specific_patterns
+        self.specific_pattern=""
+        self.layout_operand=dict()
+        self.src_path=src_path
+        self.inc_path=inc_path
 
     def partitioning_patterns(self):
 
@@ -123,18 +127,24 @@ class ExecModule(ABC):
     
     def hw_aware_template_params(self):
         raise dict()
-    
-    def memories_def(self,operands):
+
+    def memories_def(self,pattern_name,operands):
         """define the memory hierarchy of the unit by setting self.platform_memories
 
         Args:
             operands (List[Str]): list of operands
         """
-        self.platform_memories = [
+        return [
             # from lower level to higher level memories
             MemoryInst(name="l1_mem",k_bytes=32,operands=operands),
             MemoryInst(name="l2_mem",k_bytes=128,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]
+
+    def get_all_memories_names(self):
+        return ["l1_mem","l2_mem"]
+
+    def match_memories(self,pattern_name,operands):
+        self.platform_memories=self.memories_def(pattern_name,operands)
 
     def limit_spatial_mapping_to(self,dim_size:int=1,optimal_spat:int=1):
         # find greater common denominator that is smaller than the optimal spatial mapping
@@ -154,7 +164,16 @@ class ExecModule(ABC):
             dim_sizes (Dict[str,int], optional): sizes of each dimension. Defaults to {}.
             layer_attrs (Dict, optional): attributes specific to the layer. Defaults to {}.
         """
-        self.optimal_spatial_mapping = [ ("K",1), ("OY",1) ]
+        return [ ("K",1), ("OY",1) ]
+
+    def match_optimal_spatial_mapping(self, pattern_name: str = "conv_2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
+        self.optimal_spatial_mapping=self.optimal_spatial_mapping_def(pattern_name=pattern_name,dim_sizes=dim_sizes,layer_attrs=layer_attrs)
+
+    def specific_pattern_def(self, pattern_name: str = "conv_2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
+        return pattern_name
+
+    def match_specific_pattern(self, pattern_name: str = "conv_2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
+        self.specific_pattern=self.specific_pattern_def(pattern_name=pattern_name,dim_sizes=dim_sizes,layer_attrs=layer_attrs)
 
     def get_optimal_spat_size(self,optimal_spat:int=1,dim_size:int=1):
         if optimal_spat==self.FULL_DIM:
@@ -236,60 +255,64 @@ class ExecModule(ABC):
             "single_costants":single_constants,
         }
     
-    def additional_kernel_parameters(self):
+    def additional_kernel_parameters(self,pattern_name):
         return dict()
     
-    def types_def(self):
-        return
+    def layout_per_operand_def(self,pattern_name,specific_pattern):
+        return dict()
 
-    def match_types(self):
-        self.types_def()
-        return self.types
+    def match_layout_operand(self,pattern_name,specific_pattern):
+        self.layout_operand=self.layout_per_operand_def(pattern_name=pattern_name,specific_pattern=specific_pattern)
+        for operand_ in [op_ for op_ in ["O","I","W","X","Y"] if op_ not in self.layout_operand]:
+            self.layout_operand[operand_]="NCHW"
+        return self.layout_operand 
 
-    def mem_apis_def(self):
+    def types_def(self,match_types: MatchTypes=MatchTypes()):
+        return match_types
+
+    def match_types(self, pattern_name):
+        return self.types_def(MatchTypes(pattern_name=pattern_name))
+
+    def mem_apis_def(self,memory_apis: MemoryApis=MemoryApis()):
         """Functions that set the memory related APIs of the unit
         """
-        return
+        return memory_apis
 
-    def match_mem_apis(self):
-        self.mem_apis_def()
-        return self.mem_apis
+    def match_mem_apis(self,pattern_name):
+        return self.mem_apis_def(MemoryApis(pattern_name=pattern_name,layout_per_operand=self.layout_operand))
     
-    def sync_apis_def(self):
+    def sync_apis_def(self,sync_apis: SyncApis=SyncApis()):
         """Functions that set the synchronization related APIs of the unit
         """
-        return
+        return sync_apis
     
-    def match_sync_apis(self):
-        self.sync_apis_def()
-        return self.sync_apis
+    def match_sync_apis(self,pattern_name):
+        return self.sync_apis_def(SyncApis(pattern_name=pattern_name))
     
-    def comp_apis_def(self):
+    def comp_apis_def(self,computational_apis: ComputationalApis=ComputationalApis()):
         """Functions that set the computation related APIs of the unit
         """
-        return
+        return computational_apis
     
-    def match_comp_apis(self):
-        self.comp_apis_def()
-        return self.comp_apis
+    def match_comp_apis(self,pattern_name):
+        return self.comp_apis_def(ComputationalApis(pattern_name=pattern_name))
     
-    def platform_apis_def(self):
+    def platform_apis_def(self,platform_apis: PlatformApis=PlatformApis()):
         """Functions that set the platform related APIs of the unit
         """
-        return
+        return platform_apis
     
-    def match_platform_apis(self):
-        self.platform_apis_def()
-        return self.platform_apis
+    def match_platform_apis(self,pattern_name):
+        return self.platform_apis_def(PlatformApis(pattern_name=pattern_name))
 
     def def_include_list(self):
         """Functions that sets the list of headers to include additionally in the template
         """
-        return
+        return []
     
-    def match_include_list(self):
-        self.def_include_list()
-        return self.include_list
+    def match_include_list(self,pattern_name):
+        ex_module_inc_list=self.def_include_list(pattern_name)
+        return self.default_include_list+ex_module_inc_list
 
     def operand_memories(self,operands):
         return {

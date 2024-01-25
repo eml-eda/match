@@ -52,9 +52,10 @@ def get_lenght_pattern(pattern):
 class MatchTargetPattern:
     """Support pattern class that includes information about the execution module
     """
-    def __init__(self,exec_module,module_pattern,name:str="conv2d",match_additional_checks=mock_func,idx=0):
+    def __init__(self,exec_module,module_pattern,name:str="conv2d",original_name:str="conv2d",match_additional_checks=mock_func,idx=0):
         self.exec_module=exec_module
         self.name=name
+        self.original_name=original_name
         self.pattern=module_pattern.pattern
         self.additional_checks=module_pattern.additional_checks
         self.match_additional_checks=match_additional_checks
@@ -107,10 +108,10 @@ class MatchTarget(ABC):
         """
         node=mod.body.op.body
         match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{pattern_name}")
-        tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.name,partitioned=True,pattern_inst=match_pt.pattern())
+        tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=True,pattern_inst=match_pt.pattern())
         tmapgen.generate_workload()
-        layer_data=tmapgen.get_layer_data()
         tmapgen.set_exec_module_for_layer()
+        layer_data=tmapgen.get_layer_data()
         pt_res=PatternResult(match_pt,layer_data)
         temporal_mapping,latency,energy=self.find_in_cached_list(pt_res)
         return temporal_mapping,layer_data,match_pt.exec_module
@@ -138,8 +139,9 @@ class MatchTarget(ABC):
         Returns:
             Number,Number: latency and energy consumption results of the node with the given pattern
         """
-        tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.name,partitioned=False,pattern_inst=match_pt.pattern())
+        tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=False,pattern_inst=match_pt.pattern())
         tmapgen.generate_workload()
+        tmapgen.set_exec_module_for_layer()
         layer_data=tmapgen.get_layer_data()
         pt_res=PatternResult(match_pt,layer_data)
         temporal_mapping,latency,energy=self.find_in_cached_list(pt_res)
@@ -228,7 +230,7 @@ class MatchTarget(ABC):
             exec_module (ExecModule): unit to add to the target
         """
         for module_pt in exec_module.partitioning_patterns():
-            match_pt=MatchTargetPattern(exec_module,module_pt,name=f"{self.name}.{module_pt.name}",)
+            match_pt=MatchTargetPattern(exec_module,module_pt,name=f"{self.name}.{module_pt.name}",original_name=module_pt.name)
             match_additional_checks=partial(self.match_additional_checks_,match_pt=match_pt)
             match_pt.set_match_additional_checks(match_additional_checks)
             self.match_patterns.append(match_pt)

@@ -12,5 +12,5 @@ typedef struct cluster_kernel_t
 
 void cluster_init_other_kernel_params(cluster_kernel* kernel);
 
-void cluster_kernel_function_wrapper(cluster_kernel* kernel,unsigned int pattern);
+void cluster_kernel_function_wrapper(cluster_kernel* kernel);
 #endif

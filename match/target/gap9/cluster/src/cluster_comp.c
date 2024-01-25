@@ -198,24 +198,17 @@ void dense_comp(void* args){
         act,batch_norm
     );
 }
-void cluster_kernel_function_wrapper(cluster_kernel* kernel,unsigned int pattern){
-    unsigned char pw_flag=0,dw_flag=0,less_four_fs_flag=0;
-    if(pattern==gap9cluster_conv2d && kernel->common_kernel->dim_W->size_FX[l2_mem]==1
-        && kernel->common_kernel->dim_W->size_FY[l2_mem]==1) pw_flag=1;
-    if(pattern==gap9cluster_conv2d && kernel->common_kernel->dim_W->size_C[l2_mem]==1
-        && kernel->common_kernel->dim_W->size_K[l2_mem]!=1) dw_flag=1;
-    if(pattern==gap9cluster_conv2d && 
-    (kernel->common_kernel->dim_W->size_C[l2_mem]*kernel->common_kernel->dim_W->size_K[l2_mem])<4) less_four_fs_flag=1;
-    if(pattern==gap9cluster_conv2d && pw_flag)
+void cluster_kernel_function_wrapper(cluster_kernel* kernel){
+    if(kernel->common_kernel->specific_pattern==pointwise_conv2d)
         pi_team_offload_preset(pw_conv_2d_comp, kernel);
-    else if(pattern==gap9cluster_conv2d && dw_flag && less_four_fs_flag)
+    else if(kernel->common_kernel->specific_pattern==depthwise_conv2d_less_4)
         pi_team_offload_preset(dw_less_four_fs_conv_2d_comp, kernel);
-    else if(pattern==gap9cluster_conv2d && dw_flag)
+    else if(kernel->common_kernel->specific_pattern==depthwise_conv2d)
         pi_team_offload_preset(dw_conv_2d_comp, kernel);
-    else if(pattern==gap9cluster_conv2d)
+    else if(kernel->common_kernel->specific_pattern==conv2d)
         pi_team_offload_preset(conv_2d_comp, kernel);
-    else if(pattern==gap9cluster_dense)
+    else if(kernel->common_kernel->specific_pattern==dense)
         pi_team_offload_preset(dense_comp, kernel);
-    else if(pattern==gap9cluster_add)
+    else if(kernel->common_kernel->specific_pattern==elemwise_add)
         pi_team_offload_preset(add_comp, kernel);
 }

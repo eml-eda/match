@@ -12,6 +12,7 @@ class LayerData:
         self.ordered_relevant_loops=dict()
         self.layer_attrs=dict()
         self.pattern_operations=[]
+        self.specific_pattern=""
         self.equation="O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]"
         self.strides = [1, 1]
         self.dilations = [1, 1]
@@ -45,6 +46,7 @@ class LayerData:
 
     def __eq__(self,other):
         return self.operands==other.operands and self.input_operands==other.input_operands \
+        and self.specific_pattern==other.specific_pattern \
         and self.padded_dims==other.padded_dims and self.input_dim_mapping==other.input_dim_mapping \
         and self.ordered_relevant_loops==other.ordered_relevant_loops and self.pattern_operations==other.pattern_operations \
         and self.equation==other.equation and self.strides==other.strides and self.dilations==other.dilations \

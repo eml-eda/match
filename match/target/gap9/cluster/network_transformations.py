@@ -98,15 +98,23 @@ class Gap9ClusterOnnxIntegerize(ExprMutator):
             # make sure to eliminate element-wise add, so check if rhs is constant
             new_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
             if isinstance(new_args[1], relay.Constant):
-                dtype = new_args[0].attrs.out_dtype if new_args[0].attrs is not None and hasattr(new_args[0].attrs,"out_dtype") else "int32"
-                new_args[1] = relay.const(new_args[1].data.numpy().astype(dtype))
+                if isinstance(new_args[0],relay.Var):
+                    dtype=new_args[0].checked_type.dtype
+                    #dtype="uint8"
+                else:
+                    dtype = new_args[0].attrs.out_dtype if new_args[0].attrs is not None and hasattr(new_args[0].attrs,"out_dtype") else "int32"
+                new_args[1] = relay.const(new_args[1].data.numpy().astype(dtype if dtype!="" else new_args[1].checked_type.dtype))
                 new_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
 
         elif call.op.name == 'multiply' or call.op.name == "add":
             new_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
             if isinstance(new_args[1], relay.Constant):
-                dtype = new_args[0].attrs.out_dtype if new_args[0].attrs is not None and hasattr(new_args[0].attrs,"out_dtype") else "int32"
-                new_args[1] = relay.const(new_args[1].data.numpy().astype(dtype))
+                if isinstance(new_args[0],relay.Var):
+                    dtype=new_args[0].checked_type.dtype
+                    #dtype="uint8"
+                else:
+                    dtype = new_args[0].attrs.out_dtype if new_args[0].attrs is not None and hasattr(new_args[0].attrs,"out_dtype") else "int32"
+                new_args[1] = relay.const(new_args[1].data.numpy().astype(dtype if dtype!="" else new_args[1].checked_type.dtype))
                 new_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
 
         elif call.op.name == 'divide':
@@ -189,7 +197,8 @@ class FindLayoutTransformShape(ExprVisitor):
 
 def network_transformations(opts):
     pipeline=[]
-    if 'requant_transform' not in opts or opts['requant_transform'] != '0':
-        pipeline.append(Gap9ClusterOnnxRequantTransform())   
-    pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))
+    #pipeline.append(Gap9ClusterOnnxRequantTransform())  
+    #if 'requant_transform' not in opts or opts['requant_transform'] != '0':
+    #    pipeline.append(Gap9ClusterOnnxRequantTransform())   
+    #pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))
     return pipeline

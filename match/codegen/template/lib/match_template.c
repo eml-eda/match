@@ -135,7 +135,7 @@ static void init_common_kernel_static_params(
     % endif
     dimension_O_${func_number}* dim_O
 ){
-    init_common_kernel_params(kernel);
+    init_common_kernel_params(kernel,${pattern_name},${comp_apis.specific_pattern});
     init_kernel_dimension_params(
         kernel,
     % for i_operand in input_operands:
@@ -146,6 +146,7 @@ static void init_common_kernel_static_params(
     % endif
     &(dim_O->common_dim),${sw_for_loops[::-1][0][f"mem_O"]}
     );
+    // TODO: set each attribute of the pattern correctly
     //kernel->dilation_x=----layer_attrs["dilation"][0]---;kernel->dilation_y=---layer_attrs["dilation"][1]---;
     //kernel->activation_function=---layer_attrs["activation"]---;
     kernel->stride_x=${layer_attrs["strides"]["IX"]};kernel->stride_y=${layer_attrs["strides"]["IY"]};
@@ -182,13 +183,6 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         % endif
         &dim_O, &abs_tile_idxs_O, &layer_loops_idxs
     );
-    // init memory api call --> malloc L1 memory and other params
-    ${mem_apis.startup_memory_and_set_pattern}(
-        % for init_mem_op in input_operands+[op for op in operands if op not in input_operands and op!='O']+['O']:
-        mem_level_${init_mem_op}_sizes,${int(db_opportunities[init_mem_op])},&(dim_${init_mem_op}.common_dim),
-        % endfor
-        padding_array,strides_array,${pattern_name}
-    );
     % for i_operand in input_operands:
     unsigned int base_${i_operand}_pt=input_${i_operand}_pt;
     % endfor
@@ -214,6 +208,14 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         &dim_O
     );
     ${comp_apis.init_other_kernel_params}( &kernel );
+    // init memory api call --> malloc L1 memory and other params
+    ${mem_apis.startup_memory}(
+        &common_kernel,
+        % for init_mem_op in input_operands+[op for op in operands if op not in input_operands and op!='O']+['O']:
+        mem_level_${init_mem_op}_sizes,${int(db_opportunities[init_mem_op])},&(dim_${init_mem_op}.common_dim),
+        % endfor
+        padding_array,strides_array,${pattern_name}
+    );
     ## TODO: MANAGE LOOPS
     
     ## FOR LOOPS
@@ -234,14 +236,17 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     // sync prev transfer in a multi memory system with data dependency
     if(layer_loops_idxs.${for_loop["fullname"]}==0)
         ${sync_apis.sync_multilevel_transfer}(
+            &common_kernel,
             ${default_mem[mem_transfer_operand] if idx==0 else sw_for_loops[idx-1][f'mem_{mem_transfer_operand}']},
             ${for_loop[f'mem_{mem_transfer_operand}']});
     % endif
     unsigned int loop_${mem_transfer_operand}_${idx}_ext_pt = ${mem_apis.pointer_offset[mem_transfer_operand]}(
+        &common_kernel,
         &tile_idxs_${mem_transfer_operand}_${idx}_relative,
         ${default_mem[mem_transfer_operand] if idx==0 else sw_for_loops[idx-1][f"mem_{mem_transfer_operand}"]}
     ) + ${f"base_{mem_transfer_operand}_pt" if last_movements[mem_transfer_operand]==-1 else f"loop_{mem_transfer_operand}_{last_movements[mem_transfer_operand]}_int_pt"};
     unsigned int loop_${mem_transfer_operand}_${idx}_int_pt = ${mem_apis.mem_transfer[mem_transfer_operand]}(
+        &common_kernel,
         &(dim_${mem_transfer_operand}.common_dim),
         loop_${mem_transfer_operand}_${idx}_ext_pt,
         ${default_mem[mem_transfer_operand] if idx==0 else sw_for_loops[idx-1][f'mem_{mem_transfer_operand}']},
@@ -268,7 +273,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         &layer_loops_idxs
     );
     add_relative_idxs_${mem_transfer_operand}(&tile_idxs_${mem_transfer_operand}_${idx}_relative,&abs_tile_idxs_${mem_transfer_operand});
-    unsigned int kernel_${operand}_pt = ${mem_apis.pointer_offset[operand]}(&tile_idxs_${operand}_kernel_relative,${for_loop[f"mem_{operand}"]});
+    unsigned int kernel_${operand}_pt = ${mem_apis.pointer_offset[operand]}(&common_kernel,&tile_idxs_${operand}_kernel_relative,${for_loop[f"mem_{operand}"]});
     % if operand in input_operands and layer_has_padding:
     calc_padding_${operand}_${for_loop[f"mem_{operand}"]}(&dim_${operand},&tile_idxs_${operand}_kernel_relative);
     kernel_set_padding(kernel.common_kernel,&(dim_${operand}.common_dim));
@@ -282,13 +287,14 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     % endif
     kernel.common_kernel->${operand}_pt = kernel_${operand}_pt;
     % endfor
-    ${mem_apis.pattern_constants_loading}(iter,weights_and_constants_${func_number},&kernel);
-    ${sync_apis.async_transfers}();
-    if(iter>0)  ${sync_apis.prev_computation}();
-    ${comp_apis.innermost_computation}(&kernel,${pattern_name});
-    ${sync_apis.curr_computation}();
+    ${mem_apis.pattern_constants_loading}(&kernel,iter,weights_and_constants_${func_number});
+    ${sync_apis.async_transfers}(&common_kernel);
+    if(iter>0)  ${sync_apis.prev_computation}(&common_kernel);
+    ${comp_apis.innermost_computation}(&kernel);
+    ${sync_apis.curr_computation}(&common_kernel);
     % if last_movements["O"]!=idx:
     kernel_offset_ext_O=${mem_apis.pointer_offset["O"]}(
+        &common_kernel,
         &tile_idxs_O_kernel_relative,
         ${sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
@@ -297,10 +303,12 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     kernel_O_curr_int=kernel_O_pt;
     ## ITER CAN BE USED TO HAVE DOUBLE BUFFERING
     ${mem_apis.copy_out_curr_computation}(
+        &common_kernel,
         &dim_O,kernel_O_curr_int,kernel_O_curr_ext,
         ${for_loop["mem_O"]},${sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
     if(iter>0)  ${mem_apis.copy_out_prev_computation}(
+        &common_kernel,
         &dim_O,kernel_O_prev_int,kernel_O_prev_ext,
         ${for_loop["mem_O"]},${sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
@@ -326,13 +334,13 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     substract_relative_idxs_${mem_transfer_operand}(&tile_idxs_${mem_transfer_operand}_${idx}_relative,&abs_tile_idxs_${mem_transfer_operand});
     % endfor
     % endfor
-    ${sync_apis.prev_computation}();
+    ${sync_apis.prev_computation}(&common_kernel);
     ${mem_apis.copy_out_prev_computation}(
         &dim_O,kernel_O_prev_int,kernel_O_prev_ext,
         ${for_loop["mem_O"]},${sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
-    ${sync_apis.async_transfers}();
-    ${mem_apis.shutdown_mem}();
+    ${sync_apis.async_transfers}(&common_kernel);
+    ${mem_apis.shutdown_mem}(&common_kernel);
 }
 
 void __attribute__ ((noinline)) ${func_name}(

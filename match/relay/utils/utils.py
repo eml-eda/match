@@ -16,7 +16,7 @@ from tvm.relay.backend import Executor, Runtime
 from typing import Tuple, Dict, Optional, Union
 import numpy.typing as npt
 from match.target.target import MatchTarget
-
+from mako.template import Template
 
 def numpy_to_array(np_arr: npt.NDArray, dtype: str):
     """ Convert a numpy array to a TVM array with datatype `dtype`.
@@ -317,7 +317,6 @@ def tvmc_compile_and_unpack(model: TVMCModel, target: str = "gap9, c",
     # remove the archive
     os.remove(mlf_path)
 
-from mako.template import Template
 def create_build_dir(build_path: str = "./build",
                      match_lib_path: str = "./lib",
                      target: MatchTarget=None):
@@ -343,15 +342,20 @@ def create_build_dir(build_path: str = "./build",
                     dst=build_path / src_dir, dirs_exist_ok=True)
     shutil.copytree(src=match_lib_path / include_dir, 
                     dst=build_path / include_dir, dirs_exist_ok=True)
+    for ex_mod in target.exec_modules:
+        # Copy over src, include folders
+        if os.path.isdir(ex_mod.src_path):
+            shutil.copytree(src=pathlib.Path(ex_mod.src_path), 
+                            dst=build_path / src_dir, dirs_exist_ok=True)
+        else:
+            print(f"Src directory doesn't exist for exec module {ex_mod.name} path {ex_mod.src_path}!")
+        if os.path.isdir(ex_mod.src_path):
+            shutil.copytree(src=pathlib.Path(ex_mod.inc_path), 
+                            dst=build_path / include_dir, dirs_exist_ok=True)
+        else:
+            print(f"Include directory doesn't exist for exec module {ex_mod.name} path {ex_mod.inc_path}!")
     match_target_params_template = Template(filename=f"{match_lib_path}/match_target_params_template.h")
-    possible_operands_combs=[["O","I","W"],["O","X","Y"]]
-    memory_names={ex_mod.name:[] for ex_mod in target.exec_modules}
-    for exec_module in target.exec_modules:
-        for operands in possible_operands_combs:
-            exec_module.memories_def(operands)
-            for mem in exec_module.platform_memories:
-                if mem.name not in memory_names[exec_module.name]:
-                    memory_names[exec_module.name].append(mem.name)
+    memory_names={ex_mod.name:ex_mod.get_all_memories_names() for ex_mod in target.exec_modules}
     
     temp_data={"exec_modules":target.exec_modules,"memory_names":memory_names}
     match_target_params=match_target_params_template.render(**temp_data)

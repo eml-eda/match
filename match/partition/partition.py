@@ -18,6 +18,7 @@ Operations to support the SOMA accelerator.
 """
 
 from typing import Any, List
+from match.partition.network_transformations import MatchOnnxBiasAdd
 import tvm
 import logging
 from functools import partial
@@ -32,9 +33,8 @@ from tvm.relay.build_module import bind_params_by_name
 import tvm.relay.backend.contrib.match
 from match.target.target import MatchTarget
 
-#from match.matchutils import get_target
 from match.target import get_target
-from tvm.relay.dataflow_pattern import DFPatternCallback, is_op, rewrite, wildcard
+
 
 logger = logging.getLogger("match")
 
@@ -51,35 +51,6 @@ def pattern_table(target:MatchTarget=None):
         target_pattern.additional_checks) 
         for target_pattern in target.partitioning_patterns()]
     return patterns
-
-
-class RewriteOnnxBiasesCallback(DFPatternCallback):
-    def __init__(self, require_type=False):
-        super().__init__(require_type)
-        self.conv2d = is_op("nn.conv2d")(wildcard(),wildcard())
-        self.bias = wildcard()
-        self.pattern = is_op("nn.bias_add")(self.conv2d,self.bias)
-
-    def callback(self, pre, post, node_map):
-        conv2d = node_map[self.conv2d][0]
-        out_dtype=conv2d.attrs["out_dtype"]
-        bias = node_map[self.bias][0]
-        return relay.op.nn.bias_add(relay.op.cast(conv2d, out_dtype),bias)
-
-
-@tvm.ir.transform.module_pass(opt_level=0)
-class RewriteOnnxBiases:
-    def transform_module(
-        self, mod: tvm.ir.IRModule, ctx: tvm.ir.transform.PassContext
-    ) -> tvm.ir.IRModule:
-        global_var=mod.get_global_var("main")
-        func=mod.functions[global_var]
-        func = rewrite(RewriteOnnxBiasesCallback(), func)
-        mod.update_func(global_var, func)
-        return mod
-
-    def __call__(self, mod):
-        return self.transform_module(mod)
 
 def partition(mod, params, dpu, opts):
     """
@@ -101,6 +72,10 @@ def partition(mod, params, dpu, opts):
 
     pipeline = []
 
+    pipeline.append(transform.InferType())
+    pipeline.append(MatchOnnxBiasAdd())
+    pipeline.append(transform.InferType())
+
     pipeline+=target.adjust_network(opts)
 
     pipeline.append(transform.InferType())
@@ -113,8 +88,8 @@ def partition(mod, params, dpu, opts):
     pipeline.append(transform.PartitionGraph())
     pipeline.append(transform.InferType())
 
-    pipeline.append(RewriteOnnxBiases())
-    pipeline.append(transform.InferType())
+    #pipeline.append(RewriteOnnxBiases())
+    
     seq = tvm.transform.Sequential(pipeline)
     with tvm.transform.PassContext(opt_level=3):
         try:

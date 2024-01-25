@@ -1,6 +1,8 @@
 #include <match_kernel.h>
 
-void init_common_kernel_params(common_kernel* kernel){
+void init_common_kernel_params(common_kernel* kernel,unsigned int pattern_name,unsigned int specific_pattern){
+    kernel->pattern_name=pattern_name;
+    kernel->specific_pattern=specific_pattern;
     // dimensions
     kernel->c_w=0;kernel->c_i=0;kernel->c_x=0;kernel->c_y=0;
     kernel->k_o=0;kernel->k_w=0;

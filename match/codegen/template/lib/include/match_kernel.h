@@ -3,6 +3,8 @@
 #include <match_dimensions.h>
 
 typedef struct common_kernel_t {
+  unsigned int pattern_name;
+  unsigned int specific_pattern;
   // dimensions
   unsigned int c_w;
   unsigned int c_i;
@@ -63,7 +65,7 @@ typedef struct match_kernel_t
 }match_kernel;
 
 
-void init_common_kernel_params(common_kernel* kernel);
+void init_common_kernel_params(common_kernel* kernel,unsigned int pattern_name,unsigned int specific_pattern);
 
 void match_innermost_computation(match_kernel* kernel,unsigned int pattern_name);
 

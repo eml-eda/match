@@ -23,13 +23,13 @@ class TemplateDataGenerator:
     def generate_hw_dependent_template_data(self):
         hw_dependent_template_data = dict()
         hw_dependent_template_data["weights_and_constants"] = self.exec_module.weights_and_constants(self.layer_data.layer_arguments)
-        hw_dependent_template_data["mem_apis"] = self.exec_module.match_mem_apis()
-        hw_dependent_template_data["comp_apis"] = self.exec_module.match_comp_apis()
-        hw_dependent_template_data["platform_apis"] = self.exec_module.match_platform_apis()
-        hw_dependent_template_data["sync_apis"] = self.exec_module.match_sync_apis()
-        hw_dependent_template_data["types"] = self.exec_module.match_types()
-        hw_dependent_template_data["include_list"] = self.exec_module.match_include_list()
-        hw_dependent_template_data["kernel_params"] = self.exec_module.additional_kernel_parameters()
+        hw_dependent_template_data["mem_apis"] = self.exec_module.match_mem_apis(pattern_name=self.pattern_name)
+        hw_dependent_template_data["comp_apis"] = self.exec_module.match_comp_apis(pattern_name=self.pattern_name)
+        hw_dependent_template_data["platform_apis"] = self.exec_module.match_platform_apis(pattern_name=self.pattern_name)
+        hw_dependent_template_data["sync_apis"] = self.exec_module.match_sync_apis(pattern_name=self.pattern_name)
+        hw_dependent_template_data["types"] = self.exec_module.match_types(pattern_name=self.pattern_name)
+        hw_dependent_template_data["include_list"] = self.exec_module.match_include_list(pattern_name=self.pattern_name)
+        hw_dependent_template_data["kernel_params"] = self.exec_module.additional_kernel_parameters(pattern_name=self.pattern_name)
         hw_dependent_template_data["ordered_operand_memories"] = self.exec_module.operand_memories(self.layer_data.operands)
         self.template_data={**self.template_data,**hw_dependent_template_data}
 

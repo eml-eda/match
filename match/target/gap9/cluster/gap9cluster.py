@@ -2,43 +2,83 @@ from typing import Dict
 from match.target.gap9.cluster.cost_model import Gap9ClusterCostModel
 from match.target.gap9.cluster.network_transformations import network_transformations as gap9network_transformations
 from match.target.gap9.cluster.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
-from match.target.exec_module import ExecModule
+from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
+import os
 
 class Gap9Cluster(ExecModule):
     def __init__(self):
-        super(Gap9Cluster, self).__init__(name="cluster")
-    
+        super(Gap9Cluster, self).__init__(name="cluster",
+                                          specific_patterns=[
+                                              "pointwise_conv2d",
+                                              "depthwise_conv2d_less_4",
+                                              "depthwise_conv2d",
+                                              "conv2d",
+                                              "elemwise_add",
+                                              "dense",
+                                          ],
+                                          src_path=os.path.dirname(__file__)+"/src",
+                                          inc_path=os.path.dirname(__file__)+"/include")
+
     def optimal_spatial_mapping_def(self, pattern_name: str = "gap9cluster_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
-        if pattern_name=='gap9cluster_conv2d' and (dim_sizes['FY']*dim_sizes['FX'])==1:
-            self.optimal_spatial_mapping = [
+        conv2d_patterns=[
+            "gap9cluster_conv2d_bias_simple",
+            "gap9cluster_conv2d"
+        ]
+        if pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])==1:
+            return [
                 ("OY",4),("OX",4),("K",4)
             ]
-        elif pattern_name=='gap9cluster_conv2d' and layer_attrs["nn.conv2d_depthwise"]:
-            self.optimal_spatial_mapping = [
+        elif pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])<4 and layer_attrs["nn.conv2d_depthwise"]:
+            return [
                 ("K",8),("OX",4),("OY",self.FULL_DIM)
             ]
-        elif pattern_name=="gap9cluster_conv2d":
-            self.optimal_spatial_mapping = [
+        elif pattern_name in conv2d_patterns and layer_attrs["nn.conv2d_depthwise"]:
+            return [
+                ("K",8),("OX",4),("OY",self.FULL_DIM)
+            ]
+        elif pattern_name in conv2d_patterns:
+            return [
                 ("OY",8),("OX",2),("K",4)
             ]
         elif pattern_name=='gap9cluster_add':
-            self.optimal_spatial_mapping = [
+            return [
                 ("OY",8),("OX",2)
             ]
         elif pattern_name=='gap9cluster_dense':
             # TODO: K 8 C 1
-            self.optimal_spatial_mapping = [
+            return [
                 ("K",8),("C",2)
             ]
         else:
             # DEFAULT LIKE CONV2D
-            self.optimal_spatial_mapping = [
+            return [
                 ("OY",8),("OX",2),("K",4)
             ]
+    
+    def specific_pattern_def(self, pattern_name: str = "conv_2d", dim_sizes: Dict[str, int] = ..., layer_attrs: Dict = ...):
+        conv2d_patterns=[
+            "gap9cluster_conv2d_bias_simple",
+            "gap9cluster_conv2d"
+        ]
+        if pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])==1:
+            return "pointwise_conv2d"
+        elif pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])<4 and layer_attrs["nn.conv2d_depthwise"]:
+            return "depthwise_conv2d_less_4"
+        elif pattern_name in conv2d_patterns and layer_attrs["nn.conv2d_depthwise"]:
+            return "depthwise_conv2d"
+        elif pattern_name in conv2d_patterns:
+            return "conv2d"
+        elif pattern_name=='gap9cluster_add':
+            return "elemwise_add"
+        elif pattern_name=='gap9cluster_dense':
+            return "dense"
+        else:
+            # DEFAULT LIKE CONV2D
+            return "conv2d"
 
-    def memories_def(self, operands):
-        super().memories_def(operands)
-        self.platform_memories[0].double_buffering_support=True
+    def memories_def(self, patter_name, operands):
+        memories=super().memories_def(pattern_name=patter_name,operands=operands)
+        memories[0].double_buffering_support=True
 
         def buffers_for_l1_mem(layer_data,pattern_name):
             buff_mem=0
@@ -52,53 +92,53 @@ class Gap9Cluster(ExecModule):
                 buff_mem+=layer_data.loop_dim_size['K']*4
             return buff_mem
         
-        self.platform_memories[0].buffer_for_layer_func=buffers_for_l1_mem
-
+        memories[0].buffer_for_layer_func=buffers_for_l1_mem
+        return memories
+    
     def partitioning_patterns(self):
         return gap9partitioning_patterns()
 
     def network_transformations(self,opts):
         return gap9network_transformations(opts=opts)
 
-    def def_include_list(self):
-        self.include_list+=["cluster_mem.h","cluster_comp.h"]
+    def def_include_list(self,patter_name):
+        return ["cluster_mem.h","cluster_comp.h"]
 
-    def mem_apis_def(self):
-        self.mem_apis.copy_out_curr_computation="cluster_copy_out_curr_computation"
-        self.mem_apis.copy_out_prev_computation="cluster_copy_out_prev_computation"
-        self.mem_apis.mem_transfer={
+    def mem_apis_def(self,mem_apis: MemoryApis=MemoryApis()):
+        mem_apis.copy_out_curr_computation="cluster_copy_out_curr_computation"
+        mem_apis.copy_out_prev_computation="cluster_copy_out_prev_computation"
+        mem_apis.mem_transfer={
             "I":"cluster_mem_transfer_I",
             "X":"cluster_mem_transfer_X",
             "Y":"cluster_mem_transfer_Y",
             "W":"cluster_mem_transfer_W",
             "O":"cluster_mem_transfer_O",
         }
-        self.mem_apis.pattern_constants_loading="cluster_pattern_constant_loading"
-        self.mem_apis.pointer_offset={
-            "O":"cluster_pointer_offset_O",
-            "I":"cluster_pointer_offset_I",
-            "X":"cluster_pointer_offset_X",
-            "Y":"cluster_pointer_offset_Y",
-            "W":"cluster_pointer_offset_W",
-        }
-        self.mem_apis.shutdown_mem="cluster_shutdown_mem"
-        self.mem_apis.startup_memory_and_set_pattern="cluster_startup_memory_and_set_pattern"
+        mem_apis.pattern_constants_loading="cluster_pattern_constant_loading"
+        mem_apis.shutdown_mem="cluster_shutdown_mem"
+        mem_apis.startup_memory="cluster_startup_memory"
+        return mem_apis
 
-    def comp_apis_def(self):
-        self.comp_apis.innermost_computation="cluster_kernel_function_wrapper"
-        self.comp_apis.init_other_kernel_params="cluster_init_other_kernel_params"
+    def comp_apis_def(self,comp_apis: ComputationalApis=ComputationalApis()):
+        comp_apis.innermost_computation="cluster_kernel_function_wrapper"
+        comp_apis.init_other_kernel_params="cluster_init_other_kernel_params"
+        comp_apis.specific_pattern=self.specific_pattern
+        return comp_apis
     
-    def platform_apis_def(self):
-        self.platform_apis.init_platform="cluster_init_platform"
+    def platform_apis_def(self,platform_apis: PlatformApis=PlatformApis()):
+        platform_apis.init_platform="cluster_init_platform"
+        return platform_apis
     
-    def sync_apis_def(self):
-        self.sync_apis.async_transfers="cluster_wait_any_transfer"
-        self.sync_apis.curr_computation="cluster_wait_curr_computation"
-        self.sync_apis.prev_computation="cluster_wait_prev_computation"
+    def sync_apis_def(self,sync_apis: SyncApis=SyncApis()):
+        sync_apis.async_transfers="cluster_wait_any_transfer"
+        sync_apis.curr_computation="cluster_wait_curr_computation"
+        sync_apis.prev_computation="cluster_wait_prev_computation"
+        return sync_apis
 
-    def types_def(self):
-        self.types.kernel_struct="cluster_kernel"
-        self.types.mem_data_macro_and_type="GAP_L2_DATA uint8_t"
+    def types_def(self,types: MatchTypes=MatchTypes()):
+        types.kernel_struct="cluster_kernel"
+        types.mem_data_macro_and_type="GAP_L2_DATA uint8_t"
+        return types
 
     def cost_model(self):
         return Gap9ClusterCostModel

@@ -28,20 +28,23 @@ class TemporalMappingGenerator:
         self.layer_data=self.workload_parser.get_layer_data()
 
     def set_exec_module_for_layer(self):
-        self.exec_module.optimal_spatial_mapping_def(pattern_name=self.pattern_name,dim_sizes=
+        self.exec_module.match_optimal_spatial_mapping(pattern_name=self.pattern_name,dim_sizes=
                                                  self.layer_data.layer_attrs["loop_sizes"],layer_attrs=self.layer_data.layer_attrs)
-        self.exec_module.memories_def(self.layer_data.operands)
+        self.exec_module.match_memories(self.pattern_name,self.layer_data.operands)
         self.platform_memories=self.exec_module.platform_memories
         self.spatial_mapping=self.exec_module.spatial_mapping(dim_sizes=self.layer_data.layer_attrs["loop_sizes"],
                                                                          pattern_name=self.pattern_name,
                                                   operands=self.layer_data.operands,layer_attrs=self.layer_data.layer_attrs)
         self.cost_model=self.exec_module.cost_model()
+        self.exec_module.match_specific_pattern(pattern_name=self.pattern_name,dim_sizes=
+                                                self.layer_data.layer_attrs["loop_sizes"],layer_attrs=self.layer_data.layer_attrs)
+        self.layer_data.specific_pattern=self.exec_module.specific_pattern
+        self.exec_module.match_layout_operand(pattern_name=self.pattern_name,specific_pattern=self.layer_data.specific_pattern)
+        self.optimal_spatial_mapping=self.exec_module.optimal_spatial_mapping
         
     def generate_temporal_mapping(self):
         temporal_mapping_engine=self.temporal_mapping_engine_class(self.exec_module,self.pattern_name,layer_data=self.layer_data)
         temporal_mapping_engine.transform_workload_for_engine()
-        self.set_exec_module_for_layer()
-        self.optimal_spatial_mapping=self.exec_module.optimal_spatial_mapping
         try:
             temporal_mapping_engine.generate_temporal_mapping(spatial_mapping=self.spatial_mapping,platform_memories=self.platform_memories,
                                                           optimal_spatial_mapping=self.optimal_spatial_mapping,cost_model=self.cost_model)

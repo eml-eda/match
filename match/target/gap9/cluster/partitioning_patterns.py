@@ -233,7 +233,7 @@ def check_element_wise_add(pattern):
 
 def partitioning_patterns():
     testing_pts=[
-        PartitioningPattern(name="gap9cluster_basic_conv",pattern=only_conv_2d_and_bias_pattern,additional_checks=check_only_conv2d),
+        PartitioningPattern(name="gap9cluster_conv2d_bias_simple",pattern=only_conv_2d_and_bias_pattern,additional_checks=check_only_conv2d),
         #{
         #    "name":"gapcluster_onlyconv2d",
         #    "pattern_matcher":only_conv_2d_and_bias_pattern,

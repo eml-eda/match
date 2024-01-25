@@ -21,6 +21,17 @@ typedef enum{
     ,${pat.name}
     % endfor
 }patterns_${exec_module.name};
+
+% if len(exec_module.specific_patterns)==0:
+typedef patterns_${exec_module.name} specific_patterns_${exec_module.name};
+% else:
+typedef enum{
+    ${exec_module.specific_patterns[0]}
+    % for pat in exec_module.specific_patterns[1:]:
+    ,${pat}
+    % endfor
+}specific_patterns_${exec_module.name};
+% endif
 % endfor
 
 #endif
