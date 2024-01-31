@@ -3,6 +3,7 @@ from typing import Callable
 
 from zigzag.classes.cost_model.cost_model import CostModelEvaluation
 from zigzag.classes.mapping.temporal.temporal_mapping import TemporalMapping
+from zigzag.classes.opt.temporal.loma.engine import NoValidLoopOrderingFoundException
 
 class ZigZagMatchCostModel(CostModelEvaluation):
     """MATCH implementation of the cost model that will be used by ZigZag
@@ -18,15 +19,20 @@ class ZigZagMatchCostModel(CostModelEvaluation):
     ):
         temporal_mapping_dict=temporal_mapping.mapping_dic_stationary
         operands_=temporal_mapping.operand_list
-        constrained_temporal_mapping_dict=self.adjust_temporal_mapping(temporal_mapping_dict,operands_)
+        constrained_temporal_mapping_dict,valid=self.adjust_temporal_mapping(temporal_mapping_dict,operands_,layer)
         constrained_temporal_mapping=TemporalMapping(temporal_mapping_dict=constrained_temporal_mapping_dict,
                                                      layer_node=temporal_mapping.layer_node)
+        self.is_tm_valid=valid
         super(ZigZagMatchCostModel,self).__init__(
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=constrained_temporal_mapping,
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
 
-    def adjust_temporal_mapping(self,temporal_mapping_dict,operand_list):
+    def is_temporal_mapping_valid(self,temporal_mapping_dict,unordered_loops):
+        loops_at_outer_level=[lp[0] for lp in temporal_mapping_dict["O"][1]]
+        return sum([lp in loops_at_outer_level for lp in unordered_loops])==0
+
+    def adjust_temporal_mapping(self,temporal_mapping_dict,operand_list,layer):
         """Fix the temporal mapping of a schedule to match the requirements of the platform, the default implementation will
         move loops of the output to permit the computation to happen as soon as the output has been allocated
 
@@ -40,7 +46,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         min_innermost_loops=min([len(temporal_mapping_dict[operand][0]) for operand in operand_list])
         temporal_mapping_dict["O"][1]=temporal_mapping_dict["O"][0][min_innermost_loops:]+temporal_mapping_dict["O"][1]
         temporal_mapping_dict["O"][0]=temporal_mapping_dict["O"][0][:min_innermost_loops]
-        return temporal_mapping_dict
+        return temporal_mapping_dict,self.is_temporal_mapping_valid(temporal_mapping_dict,layer.layer_attrs["unordered_loops"])
 
     def set_match_params(self):
         self.temp_mapping = self.temporal_mapping.mapping_dic_stationary

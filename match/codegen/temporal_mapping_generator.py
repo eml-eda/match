@@ -17,7 +17,8 @@ class TemporalMappingGenerator:
         self.exec_module=exec_module
         self.pattern_name=pattern_name
         self.partitioned=partitioned
-        self.workload_parser=WorkloadParser(node=self.node,args_list=self.args_list,exec_module=self.exec_module,pattern_name=self.pattern_name,partitioned=self.partitioned,pattern_inst=pattern_inst)
+        self.pattern_inst=pattern_inst
+        self.workload_parser=WorkloadParser(node=self.node,args_list=self.args_list,exec_module=self.exec_module,pattern_name=self.pattern_name,partitioned=self.partitioned,pattern_inst=self.pattern_inst)
         self.temporal_mapping_engine_class=get_temporal_mapping_engine(temporal_mapping_engine)
         self.workload=dict()
         self.temporal_mapping=[]
@@ -32,14 +33,12 @@ class TemporalMappingGenerator:
                                                  self.layer_data.layer_attrs["loop_sizes"],layer_attrs=self.layer_data.layer_attrs)
         self.exec_module.match_memories(self.pattern_name,self.layer_data.operands)
         self.platform_memories=self.exec_module.platform_memories
-        self.spatial_mapping=self.exec_module.spatial_mapping(dim_sizes=self.layer_data.layer_attrs["loop_sizes"],
-                                                                         pattern_name=self.pattern_name,
-                                                  operands=self.layer_data.operands,layer_attrs=self.layer_data.layer_attrs)
+        self.spatial_mapping=self.exec_module.spatial_mapping(layer_data=self.layer_data,pattern_name=self.pattern_name,pattern_inst=self.pattern_inst)
         self.cost_model=self.exec_module.cost_model()
         self.exec_module.match_specific_pattern(pattern_name=self.pattern_name,dim_sizes=
                                                 self.layer_data.layer_attrs["loop_sizes"],layer_attrs=self.layer_data.layer_attrs)
         self.layer_data.specific_pattern=self.exec_module.specific_pattern
-        self.exec_module.match_layout_operand(pattern_name=self.pattern_name,specific_pattern=self.layer_data.specific_pattern)
+        self.exec_module.match_layout_operand(pattern_name=self.pattern_name,specific_pattern=self.layer_data.specific_pattern,operands=self.layer_data.operands)
         self.optimal_spatial_mapping=self.exec_module.optimal_spatial_mapping
         
     def generate_temporal_mapping(self):

@@ -19,6 +19,7 @@ class TemplateDataGenerator:
         self.exec_module=exec_module
         self.pattern_name=pattern_name
         self.template_data=dict()
+        self.template_data["debug_level"]=[]#["start_codegen"]
             
     def generate_hw_dependent_template_data(self):
         hw_dependent_template_data = dict()
@@ -132,7 +133,7 @@ class TemplateDataGenerator:
                 rel_dim: {
                     general_template_data["default_mem"][operand]: general_template_data["layer_attrs"]["loop_sizes"][
                         rel_dim
-                        if "conv_2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["conv_2d_depthwise"]
+                        if "nn.conv2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["nn.conv2d_depthwise"]
                         or operand not in general_template_data["input_operands"]
                         else general_template_data["input_dim_mapping"][rel_dim]
                     ],
@@ -140,7 +141,7 @@ class TemplateDataGenerator:
                         general_template_data["sw_for_loops_dict"][fl_mem_t_fn][f"mem_{operand}"]: int(
                             general_template_data["layer_attrs"]["loop_sizes"][
                                 rel_dim
-                                if "conv_2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["conv_2d_depthwise"]
+                                if "nn.conv2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["nn.conv2d_depthwise"]
                                 or operand not in general_template_data["input_operands"]
                                 else general_template_data["input_dim_mapping"][rel_dim]
                             ]
@@ -164,12 +165,12 @@ class TemplateDataGenerator:
             for operand in general_template_data["operands"]
         }
 
-        # calc overlap
+        # TODO: calc overlap
         ##{(attrs['loop_sizes'][ordim]+attrs['loop_sizes'][trdim['partial_relevancy']]-1-(attrs['loop_sizes'][trdim['mapping']]//attrs['strides'][trdim['mapping']]))//2};
-        general_template_data["overlaps"]={"OX":[0,0],"OY":[0,0]}
+        general_template_data["overlaps"]=copy.deepcopy(self.layer_data.padding)
         # calc db opportunites
         general_template_data["db_opportunities"]={
-            operand:general_template_data["sw_for_loops"][::-1][0][f'mem_{operand}']!=\
+            operand:any([p.double_buffering_support for p in self.exec_module.platform_memories]) and general_template_data["sw_for_loops"][::-1][0][f'mem_{operand}']!=\
             general_template_data["sw_for_loops"][0][f'mem_{operand}']
             for operand in general_template_data["operands"]
         }
@@ -207,7 +208,7 @@ class TemplateDataGenerator:
                 np.array(
                     [np.prod(
                         [general_template_data["size_loops_mem"][operand][dim][op_mem] + 
-                        (np.sum(general_template_data["overlaps"][dim]) if operand in general_template_data["input_operands"] and dim in general_template_data["padded_dims"] else 0)
+                        (np.sum(general_template_data["overlaps"][general_template_data["input_dim_mapping"][dim]]) if operand in general_template_data["input_operands"] and dim in general_template_data["padded_dims"] else 0)
                          for dim in general_template_data["size_loops_mem"][operand].keys()]
                     )
                 for op_mem in self.template_data['ordered_operand_memories'][operand]
@@ -218,7 +219,7 @@ class TemplateDataGenerator:
         #calc_db_opportunities()
         #calc_overlap()
         general_template_data["layer_has_padding"]=any([v!=0 for v in np.array([v for v in general_template_data["layer_data"].padding.values()]).flatten().tolist()])
-        general_template_data["layer_has_weights"]=True
+        general_template_data["layer_has_weights"]=self.template_data["weights_and_constants"]["len"]>0
         general_template_data["padding_c_array"]=c_friendly_npvalue(np.array([v for v in general_template_data["layer_data"].padding.values()]).flatten())
         general_template_data["strides_c_array"]=c_friendly_npvalue(np.array([v for v in general_template_data["layer_attrs"]["strides"].values()]).flatten())
         

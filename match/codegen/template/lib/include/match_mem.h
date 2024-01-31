@@ -25,6 +25,6 @@ unsigned int match_pointer_offset_NHWC_Y(common_kernel* common_kernel,tile_index
 
 unsigned int match_pointer_offset_NHWC_W(common_kernel* common_kernel,tile_indexes_W* tile_idxs,unsigned int memory_level);
 
-void match_pattern_constants_loading(match_kernel* kernel,unsigned int iter,unsigned char* weights_and_constant_buf);
+void match_pattern_constants_loading(match_kernel* kernel,unsigned int iter,void* weights_and_constant_buf);
 
 #endif

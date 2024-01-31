@@ -3,8 +3,9 @@ __pycache__
 .pkl_memoize_py3
 build
 __tmp__
-docker-gap
+docker
 tmp
-outputs
+results
+output
 match.egg-info
 dist

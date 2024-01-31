@@ -16,6 +16,7 @@ class LayerData:
         self.equation="O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]"
         self.strides = [1, 1]
         self.dilations = [1, 1]
+        self.visited_operations=list()
         self.loop_dim_size = {
             "B": 1,
             "K": 1,

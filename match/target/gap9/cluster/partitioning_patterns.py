@@ -7,13 +7,34 @@ from match.partition.partitioning_pattern import PartitioningPattern
 logger = logging.getLogger("Gap9Cluster")
 
 
+def batchnorm_pattern(prev_op):
+    """Add batchnorm pattern (multiply->add)"""
+    mult = is_op("multiply")(prev_op, is_constant())
+    add = is_op("add")(mult,is_constant())
+    return add
+
 def _requant_pattern(prev_op):
     """Add requant pattern (right_shift -> clip -> cast) to prev_op"""
     right_shift = is_op("right_shift")(prev_op, is_constant())
     clip = is_op("clip")(right_shift)
-    cast = is_op("cast")(clip).has_attr({"dtype": "uint8"})
+    cast = is_op("cast")(clip)
     return cast
 
+def conv2d_bnorm_requant_pattern():
+    conv2d = is_op("nn.conv2d")(
+            wildcard(), wildcard()
+    )
+    cast = is_op("cast")(conv2d)
+    bnorm = batchnorm_pattern(cast)
+    return _requant_pattern(bnorm)
+
+def dense_bnorm_requant_pattern():
+    dense = is_op("nn.dense")(
+            wildcard(), wildcard()
+    )
+    cast = is_op("cast")(dense)
+    bnorm = batchnorm_pattern(cast)
+    return _requant_pattern(bnorm)
 
 def _biasadd_requant_pattern(linear_op):
     """Add pattern bias_add-requant to linear_op"""
@@ -24,18 +45,10 @@ def _biasadd_requant_pattern(linear_op):
 
 def conv2d_pattern():
     """Create pattern for conv2D with optional fused relu."""
-    #breakpoint()
     conv2d = is_op("nn.conv2d")(
             wildcard(), wildcard()
     )
     return _biasadd_requant_pattern(conv2d)
-
-def only_conv_2d_pattern():
-    """Create pattern for conv2D"""
-    conv2d = is_op("nn.conv2d")(
-            wildcard(), wildcard()
-    )
-    return conv2d
 
 def only_conv_2d_and_bias_pattern():
     """Create pattern for conv2D"""
@@ -45,26 +58,6 @@ def only_conv_2d_and_bias_pattern():
     bias_add = is_op("nn.bias_add")(conv2d, wildcard())
     return bias_add
 
-def check_only_conv2d(pattern):
-    """Check if the Conv2D is supported by the arch accelerator"""
-    #breakpoint()
-
-    return True
-
-def only_bias_pattern():
-    """Create pattern for conv2D"""
-    #conv2d = is_op("nn.conv2d")(
-    #        wildcard(), wildcard()
-    #)
-    #bias_add = wildcard()
-    bias_add = is_op("nn.bias_add")(wildcard(), wildcard()) | is_op("add")(wildcard(), wildcard())
-    return bias_add
-
-def check_only_bias(pattern):
-    """Check if the bias is supported by the arch accelerator"""
-    breakpoint()
-
-    return True
 def fully_connected_pattern():
     """Create pattern for nn.dense with optional fused relu."""
 
@@ -127,7 +120,6 @@ def _check_biasadd_requant(pattern):
 
 def check_conv2d(pattern):
     """Check if the Conv2D is supported by the soma dory accelerator"""
-    #breakpoint()
     conv2d = _check_biasadd_requant(pattern)
     if conv2d is None:
         return False
@@ -152,7 +144,11 @@ def check_conv2d(pattern):
         return True
 
     def is_filter_and_padding_supported(attrs):
-        kernel_size = list(attrs["kernel_size"])
+        kernel_size = list()
+        if "kernel_size" in dict(attrs) and attrs["kernel_size"]!=None:
+            kernel_size = list(attrs["kernel_size"])
+        else:
+            kernel_size = list([int(v) for v in conv2d.args[1].checked_type.shape][2:])
         kernel_h = kernel_size[0]
         kernel_w = kernel_size[1]
         supported_kernels = [1, 3, 5, 7]
@@ -232,17 +228,11 @@ def check_element_wise_add(pattern):
     return True
 
 def partitioning_patterns():
-    testing_pts=[
-        PartitioningPattern(name="gap9cluster_conv2d_bias_simple",pattern=only_conv_2d_and_bias_pattern,additional_checks=check_only_conv2d),
-        #{
-        #    "name":"gapcluster_onlyconv2d",
-        #    "pattern_matcher":only_conv_2d_and_bias_pattern,
-        #    "pattern_limitations":check_only_conv2d,
-        #},
-    ]
-    #testing_pts=[]
-    return testing_pts+[
-        PartitioningPattern(name="gap9cluster_conv2d",pattern=conv2d_pattern,additional_checks=check_conv2d),
-        PartitioningPattern(name="gap9cluster_dense",pattern=fully_connected_pattern,additional_checks=check_fully_connected),
-        PartitioningPattern(name="gap9cluster_add",pattern=element_wise_add_pattern,additional_checks=check_element_wise_add),
+    return [
+        PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="conv2d_bias_add_requant",pattern=conv2d_pattern,additional_checks=check_conv2d,ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="conv2d_bias_add",pattern=only_conv_2d_and_bias_pattern,ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="dense_bnorm_requant",pattern=dense_bnorm_requant_pattern,ordered_operation="nn.dense"),
+        PartitioningPattern(name="dense_bias_add_requant",pattern=fully_connected_pattern,additional_checks=check_fully_connected,ordered_operation="nn.dense"),
+        PartitioningPattern(name="add_requant",pattern=element_wise_add_pattern,additional_checks=check_element_wise_add,ordered_operation="add"),
     ]

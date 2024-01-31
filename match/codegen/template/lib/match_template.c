@@ -2,11 +2,13 @@
 #include <${inc_name}>
 % endfor
 
-${types.mem_data_macro_and_type} padding_array ${padding_c_array["shape"]} = ${padding_c_array["value"]};
-${types.mem_data_macro_and_type} strides_array ${strides_c_array["shape"]} = ${strides_c_array["value"]};
+static ${types.mem_data_macro_and_type} padding_array ${padding_c_array["shape"]} = ${padding_c_array["value"]};
+static ${types.mem_data_macro_and_type} strides_array ${strides_c_array["shape"]} = ${strides_c_array["value"]};
 % if weights_and_constants["len"]>0:
 ## define weights for layers containing weights
-${types.mem_data_macro_and_type} weights_and_constants_${func_number} ${weights_and_constants["shape"]} = ${weights_and_constants["value"]};
+static ${types.mem_data_macro_and_type} weights_and_constants ${weights_and_constants["shape"]} = ${weights_and_constants["value"]};
+% else:
+static ${types.mem_data_macro_and_type} weights_and_constants [1]={0};
 % endif
 
 typedef struct layer_loops_indexes_t
@@ -20,12 +22,6 @@ typedef struct layer_loops_indexes_t
 % for operand in operands:
 typedef struct dimension_${operand}_${func_number}_t{
     dimension_${operand} common_dim;
-    % for rel_loop_dim in ordered_relevant_loops[operand]:
-    % if operand in input_operands and rel_loop_dim in padded_dims:
-    ## TODO: IS THIS NEEDED?
-    int max_${input_dim_mapping[rel_loop_dim]}_kernel_size;
-    % endif
-    % endfor
     % for tile_dim in tiling_sizes[operand].keys():
     int tile_${tile_dim}_size;
     % endfor
@@ -77,7 +73,7 @@ static void calc_padding_${operand}_${mem_level}(dimension_${operand}_${func_num
 % endfor
 % endfor
 
-static void match_initial_setup_${func_number}(
+static void match_initial_setup(
     % for i_operand in input_operands:
     dimension_${i_operand}_${func_number}* dim_${i_operand}, tile_indexes_${i_operand}* tile_idxs_${i_operand},
     % endfor
@@ -106,15 +102,15 @@ static void match_initial_setup_${func_number}(
     ## INPUT DIMENSIONS PADDING AND OVERLAPS SETTING
     % if not layer_has_padding:
     % for i_operand in input_operands:
-    dim_${i_operand}->common_dim.overlap_IX_x=0;dim${i_operand}->common_dim.overlap_IX_y=0;
-    dim_${i_operand}->common_dim.overlap_IY_x=0;dim${i_operand}->common_dim.overlap_IY_y=0;
-    dim_${i_operand}->common_dim.pad_IX_x=0;dim${i_operand}->common_dim.pad_IX_y=0;
-    dim_${i_operand}->common_dim.pad_IY_x=0;dim${i_operand}->common_dim.pad_IY_y=0;
+    dim_${i_operand}->common_dim.overlap_IX_x=0;dim_${i_operand}->common_dim.overlap_IX_y=0;
+    dim_${i_operand}->common_dim.overlap_IY_x=0;dim_${i_operand}->common_dim.overlap_IY_y=0;
+    dim_${i_operand}->common_dim.pad_IX_x=0;dim_${i_operand}->common_dim.pad_IX_y=0;
+    dim_${i_operand}->common_dim.pad_IY_x=0;dim_${i_operand}->common_dim.pad_IY_y=0;
     % endfor
     % else:
     % for i_operand in input_operands:
-    dim_${i_operand}->common_dim.overlap_IX_x=${overlaps["OX"][0]}; dim_${i_operand}->common_dim.overlap_IY_x=${overlaps["OY"][0]};
-    dim_${i_operand}->common_dim.overlap_IX_y=${overlaps["OX"][1]}; dim_${i_operand}->common_dim.overlap_IY_y=${overlaps["OY"][1]};
+    dim_${i_operand}->common_dim.overlap_IX_x=${overlaps["IX"][0]}; dim_${i_operand}->common_dim.overlap_IY_x=${overlaps["IY"][0]};
+    dim_${i_operand}->common_dim.overlap_IX_y=${overlaps["IX"][1]}; dim_${i_operand}->common_dim.overlap_IY_y=${overlaps["IY"][1]};
     dim_${i_operand}->common_dim.pad_IX_x=${layer_data.padding["IX"][0]}; dim_${i_operand}->common_dim.pad_IY_x=${layer_data.padding["IY"][0]};
     dim_${i_operand}->common_dim.pad_IX_y=${layer_data.padding["IX"][1]}; dim_${i_operand}->common_dim.pad_IY_y=${layer_data.padding["IY"][1]};
     % endfor
@@ -136,15 +132,15 @@ static void init_common_kernel_static_params(
     dimension_O_${func_number}* dim_O
 ){
     init_common_kernel_params(kernel,${pattern_name},${comp_apis.specific_pattern});
-    init_kernel_dimension_params(
+    init_kernel_dimension_params_${"_".join(input_operands+(["W","O"] if layer_has_weights else ["O"]))}(
         kernel,
     % for i_operand in input_operands:
-    &(dim_${i_operand}->common_dim),${sw_for_loops[::-1][0][f"mem_{i_operand}"]},
+    &(dim_${i_operand}->common_dim),${sw_for_loops[::-1][0][f"mem_{i_operand}"]},${layer_data.operand_precision[i_operand]},
     % endfor
     % if layer_has_weights:
-    &(dim_W->common_dim),${sw_for_loops[::-1][0]["mem_W"]},
+    &(dim_W->common_dim),${sw_for_loops[::-1][0]["mem_W"]},${layer_data.operand_precision["W"]},
     % endif
-    &(dim_O->common_dim),${sw_for_loops[::-1][0][f"mem_O"]}
+    &(dim_O->common_dim),${sw_for_loops[::-1][0][f"mem_O"]},${layer_data.operand_precision["O"]}
     );
     // TODO: set each attribute of the pattern correctly
     //kernel->dilation_x=----layer_attrs["dilation"][0]---;kernel->dilation_y=---layer_attrs["dilation"][1]---;
@@ -155,6 +151,9 @@ static void init_common_kernel_static_params(
 
 void __attribute__ ((noinline)) ${func_name}_inner(void* args)
 {
+    % if "start_codegen" in debug_level:
+    printf("Start of ${func_name} codegen function!\n");
+    % endif
     // recover args of function
     unsigned int *real_args = (unsigned int *) args;
     % for i_index,i_operand in enumerate(input_operands):
@@ -174,7 +173,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     unsigned int mem_level_${operand}_sizes ${size_each_level[operand]["shape"]} = ${size_each_level[operand]["value"]};
     % endfor
     // setup(init) dimensions
-    match_initial_setup_${func_number}(
+    match_initial_setup(
         % for i_operand in input_operands:
         &dim_${i_operand}, &abs_tile_idxs_${i_operand},
         % endfor
@@ -187,7 +186,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     unsigned int base_${i_operand}_pt=input_${i_operand}_pt;
     % endfor
     % if layer_has_weights:
-    unsigned int base_W_pt=weights_and_constants_${func_number};
+    unsigned int base_W_pt=weights_and_constants;
     % endif
     unsigned int base_O_pt=output_pt;
     ## PARAMS USEFUL FOR KERNEL
@@ -207,15 +206,16 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         % endif
         &dim_O
     );
-    ${comp_apis.init_other_kernel_params}( &kernel );
     // init memory api call --> malloc L1 memory and other params
     ${mem_apis.startup_memory}(
         &common_kernel,
         % for init_mem_op in input_operands+[op for op in operands if op not in input_operands and op!='O']+['O']:
         mem_level_${init_mem_op}_sizes,${int(db_opportunities[init_mem_op])},&(dim_${init_mem_op}.common_dim),
         % endfor
-        padding_array,strides_array,${pattern_name}
+        padding_array,strides_array
     );
+    
+    ${comp_apis.init_other_kernel_params}( &kernel );
     ## TODO: MANAGE LOOPS
     
     ## FOR LOOPS
@@ -273,7 +273,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         &layer_loops_idxs
     );
     add_relative_idxs_${mem_transfer_operand}(&tile_idxs_${mem_transfer_operand}_${idx}_relative,&abs_tile_idxs_${mem_transfer_operand});
-    unsigned int kernel_${operand}_pt = ${mem_apis.pointer_offset[operand]}(&common_kernel,&tile_idxs_${operand}_kernel_relative,${for_loop[f"mem_{operand}"]});
+    unsigned int kernel_${operand}_pt = loop_${operand}_${last_movements[operand]}_int_pt+${mem_apis.pointer_offset[operand]}(&common_kernel,&tile_idxs_${operand}_kernel_relative,${for_loop[f"mem_{operand}"]});
     % if operand in input_operands and layer_has_padding:
     calc_padding_${operand}_${for_loop[f"mem_{operand}"]}(&dim_${operand},&tile_idxs_${operand}_kernel_relative);
     kernel_set_padding(kernel.common_kernel,&(dim_${operand}.common_dim));
@@ -287,7 +287,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     % endif
     kernel.common_kernel->${operand}_pt = kernel_${operand}_pt;
     % endfor
-    ${mem_apis.pattern_constants_loading}(&kernel,iter,weights_and_constants_${func_number});
+    ${mem_apis.pattern_constants_loading}(&kernel,iter,weights_and_constants);
     ${sync_apis.async_transfers}(&common_kernel);
     if(iter>0)  ${sync_apis.prev_computation}(&common_kernel);
     ${comp_apis.innermost_computation}(&kernel);
@@ -336,7 +336,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     % endfor
     ${sync_apis.prev_computation}(&common_kernel);
     ${mem_apis.copy_out_prev_computation}(
-        &dim_O,kernel_O_prev_int,kernel_O_prev_ext,
+        &common_kernel,&dim_O,kernel_O_prev_int,kernel_O_prev_ext,
         ${for_loop["mem_O"]},${sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
     ${sync_apis.async_transfers}(&common_kernel);

@@ -1,0 +1,29 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "MATCH",
+            "type": "python",
+            "request": "launch",
+            //"program": "${workspaceFolder}/match/run.py",
+            "program": "${workspaceFolder}/docker-gap/gap_run.py",
+            "args": [
+                //"-t","gap9",
+                "-i",
+                "onnx",
+                "-f","examples/temponet_ht 2.onnx"
+                //"relay",
+                //"-a",
+                //"-c"
+                //"-f","examples/quant_conv.relay",
+                //"-p","examples/params_quant_conv.txt",
+                
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        }
+    ]
+}

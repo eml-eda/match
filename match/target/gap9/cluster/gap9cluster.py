@@ -21,8 +21,13 @@ class Gap9Cluster(ExecModule):
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "gap9cluster_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
         conv2d_patterns=[
-            "gap9cluster_conv2d_bias_simple",
-            "gap9cluster_conv2d"
+            "conv2d_bnorm_requant",
+            "conv2d_bias_add_requant",
+            "conv2d_bias_add",
+        ]
+        dense_patterns=[
+            "dense_bnorm_requant",
+            "dense_bias_add_requant",
         ]
         if pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])==1:
             return [
@@ -40,11 +45,11 @@ class Gap9Cluster(ExecModule):
             return [
                 ("OY",8),("OX",2),("K",4)
             ]
-        elif pattern_name=='gap9cluster_add':
+        elif pattern_name=='add_requant':
             return [
                 ("OY",8),("OX",2)
             ]
-        elif pattern_name=='gap9cluster_dense':
+        elif pattern_name in dense_patterns:
             # TODO: K 8 C 1
             return [
                 ("K",8),("C",2)
@@ -57,8 +62,13 @@ class Gap9Cluster(ExecModule):
     
     def specific_pattern_def(self, pattern_name: str = "conv_2d", dim_sizes: Dict[str, int] = ..., layer_attrs: Dict = ...):
         conv2d_patterns=[
-            "gap9cluster_conv2d_bias_simple",
-            "gap9cluster_conv2d"
+            "conv2d_bnorm_requant",
+            "conv2d_bias_add_requant",
+            "conv2d_bias_add",
+        ]
+        dense_patterns=[
+            "dense_bnorm_requant",
+            "dense_bias_add_requant",
         ]
         if pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])==1:
             return "pointwise_conv2d"
@@ -68,27 +78,28 @@ class Gap9Cluster(ExecModule):
             return "depthwise_conv2d"
         elif pattern_name in conv2d_patterns:
             return "conv2d"
-        elif pattern_name=='gap9cluster_add':
+        elif pattern_name=='add_requant':
             return "elemwise_add"
-        elif pattern_name=='gap9cluster_dense':
+        elif pattern_name in dense_patterns:
             return "dense"
         else:
             # DEFAULT LIKE CONV2D
             return "conv2d"
 
-    def memories_def(self, patter_name, operands):
-        memories=super().memories_def(pattern_name=patter_name,operands=operands)
-        memories[0].double_buffering_support=True
+    def memories_def(self, pattern_name, operands):
+        memories=super().memories_def(pattern_name=pattern_name,operands=operands)
+        if pattern_name!="add_requant":
+            memories[0].double_buffering_support=True
 
         def buffers_for_l1_mem(layer_data,pattern_name):
             buff_mem=0
             # buffer for the cores of the accelerator (weights dimensions)
-            if pattern_name!='gap9cluster_add' :
+            if pattern_name!='add_requant' :
                 buff_mem=2*layer_data.loop_dim_size['C']*layer_data.loop_dim_size['FY']*layer_data.loop_dim_size['FX']
             # buff for each core
             buff_mem*=8
             # bias
-            if pattern_name!="gap9cluster_add":
+            if pattern_name!="add_requant":
                 buff_mem+=layer_data.loop_dim_size['K']*4
             return buff_mem
         
@@ -142,3 +153,6 @@ class Gap9Cluster(ExecModule):
 
     def cost_model(self):
         return Gap9ClusterCostModel
+    
+    def layout_per_operand_def(self, pattern_name, specific_pattern, operands):
+        return {operand:"NHWC" for operand in operands}

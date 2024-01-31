@@ -1,19 +1,19 @@
-from match.relay.compiled_module import CompiledModule
 from match.relay.models import create_model_add_convs, create_model_conv_2d
 from match.target.get_target import get_target
 from match.driver.driver import driver
 import argparse
 from match.relay.get_relay import get_relay_from
 
-def match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, target=None, target_name=None):
+def match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, target=None,target_name=None):
     if relay_mod==None:    
         relay_mod,relay_params=get_relay_from(input_type,filename,params_filename)
     if target==None:
         target=get_target(target_name=target_name)
     driver(relay_mod, relay_params, target=target)
-    return CompiledModule.result
+
 
 if __name__ == "__main__":
+    __package__="match"
     parser = argparse.ArgumentParser()
 
     parser.add_argument(

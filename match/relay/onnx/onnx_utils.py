@@ -13,6 +13,21 @@ def sanitize_onnx_only_remove(onnx_model: onnx.ModelProto):
         for idx_att, att_ref in enumerate(atts_to_pop):
             node.attribute.pop(att_ref - idx_att)
 
+def channels_from_op(op_type,tensor_shape):
+    if op_type=="MatMul":
+        return tensor_shape[1]
+    else:
+        return tensor_shape[0]
+
+def unsqueeze_axes(op_type,tensor_shape):
+    if op_type=="Conv":
+        return tuple([0,2,3])
+    else:
+        return tuple(range(0,1))
+    
+
+SKIP_BIAS_ADD=True
+
 def sanitize_onnx(onnx_model: onnx.ModelProto):
     def create_initializer_tensor(
         name: str,
@@ -68,9 +83,12 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
     input_names_to_idx= dict()
     graph_input_types=dict()
     original_out_to_new_node_version=dict()
+    input_reformed_name=dict()
     for inp_idx,input_t in enumerate(onnx_model.graph.input):
         input_names.append(input_t.name)
         input_names_to_idx[input_t.name]=inp_idx
+        input_reformed_name[input_t.name]=input_t.name if not input_t.name.isnumeric() else f"match_input_{inp_idx}"
+        input_t.name=input_reformed_name[input_t.name]
         graph_input_types[input_t.name]=onnx.helper.tensor_dtype_to_np_dtype(input_t.type.tensor_type.elem_type)
     for idx_node, node in enumerate(onnx_model.graph.node):
         refactored_idx = int(node.output[0]) + len(nodes_with_new_ops)
@@ -104,13 +122,14 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
                     nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int",cast_bits))
                 if att[0] == "bias":
                     atts_to_pop["bias"]=idx_att
-                    if node.op_type=="Conv":
+                    if not SKIP_BIAS_ADD:
                         bias_bits = attribute.i
                         nodes_with_new_ops.append(idx_node)
                         nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int",bias_bits))
         op_channels = 32
         inputs_types=list()
         bias_found_in_inputs=""
+        weight_tensor_shape=[]
         for input_idx, node_input in enumerate(node.input):
             if node_input.isnumeric():
                 node_input_ref = int(node_input)
@@ -119,8 +138,8 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
                 )
                 node.input[input_idx] = str(new_node_input_ref)
                 if node_input not in input_names and onnx_model.graph.node[output_to_graph_idx[node_input_ref]].op_type=="Constant":
-                    op_channels_dim_idx = 0
-                    op_channels = node_init.dims[op_channels_dim_idx]
+                    op_channels = channels_from_op(node.op_type,node_init.dims)
+                    weight_tensor_shape = node_init.dims 
                     if op_bits > 0:
                         # const node needs an update
                         onnx_model.graph.node[output_to_graph_idx[node_input_ref]].attribute[0].t.raw_data = (
@@ -157,6 +176,7 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
                     })
                 else:
                     if node_input in input_names:
+                        node.input[input_idx]=input_reformed_name[node_input]
                         inputs_types.append({
                             "ndtype":graph_input_types[input_t.name],
                             "type":"input",
@@ -176,8 +196,8 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
                 for node_init in onnx_model.graph.initializer:
                     if node_init.name == node_input:
                         if input_idx < number_of_inputs_with_bias(node.op_type)-1:
-                            op_channels_dim_idx = 0 if len(node_init.dims) > 1 else 0
-                            op_channels = node_init.dims[op_channels_dim_idx]
+                            op_channels = channels_from_op(node.op_type,node_init.dims)
+                            weight_tensor_shape = node_init.dims
                             if op_bits > 0:
                                 node_init.raw_data = (
                                     np.frombuffer(
@@ -224,31 +244,35 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
                                     .tobytes()
                                 )
                                 node_init.data_type = onnx_data_type("int", bias_bits)
+                                unsqueeze_needed = len(weight_tensor_shape)>2
+                                #unsqueeze_needed = False
                                 nodes_to_append.append(
                                     (
                                         refactored_idx,
                                         onnx.helper.make_node(
                                             name="match_onnx_bias_add",
                                             op_type="Add",
-                                            inputs=[str(refactored_idx+output_added_nodes),str(refactored_idx+output_added_nodes+1)],
-                                            outputs=[str(refactored_idx+output_added_nodes+2)]
+                                            inputs=[str(refactored_idx+output_added_nodes),str(refactored_idx+output_added_nodes+1) if unsqueeze_needed else node_init.name],
+                                            outputs=[str(refactored_idx+output_added_nodes+1+unsqueeze_needed)]
                                         )
                                     )
                                 )
-                                nodes_to_append.append(
-                                    (
-                                        refactored_idx,
-                                        onnx.helper.make_node(
-                                            name="match_onnx_bias_unsqueeze",
-                                            op_type="Unsqueeze",
-                                            inputs=[node_init.name],
-                                            outputs=[str(refactored_idx+output_added_nodes+1)],
-                                            axes=tuple(range(1, 3)),
+                                if unsqueeze_needed:
+                                    nodes_to_append.append(
+                                        (
+                                            refactored_idx,
+                                            onnx.helper.make_node(
+                                                name="match_onnx_bias_unsqueeze",
+                                                op_type="Unsqueeze",
+                                                inputs=[node_init.name],
+                                                outputs=[str(refactored_idx+output_added_nodes+1)],
+                                                axes=unsqueeze_axes(node.op_type,weight_tensor_shape),
+                                            )
                                         )
                                     )
-                                )
-                                nodes_with_new_ops.append(idx_node)
-                                output_added_nodes+=2
+                                    nodes_with_new_ops.append(idx_node)
+                                    output_added_nodes+=1
+                                output_added_nodes+=1
                                 bias_found_in_inputs=node_init.name
                         break
         
@@ -313,23 +337,26 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
         if bias_found_in_inputs!="" and onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int", bias_bits))!=more_restrictive_dtype:
             nodes_with_new_ops.append(idx_node)
             output_added_nodes+=1
-            nodes_to_append[len(nodes_to_append)-2]=(refactored_idx,
+            unsqueeze_needed = len(weight_tensor_shape)>2
+            #unsqueeze_needed = False
+            nodes_to_append[len(nodes_to_append)-2 if unsqueeze_needed else len(nodes_to_append)-1]=(refactored_idx,
                 onnx.helper.make_node(
                     name="match_onnx_bias_add",
                     op_type="Add",
-                    inputs=[str(refactored_idx+1),str(refactored_idx+2)],
-                    outputs=[str(refactored_idx+3)]
+                    inputs=[str(refactored_idx+1),str(refactored_idx+2) if unsqueeze_needed else bias_found_in_inputs],
+                    outputs=[str(refactored_idx+3) if unsqueeze_needed else str(refactored_idx+2)]
                 )
             )
-            nodes_to_append[len(nodes_to_append)-1]=(refactored_idx,
-                onnx.helper.make_node(
-                    name="match_onnx_bias_unsqueeze",
-                    op_type="Unsqueeze",
-                    inputs=[node_init.name],
-                    outputs=[str(refactored_idx+2)],
-                    axes=tuple(range(1, 3)),
+            if unsqueeze_needed:
+                nodes_to_append[len(nodes_to_append)-1]=(refactored_idx,
+                    onnx.helper.make_node(
+                        name="match_onnx_bias_unsqueeze",
+                        op_type="Unsqueeze",
+                        inputs=[bias_found_in_inputs],
+                        outputs=[str(refactored_idx+2)],
+                        axes=unsqueeze_axes(node.op_type,weight_tensor_shape),
+                    )
                 )
-            )
             nodes_to_append.append(
                 (
                     refactored_idx,
@@ -357,31 +384,35 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
             if onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int", bias_bits))!=more_restrictive_dtype:
                 nodes_with_new_ops.append(idx_node)
                 output_added_nodes+=1
+            unsqueeze_needed = len(weight_tensor_shape)>2
+            #unsqueeze_needed = False
             nodes_to_append.append(
                 (
                     refactored_idx,
                     onnx.helper.make_node(
                         name="match_onnx_bias_add",
                         op_type="Add",
-                        inputs=[str(refactored_idx+output_added_nodes),str(refactored_idx+output_added_nodes+1)],
-                        outputs=[str(refactored_idx+output_added_nodes+2)]
+                        inputs=[str(refactored_idx+output_added_nodes),str(refactored_idx+output_added_nodes+1) if unsqueeze_needed else bias_name],
+                        outputs=[str(refactored_idx+output_added_nodes+1+unsqueeze_needed)]
                     )
                 )
             )
-            nodes_to_append.append(
-                (
-                    refactored_idx,
-                    onnx.helper.make_node(
-                        name="match_onnx_bias_unsqueeze",
-                        op_type="Unsqueeze",
-                        inputs=[bias_name],
-                        outputs=[str(refactored_idx+output_added_nodes+1)],
-                        axes=tuple(range(1, 3)),
+            if unsqueeze_needed:
+                nodes_to_append.append(
+                    (
+                        refactored_idx,
+                        onnx.helper.make_node(
+                            name="match_onnx_bias_unsqueeze",
+                            op_type="Unsqueeze",
+                            inputs=[bias_name],
+                            outputs=[str(refactored_idx+output_added_nodes+1)],
+                            axes=tuple(range(1, len(weight_tensor_shape)-1)) if len(weight_tensor_shape)>2 else tuple([1]),
+                        )
                     )
                 )
-            )
-            nodes_with_new_ops.append(idx_node)
-            output_added_nodes+=2
+                nodes_with_new_ops.append(idx_node)
+                output_added_nodes+=1
+            output_added_nodes+=1
             if onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int", bias_bits))!=more_restrictive_dtype:
                 nodes_to_append.append(
                     (
@@ -418,4 +449,6 @@ def sanitize_onnx(onnx_model: onnx.ModelProto):
             node.attribute.pop(att_ref - idx_att)
     for idx_node,new_node in enumerate(nodes_to_append):
         onnx_model.graph.node.insert(new_node[0],new_node[1])
+    #onnx_model.graph.output[0].type.tensor_type.elem_type=onnx.helper.np_dtype_to_tensor_dtype(np.dtype("int32"))#nodes_out_types[original_out_to_new_node_version[onnx_model.graph.output[0].name]])
+    onnx_model.graph.output[0].name=str(onnx_model.graph.node[::-1][0].output[0])
     return {"out_types":nodes_out_types,"to_append":nodes_to_append,"out_to_graph_idx":output_to_graph_idx,"new_ops_at":nodes_with_new_ops}

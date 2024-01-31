@@ -57,6 +57,7 @@ class MatchTargetPattern:
         self.name=name
         self.original_name=original_name
         self.pattern=module_pattern.pattern
+        self.ordered_operation=module_pattern.ordered_operation
         self.additional_checks=module_pattern.additional_checks
         self.match_additional_checks=match_additional_checks
         self.idx=idx
@@ -108,7 +109,7 @@ class MatchTarget(ABC):
         """
         node=mod.body.op.body
         match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{pattern_name}")
-        tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=True,pattern_inst=match_pt.pattern())
+        tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=True,pattern_inst=match_pt)
         tmapgen.generate_workload()
         tmapgen.set_exec_module_for_layer()
         layer_data=tmapgen.get_layer_data()
@@ -139,7 +140,7 @@ class MatchTarget(ABC):
         Returns:
             Number,Number: latency and energy consumption results of the node with the given pattern
         """
-        tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=False,pattern_inst=match_pt.pattern())
+        tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=False,pattern_inst=match_pt)
         tmapgen.generate_workload()
         tmapgen.set_exec_module_for_layer()
         layer_data=tmapgen.get_layer_data()
@@ -245,7 +246,8 @@ class MatchTarget(ABC):
             List[PartitioningPattern]: list of pattern supported by the target sorted
         """
         return [
-            PartitioningPattern(m_pt.name,m_pt.pattern,m_pt.match_additional_checks)
+            PartitioningPattern(name=m_pt.name,pattern=m_pt.pattern,
+                                ordered_operation=m_pt.ordered_operation,additional_checks=m_pt.match_additional_checks)
             for m_pt in self.match_patterns
         ]
 

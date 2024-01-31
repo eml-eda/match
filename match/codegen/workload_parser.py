@@ -43,10 +43,11 @@ class WorkloadParser:
         self.energy = 0
         self.latency = 0
         self.layer_data=LayerData()
+        self.pattern_inst=pattern_inst
         #self.depth_limits=get_depth_arr_pattern(pattern_inst_=pattern_inst)
         if not partitioned:
             mod = tvm.ir.IRModule()
-            self.node=InferType()(mod.from_expr(pattern_inst.partition(node)))
+            self.node=InferType()(mod.from_expr(pattern_inst.pattern().partition(node)))
             self.node=self.node["main"].body.op.body
         
     def get_io_from_layout(self,layout, data):
@@ -108,7 +109,7 @@ class WorkloadParser:
         self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
 
     def visit_bias_add(self, call, attrs):
-        attrs = {"bias.axis": int(attrs.axis),'bias_add':True}
+        attrs = {"bias.axis": int(attrs.axis)}
         self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
     def visit_multiply(self,call,atts):
         attrs = {"batchnorm":True}
@@ -157,7 +158,7 @@ class WorkloadParser:
             self.layer_data.pr_loop_dim_size,
             operand_precision_zigzag,
             self.layer_data.operand_precision,
-        ) = self.exec_module.adjust_dimensions_and_precision()(
+        ) = self.exec_module.adjust_dimensions_and_precision(
             loop_dim_size=self.layer_data.loop_dim_size, pr_loop_dim_size=self.layer_data.pr_loop_dim_size, operand_precision=self.layer_data.operand_precision, strides=strides, pattern_name=self.pattern_name
         )
         attrs = {
@@ -180,6 +181,8 @@ class WorkloadParser:
         self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
 
     def visit_add(self, call, attrs):
+        if self.pattern_inst.ordered_operation!="add":
+            return
         #if len(self.layer_data.loop_dim_size)==0:
         #    return
         itype = call.args[0].args[0].checked_type.shape
@@ -272,7 +275,11 @@ class WorkloadParser:
             f"ix={int(strides[0])}*ox+{int(dilations[0])}*fx",
             f"iy={int(strides[1])}*oy+{int(dilations[1])}*fy",
         ]
-        kernel_size = attrs.kernel_size
+        kernel_size = list()
+        if "kernel_size" in dict(attrs) and attrs["kernel_size"]!=None:
+            kernel_size = list(attrs["kernel_size"])
+        else:
+            kernel_size = list([int(v) for v in wtype][2:])
         self.layer_data.loop_dim_size = {
             "B": int(o_n),
             "K": int(o_c),
@@ -391,13 +398,13 @@ class WorkloadParser:
         self.layer_data.layer_arguments = {**var_and_consts_not_unrolled, **var_and_consts_unrolled}
 
     def visit_call(self, call):
-        #breakpoint()
         if call.op.name not in self.supported_operators:
             # skip if not supported for testing purposes
             raise NotImplementedError(
                 f"Currently the operator {call.op.name} is not supported."
             )
         else:
+            self.layer_data.visited_operations.append(call.op.name)
             self.visit_router[call.op.name](call, call.attrs)
 
     def get_layer_data(self):

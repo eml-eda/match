@@ -20,7 +20,7 @@ void pw_conv_2d_comp(void* args){
     int w_y_width=kernel->common_kernel->fx;
     int w_y_height=kernel->common_kernel->fy;
     int act=kernel->common_kernel->activation_function;
-    int batch_norm=0;
+    int batch_norm=kernel->common_kernel->batchnorm_add!=0x0;
     int p_top=kernel->common_kernel->pad_IY_x;
     int p_bottom=kernel->common_kernel->pad_IY_y;
     int p_left=kernel->common_kernel->pad_IX_x;
@@ -59,7 +59,7 @@ void dw_conv_2d_comp(void* args){
     int w_y_width=kernel->common_kernel->fx;
     int w_y_height=kernel->common_kernel->fy;
     int act=kernel->common_kernel->activation_function;
-    int batch_norm=0;
+    int batch_norm=kernel->common_kernel->batchnorm_add!=0x0;
     int p_top=kernel->common_kernel->pad_IY_x;
     int p_bottom=kernel->common_kernel->pad_IY_y;
     int p_left=kernel->common_kernel->pad_IX_x;
@@ -99,7 +99,7 @@ void dw_less_four_fs_conv_2d_comp(void* args){
     int w_y_width=kernel->common_kernel->fx;
     int w_y_height=kernel->common_kernel->fy;
     int act=kernel->common_kernel->activation_function;
-    int batch_norm=0;
+    int batch_norm=kernel->common_kernel->batchnorm_add!=0x0;
     int p_top=kernel->common_kernel->pad_IY_x;
     int p_bottom=kernel->common_kernel->pad_IY_y;
     int p_left=kernel->common_kernel->pad_IX_x;
@@ -140,7 +140,7 @@ void conv_2d_comp(void* args){
     int w_y_width=kernel->common_kernel->fx;
     int w_y_height=kernel->common_kernel->fy;
     int act=kernel->common_kernel->activation_function;
-    int batch_norm=0;
+    int batch_norm=kernel->common_kernel->batchnorm_add!=0x0;
     int p_top=kernel->common_kernel->pad_IY_x;
     int p_bottom=kernel->common_kernel->pad_IY_y;
     int p_left=kernel->common_kernel->pad_IX_x;
@@ -181,10 +181,10 @@ void add_comp(void* args){
 
 void dense_comp(void* args){
     cluster_kernel* kernel = (cluster_kernel*)args;
-    int i_channels=kernel->common_kernel->c_i;
+    int i_channels=kernel->common_kernel->c_i>kernel->common_kernel->c_w?kernel->common_kernel->c_w:kernel->common_kernel->c_i;
     int o_channels=kernel->common_kernel->k_o;
     int act=kernel->common_kernel->activation_function;
-    int batch_norm=0;
+    int batch_norm=kernel->common_kernel->batchnorm_add!=0x0;
     pulp_nn_linear(
         kernel->common_kernel->I_pt,
         kernel->common_kernel->bias_pt,

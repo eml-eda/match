@@ -93,7 +93,6 @@ class ExecModule(ABC):
 
         def conv2d_pattern():
             """Create pattern for conv2D with optional fused relu."""
-            #breakpoint()
             return is_op("nn.conv2d")(
                     wildcard(), wildcard()
             )
@@ -112,14 +111,11 @@ class ExecModule(ABC):
             cast_a = is_op("cast")(wildcard()).has_attr({"dtype": "int32"})
             cast_b = is_op("cast")(wildcard()).has_attr({"dtype": "int32"})
             return is_op("add")(cast_a, cast_b)
-        
-        def no_checks(pattern):
-            return True
 
         return [
-            PartitioningPattern(name="default_conv2d",pattern=conv2d_pattern,additional_checks=no_checks),
-            PartitioningPattern(name="default_dense",pattern=fully_connected_pattern,additional_checks=no_checks),
-            PartitioningPattern(name="default_add",pattern=element_wise_add_pattern,additional_checks=no_checks)
+            PartitioningPattern(name="default_conv2d",pattern=conv2d_pattern,ordered_operation="nn.conv2d"),
+            PartitioningPattern(name="default_dense",pattern=fully_connected_pattern,ordered_operation="nn.dense"),
+            PartitioningPattern(name="default_add",pattern=element_wise_add_pattern,ordered_operation="add")
         ]
     
     def network_transformations(self,opts):
@@ -181,9 +177,9 @@ class ExecModule(ABC):
         else:
             return optimal_spat
 
-    def spatial_mapping(self,dim_sizes:Dict[str,int]={},pattern_name:str="conv_2d",operands:List[str]=["O","W","I"],pattern_operations:List[str]=["nn.conv2d"],layer_attrs:Dict={}):
+    def spatial_mapping(self,layer_data=None,pattern_name:str="conv_2d",pattern_inst=None):
         if self.optimal_spatial_mapping is None:
-            self.optimal_spatial_mapping_def(pattern_name=pattern_name,dim_sizes=dim_sizes,layer_attrs=layer_attrs)
+            self.optimal_spatial_mapping_def(pattern_name=pattern_name,dim_sizes=layer_data.layer_attrs["loop_sizes"],layer_attrs=layer_data.layer_attrs)
             if self.optimal_spatial_mapping is None:
                 self.optimal_spatial_mapping = [ ("K",1), ("OY",1) ]
         def op_link_name(operand: str="O"):
@@ -198,10 +194,10 @@ class ExecModule(ABC):
                 {
                     "core_allocation": 1,
                     "spatial_mapping":  {f"D{opt_idx+1}":(opt_sptmap[0],self.limit_spatial_mapping_to(\
-                        dim_size=dim_sizes[opt_sptmap[0]],optimal_spat=self.get_optimal_spat_size(opt_sptmap[1],dim_sizes[opt_sptmap[0]])))\
+                        dim_size=layer_data.layer_attrs["loop_sizes"][opt_sptmap[0]],optimal_spat=self.get_optimal_spat_size(opt_sptmap[1],layer_data.layer_attrs["loop_sizes"][opt_sptmap[0]])))\
                                         for opt_idx,opt_sptmap in enumerate(self.optimal_spatial_mapping)},
-                    "memory_operand_links": {op:op_link_name(op) for op in operands},
-                    "unordered_loops":["FX","FY"]+(["C"] if "dense" not in pattern_operations else []),
+                    "memory_operand_links": {op:op_link_name(op) for op in layer_data.operands},
+                    "unordered_loops":["FX","FY"]+(["C"] if "nn.dense" != pattern_inst.ordered_operation else []),
                 }
         }
     
@@ -258,11 +254,11 @@ class ExecModule(ABC):
     def additional_kernel_parameters(self,pattern_name):
         return dict()
     
-    def layout_per_operand_def(self,pattern_name,specific_pattern):
+    def layout_per_operand_def(self,pattern_name,specific_pattern,operands):
         return dict()
 
-    def match_layout_operand(self,pattern_name,specific_pattern):
-        self.layout_operand=self.layout_per_operand_def(pattern_name=pattern_name,specific_pattern=specific_pattern)
+    def match_layout_operand(self,pattern_name,specific_pattern,operands):
+        self.layout_operand=self.layout_per_operand_def(pattern_name=pattern_name,specific_pattern=specific_pattern,operands=operands)
         for operand_ in [op_ for op_ in ["O","I","W","X","Y"] if op_ not in self.layout_operand]:
             self.layout_operand[operand_]="NCHW"
         return self.layout_operand 

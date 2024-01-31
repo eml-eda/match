@@ -39,7 +39,6 @@ class Gap9ClusterOnnxDigitalRequantRewriter(DFPatternCallback):
         x = relay.op.clip(x, a_min=int(maximum.data.numpy()), a_max=int(minimum.data.numpy()))
         return relay.op.cast(x, 'uint8')
 
-
 @tvm.ir.transform.module_pass(opt_level=0)
 class Gap9ClusterOnnxRequantTransform:
     """ Find and rewrite MATCH ONNX requant to requant for internal use:
@@ -194,10 +193,71 @@ class FindLayoutTransformShape(ExprVisitor):
             elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'match':
                 self.shapes.append(call.args[0].checked_type.shape)
 
+class DivFloorPlinioOnnx(DFPatternCallback):
+    """Rewriter for digital requant pattern
+    """
+    def __init__(self, require_type=False):
+        super().__init__(require_type)
+
+        self.div = is_op("divide")(wildcard(),is_constant())
+        self.floor = is_op("floor")(self.div)
+        self.clip = is_op("clip")(self.floor)
+        self.cast = is_op("cast")(self.clip)
+        self.pattern = self.cast
+
+    def callback(self, pre, post, node_map):
+        div = node_map[self.div][0]
+        cast = node_map[self.cast][0]
+
+        shift_factor = int(np.log2(abs(int(div.args[1].data.numpy()))))
+
+        x = relay.op.right_shift(div.args[0], relay.const(shift_factor))
+        x = relay.op.clip(x, a_min=int(0), a_max=int(255))
+        return relay.op.cast(x, cast.attrs["dtype"])
+    
+class DivReqPlinioOnnx(DFPatternCallback):
+    """Rewriter for digital requant pattern
+    """
+    def __init__(self, require_type=False):
+        super().__init__(require_type)
+
+        self.div = is_op("divide")(wildcard(),is_constant())
+        self.clip = is_op("clip")(self.div)
+        self.cast = is_op("cast")(self.clip)
+        self.pattern = self.cast
+
+    def callback(self, pre, post, node_map):
+        div = node_map[self.div][0]
+        cast = node_map[self.cast][0]
+
+        shift_factor = int(np.log2(abs(int(div.args[1].data.numpy()))))
+
+        x = relay.op.right_shift(div.args[0], relay.const(shift_factor))
+        x = relay.op.clip(x, a_min=int(0), a_max=int(255))
+        return relay.op.cast(x, cast.attrs["dtype"])
+
+@tvm.ir.transform.module_pass(opt_level=0)
+class RequantRewriterPlinioOnnx:
+    """ Find and rewrite MATCH ONNX requant to requant for internal use:
+        div->div->floor->max->min to
+        right_shift->clip->cast
+    """
+    def transform_module(
+        self, mod: tvm.ir.IRModule, ctx: tvm.ir.transform.PassContext
+    ) -> tvm.ir.IRModule:
+        for global_var, func in mod.functions.items():
+            func = rewrite(DivFloorPlinioOnnx(), func)
+            func = rewrite(DivReqPlinioOnnx(), func)
+            mod.update_func(global_var, func)
+        return mod
+
+    def __call__(self, mod):
+        return self.transform_module(mod)
+
 
 def network_transformations(opts):
     pipeline=[]
-    #pipeline.append(Gap9ClusterOnnxRequantTransform())  
+    pipeline.append(RequantRewriterPlinioOnnx())  
     #if 'requant_transform' not in opts or opts['requant_transform'] != '0':
     #    pipeline.append(Gap9ClusterOnnxRequantTransform())   
     #pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))

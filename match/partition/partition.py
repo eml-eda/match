@@ -18,7 +18,7 @@ Operations to support the SOMA accelerator.
 """
 
 from typing import Any, List
-from match.partition.network_transformations import MatchOnnxBiasAdd
+from match.partition.network_transformations import MatchOnnxBiasAdd,MatchOnnxBiasAddRemoveFromMain, MatchSaveModule
 import tvm
 import logging
 from functools import partial
@@ -64,7 +64,6 @@ def partition(mod, params, dpu, opts):
     The partitioned module.
 
     """
-    #breakpoint()
     if params:
         mod["main"] = bind_params_by_name(mod["main"], params)
     
@@ -82,14 +81,16 @@ def partition(mod, params, dpu, opts):
     pipeline.append(transform.MergeComposite(pattern_table(target=target)))
     pipeline.append(transform.AnnotateTarget(["match"]))
 
-    pipeline+=target.network_transformations(opts)
+    #pipeline+=target.network_transformations(opts)
 
     pipeline.append(transform.InferType())
     pipeline.append(transform.PartitionGraph())
     pipeline.append(transform.InferType())
 
-    #pipeline.append(RewriteOnnxBiases())
-    
+    pipeline.append(MatchOnnxBiasAddRemoveFromMain())
+    pipeline.append(transform.InferType())
+
+    pipeline.append(MatchSaveModule())
     seq = tvm.transform.Sequential(pipeline)
     with tvm.transform.PassContext(opt_level=3):
         try:

@@ -24,11 +24,13 @@ def create_model_conv_2d(weight_bits: int = 8,
     if weights_values is None:
         weights = utils.create_random_array(weights_shape, 
                                             f'int{weight_bits}')
+        weights = utils.numpy_to_array(np.ones(weights_shape,f"int{weight_bits}"),f"int{weight_bits}")
     else:
         weights = weights_values
     # Get or generate bias values
     if bias_values is None:
         bias = utils.create_random_array(weights_shape[0], 'int32')
+        bias = utils.numpy_to_array(np.ones(weights_shape[0],"int32"),"int32")
     else:
         bias = bias_values
     # Generate the conv2d call
@@ -51,7 +53,7 @@ def create_model_add_convs(weight_bits: int = 8,
                  bias_values: Optional[tvm.nd.array] = None,
                  padding: Tuple[int, int] = (1, 1),
                  strides: Tuple[int, int] = (1, 1),
-                 shift_bits: int = 4
+                 shift_bits: int = 0
                  ):
     """Generate a small network in TVM Relay IR that does 2 requantized convolutions and add their results
     """
@@ -62,11 +64,13 @@ def create_model_add_convs(weight_bits: int = 8,
     if weights_values is None:
         weights = utils.create_random_array(weights_shape, 
                                             f'int{weight_bits}')
+        weights = utils.numpy_to_array(np.ones(weights_shape,f"int{weight_bits}"),f"int{weight_bits}")
     else:
         weights = weights_values
     # Get or generate bias values
     if bias_values is None:
         bias = utils.create_random_array(weights_shape[0], 'int32')
+        bias = utils.numpy_to_array(np.ones(weights_shape[0],"int32"),"int32")
     else:
         bias = bias_values
     # Generate the conv2d call

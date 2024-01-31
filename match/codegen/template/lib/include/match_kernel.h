@@ -42,21 +42,26 @@ typedef struct common_kernel_t {
   dimension_O* dim_O;
   int mem_O;
   unsigned int O_pt;
+  unsigned int prec_O;
   // 1 input
   dimension_I* dim_I;
   int mem_I;
   unsigned int I_pt;
+  unsigned int prec_I;
   // 2 inputs
   dimension_X* dim_X;
   int mem_X;
   unsigned int X_pt;
+  unsigned int prec_X;
   dimension_Y* dim_Y;
   int mem_Y;
   unsigned int Y_pt;
+  unsigned int prec_Y;
   // weights
   dimension_W* dim_W;
   int mem_W;
   unsigned int W_pt;
+  unsigned int prec_W;
 } common_kernel;
 
 typedef struct match_kernel_t
@@ -66,6 +71,18 @@ typedef struct match_kernel_t
 
 
 void init_common_kernel_params(common_kernel* kernel,unsigned int pattern_name,unsigned int specific_pattern);
+
+void init_kernel_dimension_params_I_W_O(
+    common_kernel* kernel,dimension_I* dim_I,unsigned int innermost_I_mem_level,unsigned int prec_I,
+    dimension_W* dim_W,unsigned int innermost_W_mem_level,unsigned int prec_W,
+    dimension_O* dim_O,unsigned int innermost_O_mem_level,unsigned int prec_O
+);
+
+void init_kernel_dimension_params_X_Y_O(
+    common_kernel* kernel,dimension_X* dim_X,unsigned int innermost_X_mem_level,unsigned int prec_X,
+    dimension_Y* dim_Y,unsigned int innermost_Y_mem_level,unsigned int prec_Y,
+    dimension_O* dim_O,unsigned int innermost_O_mem_level,unsigned int prec_O
+);
 
 void match_innermost_computation(match_kernel* kernel,unsigned int pattern_name);
 

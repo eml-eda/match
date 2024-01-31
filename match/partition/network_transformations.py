@@ -1,3 +1,5 @@
+from math import prod
+from match.relay.compiled_module import CompiledModule
 from tvm.relay.expr_functor import ExprMutator, ExprVisitor
 from tvm.relay.dataflow_pattern import DFPatternCallback, is_op, rewrite, wildcard
 from tvm.relay import transform
@@ -58,8 +60,54 @@ class MatchOnnxBiasAdd(ExprMutator):
             new_args_attrs=dict(new_args[0].attrs)
             new_args_attrs["out_dtype"]=call.attrs.dtype
             new_args[0]=relay.frontend.common.get_relay_op(new_args[0].op.name)(new_args[0].args[0], new_args[0].args[1], **new_args_attrs)
+            new_args[0]=relay.frontend.common.set_span(new_args[0],"match_onnx_bias_cast_removed_added_out_dtype")
             new_call=new_args[0]
         
         if span_name=="match_onnx_bias_add":
             new_call=relay.op.nn.bias_add(new_args[0],relay.const(new_args[1].data.numpy().flatten()))
+            new_call=relay.frontend.common.set_span(new_call,"match_onnx_bias_add")
         return new_call
+    
+@transform.function_pass(opt_level=0)
+class MatchOnnxBiasAddRemoveFromMain(ExprMutator):
+    """Cast linear layers in graph to integers and insert the necessary cast operations (from MATCH ONNX file)
+    """
+
+    def __init__(self):
+        super().__init__()
+
+    def transform_function(self, func, mod, ctx):
+        return self.visit(mod.functions[mod.get_global_var("main")])
+
+    def visit_call(self, call):
+        """Rewrite ops
+        """
+        new_fn = self.visit(call.op)
+        new_args = [self.visit(arg) for arg in call.args]
+        # Default case
+        new_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
+        span_name=""
+        if hasattr(call,"span") and hasattr(call.span,"source_name"):
+            span_name = call.span.source_name.name
+
+        if span_name=="match_onnx_bias_add":
+            new_call=relay.op.nn.bias_add(relay.frontend.common.set_span(relay.op.cast(
+                new_args[0],new_args[0].attrs["out_dtype"]),"match_onnx_bias_cast")
+                ,new_args[1])
+        return new_call
+    
+@tvm.ir.transform.module_pass(opt_level=0)
+class MatchSaveModule:
+    def transform_module(
+        self, mod: tvm.ir.IRModule, ctx: tvm.ir.transform.PassContext
+    ) -> tvm.ir.IRModule:
+        global_var=mod.get_global_var("main")
+        func=mod.functions[global_var]
+        relay_inputs=func.params
+        match_inputs=[{"name":inp_.name_hint,"size":prod(inp_.type_annotation.shape),"type":inp_.type_annotation.dtype} for inp_ in relay_inputs]
+        match_output={"size":prod(func.ret_type.shape),"type":func.ret_type.dtype}
+        CompiledModule.define_compiled_module(mod=mod,match_inputs=match_inputs,match_output=match_output)
+        return mod
+
+    def __call__(self, mod):
+        return self.transform_module(mod)

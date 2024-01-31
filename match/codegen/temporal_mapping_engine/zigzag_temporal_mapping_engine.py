@@ -20,7 +20,7 @@ class ZigZagEngine(TemporalMappingEngine):
     def __init__(self,exec_module:ExecModule=None,pattern_name:str="",layer_data:LayerData=None):
         super(ZigZagEngine, self).__init__(exec_module=exec_module,pattern_name=pattern_name,layer_data=layer_data)
         self.lpf_limit=13
-        self.debuglayer=True
+        self.debuglayer=False
         self.zigzag_temporal_mapping=dict()
 
     def transform_workload_for_engine(self):
@@ -140,7 +140,16 @@ class ZigZagEngine(TemporalMappingEngine):
                 lpf_limit=self.lpf_limit,
                 cost_model_class= cost_model
             )
+            if hasattr(cme[0][0],"is_tm_valid") and not cme[0][0].is_tm_valid:
+                raise NoValidLoopOrderingFoundException(
+                    f"No valid loop ordering was found for layer {cme.layer}. Please make sure the spatial mapping is compatible with the architecture."
+                )
         except NoValidLoopOrderingFoundException as exc:
+            self.energy=-1
+            self.latency=-1
+            self.cme=None
+            raise Exception("No valid loop ordering found")
+        except Exception as exc:
             self.energy=-1
             self.latency=-1
             self.cme=None
@@ -202,3 +211,10 @@ class ZigZagEngine(TemporalMappingEngine):
             for operand in self.layer_data.operands:
                 obj[f"mem_{operand}"] = self.temporal_mapping[len(self.temporal_mapping) - 1][f"mem_{operand}"]
             self.temporal_mapping.append(obj)
+        
+        # FIX THAT O IS LAST TO BE MOVED
+        for idx in reversed(range(len(self.temporal_mapping))):
+            for op in set(self.layer_data.operands)-set("O"):
+                if self.temporal_mapping[idx][f"mem_{op}"]!=mem_name[op][0] and self.temporal_mapping[idx]["mem_O"]==mem_name["O"][0]:
+                    self.temporal_mapping[idx]["mem_O"]=mem_name["O"][1 if len(mem_name["O"])>1 else 0]
+                    break
