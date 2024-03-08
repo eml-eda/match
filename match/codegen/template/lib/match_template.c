@@ -47,27 +47,27 @@ static void setup_relative_tile_idxs_${operand}_${mem_level}(
     ;
     % endif
     % endfor
+    ## EVALUATE IDX ALSO WITH STRIDES
+    % if operand in input_operands:
+    % for stride_dim,stride_val in layer_attrs["strides"].items():
+    tile_idxs->tile_${stride_dim}*=${stride_val};
+    % endfor
+    % endif
 }
 % if operand in input_operands and layer_has_padding:
 static void calc_padding_${operand}_${mem_level}(dimension_${operand}_${func_number}* dim,tile_indexes_${operand}* abs_tile_idxs){
     // IX dimension pads
-    dim->common_dim.pad_IX_x=abs_tile_idxs->tile_IX - dim->common_dim.overlap_IX_x +
-        abs_tile_idxs->tile_IX*(${layer_attrs['strides']["IX"]}-1) <= 0 ?
-        dim->common_dim.overlap_IX_x - abs_tile_idxs->tile_IX + abs_tile_idxs->tile_IX * (${layer_attrs['strides']["IX"]}-1)
-        : 0;
+    dim->common_dim.pad_IX_x=abs_tile_idxs->tile_IX - dim->common_dim.overlap_IX_x  <= 0 ?
+        dim->common_dim.overlap_IX_x - abs_tile_idxs->tile_IX : 0;
     dim->common_dim.pad_IX_y=abs_tile_idxs->tile_IX + dim->common_dim.size_IX[${mem_level}]+ 
-        dim->common_dim.overlap_IX_y + abs_tile_idxs->tile_IX * (${layer_attrs['strides']["IX"]}-1) > ${layer_attrs['loop_sizes']["OX"]} ?
-        abs_tile_idxs->tile_IX+dim->common_dim.size_IX[${mem_level}]+dim->common_dim.overlap_IX_y+
-        abs_tile_idxs->tile_IX*(${layer_attrs['strides']["IX"]}-1) - ${layer_attrs['loop_sizes']["OX"]} : 0;
+        dim->common_dim.overlap_IX_y > ${layer_attrs['loop_sizes']["IX"]} ?
+        abs_tile_idxs->tile_IX+dim->common_dim.size_IX[${mem_level}]+dim->common_dim.overlap_IX_y - ${layer_attrs['loop_sizes']["IX"]} : 0;
     // IY dimension pads
-    dim->common_dim.pad_IY_x=abs_tile_idxs->tile_IY - dim->common_dim.overlap_IY_x +
-        abs_tile_idxs->tile_IY*(${layer_attrs['strides']["IY"]}-1) <= 0 ?
-        dim->common_dim.overlap_IY_x - abs_tile_idxs->tile_IY + abs_tile_idxs->tile_IY * (${layer_attrs['strides']["IY"]}-1)
-        : 0;
+    dim->common_dim.pad_IY_x=abs_tile_idxs->tile_IY - dim->common_dim.overlap_IY_x  <= 0 ?
+        dim->common_dim.overlap_IY_x - abs_tile_idxs->tile_IY : 0;
     dim->common_dim.pad_IY_y=abs_tile_idxs->tile_IY + dim->common_dim.size_IY[${mem_level}]+ 
-        dim->common_dim.overlap_IY_y + abs_tile_idxs->tile_IY * (${layer_attrs['strides']["IY"]}-1) > ${layer_attrs['loop_sizes']["OY"]} ?
-        abs_tile_idxs->tile_IY+dim->common_dim.size_IY[${mem_level}]+dim->common_dim.overlap_IY_y+
-        abs_tile_idxs->tile_IY*(${layer_attrs['strides']["IY"]}-1) - ${layer_attrs['loop_sizes']["OY"]} : 0;
+        dim->common_dim.overlap_IY_y > ${layer_attrs['loop_sizes']["IY"]} ?
+        abs_tile_idxs->tile_IY+dim->common_dim.size_IY[${mem_level}]+dim->common_dim.overlap_IY_y - ${layer_attrs['loop_sizes']["IY"]} : 0;
 }
 % endif
 % endfor
@@ -341,6 +341,9 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     );
     ${sync_apis.async_transfers}(&common_kernel);
     ${mem_apis.shutdown_mem}(&common_kernel);
+    % if "end_codegen" in debug_level:
+    printf("End of ${func_name} codegen function!\n");
+    % endif
 }
 
 void __attribute__ ((noinline)) ${func_name}(

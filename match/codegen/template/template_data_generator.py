@@ -19,7 +19,7 @@ class TemplateDataGenerator:
         self.exec_module=exec_module
         self.pattern_name=pattern_name
         self.template_data=dict()
-        self.template_data["debug_level"]=[]#["start_codegen"]
+        self.template_data["debug_level"]=["start_codegen","end_codegen"]
             
     def generate_hw_dependent_template_data(self):
         hw_dependent_template_data = dict()
@@ -103,8 +103,21 @@ class TemplateDataGenerator:
         #        for operand in [op for op in general_template_data["operands"] if fl["name"] in general_template_data["ordered_relevant_loops"][op]]:
         #            dim_name=fl["name"] if operand not in general_template_data["input_operands"] else general_template_data["input_dim_mapping"][fl["name"]]
         #            tiling_sizes[operand][dim_name]={"name":fl["name"],"size":1,"index":fl["index"]}
-        
+        # TODO: calc overlap
+        ##{(attrs['loop_sizes'][ordim]+attrs['loop_sizes'][trdim['partial_relevancy']]-1-(attrs['loop_sizes'][trdim['mapping']]//attrs['strides'][trdim['mapping']]))//2};
+        general_template_data["overlaps"]=copy.deepcopy(self.layer_data.padding)
+
         current_dims = {operand:copy.deepcopy(general_template_data["layer_attrs"]["loop_sizes"]) for operand in general_template_data["operands"]}
+
+        # DEPTHWISE
+        if "nn.conv2d_depthwise" in general_template_data["layer_data"].layer_attrs and general_template_data["layer_data"].layer_attrs["nn.conv2d_depthwise"]:
+            for input_op in general_template_data["input_operands"]:
+                current_dims[input_op]["C"]=current_dims[input_op]["K"]
+        # PADS
+        for input_op in general_template_data["input_operands"]:
+            for overlapped_dim,overlapped_val in general_template_data["overlaps"].items():
+                current_dims[input_op][overlapped_dim]+=max(overlapped_val)
+        #print(f"For {general_template_data['func_name']} Dims {current_dims} overlap {general_template_data['overlaps']}\n\n")
         for fl in general_template_data["sw_for_loops"]:
             if fl["fullname"] in tiled_dimensions:
                 for operand in [op for op in general_template_data["operands"] if fl["name"] in general_template_data["ordered_relevant_loops"][op]]:
@@ -114,6 +127,8 @@ class TemplateDataGenerator:
                     tiling_sizes[operand][fl_fullname] = {"name":fl["name"],"size":size_,"index":fl["index"]}
                     current_dims[operand][dim_name] = size_
         
+        #print(f"For {general_template_data['func_name']} tiling sizes {tiling_sizes}\n\n")
+
         general_template_data["tiling_sizes"] = tiling_sizes
         general_template_data["memory_transfers"] = {
             sl["fullname"]: [
@@ -141,7 +156,9 @@ class TemplateDataGenerator:
                         general_template_data["sw_for_loops_dict"][fl_mem_t_fn][f"mem_{operand}"]: int(
                             general_template_data["layer_attrs"]["loop_sizes"][
                                 rel_dim
-                                if "nn.conv2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["nn.conv2d_depthwise"]
+                                if ("nn.conv2d" in self.layer_data.pattern_operations and
+                                     self.layer_data.layer_attrs["nn.conv2d_depthwise"]
+                                     and rel_dim in ["K","C"])
                                 or operand not in general_template_data["input_operands"]
                                 else general_template_data["input_dim_mapping"][rel_dim]
                             ]
@@ -165,9 +182,6 @@ class TemplateDataGenerator:
             for operand in general_template_data["operands"]
         }
 
-        # TODO: calc overlap
-        ##{(attrs['loop_sizes'][ordim]+attrs['loop_sizes'][trdim['partial_relevancy']]-1-(attrs['loop_sizes'][trdim['mapping']]//attrs['strides'][trdim['mapping']]))//2};
-        general_template_data["overlaps"]=copy.deepcopy(self.layer_data.padding)
         # calc db opportunites
         general_template_data["db_opportunities"]={
             operand:any([p.double_buffering_support for p in self.exec_module.platform_memories]) and general_template_data["sw_for_loops"][::-1][0][f'mem_{operand}']!=\
