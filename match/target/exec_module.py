@@ -47,6 +47,7 @@ class PlatformApis:
     """
     def __init__(self, pattern_name="conv2d"):
         self.init_platform="match_init_platform"
+        self.get_task_id="match_task_id"
 
 class SyncApis:
     """All the APIs for the synchronization that are used by templates of MATCH
@@ -56,6 +57,8 @@ class SyncApis:
         self.prev_computation="match_prev_computation"
         self.curr_computation="match_curr_computation"
         self.sync_multilevel_transfer="match_sync_multilevel_transfer"
+        self.wait_input_transfers="match_wait_input_transfers"
+        self.wait_ouput_transfers="match_wait_output_transfers"
 
 class MatchTypes:
     """MACROS and types that can be used by MATCH

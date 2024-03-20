@@ -121,7 +121,9 @@ def relay_gap9_conv2d(input_tensor: relay.Var, layer_name: str,
                            strides=strides,
                            padding=padding,
                            groups=groups,
+                           kernel_size=(3,3),
                            out_dtype='int32')
+    batchnorm=True
     if batchnorm:
         input_shape=simple_basic_type_checker(input_tensor,w_value.shape)
         #input_shape = [int(x) for x in input_tensor.type_annotation.shape]
@@ -356,8 +358,13 @@ def create_build_dir(build_path: str = "./build",
             print(f"Include directory doesn't exist for exec module {ex_mod.name} path {ex_mod.inc_path}!")
     match_target_params_template = Template(filename=f"{match_lib_path}/match_target_params_template.h")
     memory_names={ex_mod.name:ex_mod.get_all_memories_names() for ex_mod in target.exec_modules}
-    
-    temp_data={"exec_modules":target.exec_modules,"memory_names":memory_names}
+    patterns_set=set()
+    memories_set=set()
+    for exec_module in target.exec_modules:
+        memories_set.update(exec_module.get_all_memories_names())
+        patterns_set.update([pt.name for pt in exec_module.partitioning_patterns()])
+        patterns_set.update(exec_module.specific_patterns)
+    temp_data={"exec_modules":target.exec_modules,"memory_names":memory_names,"patterns_list":list(patterns_set),"memories_list":list(memories_set)}
     match_target_params=match_target_params_template.render(**temp_data)
     with open(f"{build_path}/include/match_target_params.h", "w") as fw:
         fw.write(match_target_params)

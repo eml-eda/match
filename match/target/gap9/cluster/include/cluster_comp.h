@@ -10,7 +10,7 @@ typedef struct cluster_kernel_t
     unsigned int pwtbuf_pt;
 }cluster_kernel;
 
-void cluster_init_other_kernel_params(cluster_kernel* kernel);
+void cluster_init_other_kernel_params(unsigned int task_id,cluster_kernel* kernel);
 
-void cluster_kernel_function_wrapper(cluster_kernel* kernel);
+void cluster_kernel_function_wrapper(unsigned int task_id,cluster_kernel* kernel);
 #endif

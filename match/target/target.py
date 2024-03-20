@@ -97,7 +97,7 @@ class MatchTarget(ABC):
                 return pt
         return None
 
-    def get_layer_from_module(self,mod:tvm.ir.IRModule,pattern_name:str="conv2d"):
+    def get_layer_from_module(self,mod:tvm.ir.IRModule,exec_module_name:str="",pattern_name:str="conv2d"):
         """Function to retrieve the temporal mapping with caching of a certain TVM module
 
         Args:
@@ -108,7 +108,7 @@ class MatchTarget(ABC):
             Temporal mapping as a list, the data of the fused layer and the module used to compile it
         """
         node=mod.body.op.body
-        match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{pattern_name}")
+        match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{exec_module_name}.{pattern_name}")
         tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=True,pattern_inst=match_pt)
         tmapgen.generate_workload()
         tmapgen.set_exec_module_for_layer()
@@ -231,7 +231,7 @@ class MatchTarget(ABC):
             exec_module (ExecModule): unit to add to the target
         """
         for module_pt in exec_module.partitioning_patterns():
-            match_pt=MatchTargetPattern(exec_module,module_pt,name=f"{self.name}.{module_pt.name}",original_name=module_pt.name)
+            match_pt=MatchTargetPattern(exec_module,module_pt,name=f"{self.name}.{exec_module.name}.{module_pt.name}",original_name=module_pt.name)
             match_additional_checks=partial(self.match_additional_checks_,match_pt=match_pt)
             match_pt.set_match_additional_checks(match_additional_checks)
             self.match_patterns.append(match_pt)

@@ -5,12 +5,12 @@ from match.driver.driver import driver
 import argparse
 from match.relay.get_relay import get_relay_from
 
-def match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, target=None, target_name=None):
+def match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, target=None, target_name=None,output_path="./match_output"):
     if relay_mod==None:    
         relay_mod,relay_params=get_relay_from(input_type,filename,params_filename)
     if target==None:
         target=get_target(target_name=target_name)
-    driver(relay_mod, relay_params, target=target)
+    driver(relay_mod, relay_params, target=target,output_path=output_path)
     return CompiledModule.result
 
 if __name__ == "__main__":
@@ -78,6 +78,14 @@ if __name__ == "__main__":
         + "with a final requantization step",
     )
 
+    parser.add_argument(
+        "-o",
+        "--output_path",
+        dest="output_path",
+        type=str,
+        help="Provide the output path"
+    )
+
     args = parser.parse_args()
     input_type=args.input_type
     target_name=args.target
@@ -86,6 +94,7 @@ if __name__ == "__main__":
     params=None
     filename=args.filename
     params_filename=args.params_filename
+    output_path=args.output_path
 
     if args.convexample:
         mod,params=create_model_conv_2d()
@@ -104,5 +113,6 @@ if __name__ == "__main__":
         filename=filename,
         params_filename=params_filename,
         target=target,
-        target_name=target_name
+        target_name=target_name,
+        output_path=output_path,
     )

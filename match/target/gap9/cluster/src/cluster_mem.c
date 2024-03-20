@@ -16,28 +16,28 @@ unsigned int l1_im2col_off=0x0;
 unsigned int l1_pwt_off=0x0;
 DmaTransfer transfer;
 
-unsigned int memalloc_O(){
+static unsigned int memalloc_O(){
     db_O++;
     return l1_memory+l1_O_off[db_O%2];
 }
-unsigned int memalloc_I(){
+static unsigned int memalloc_I(){
     db_I++;
     return l1_memory+l1_I_off[db_I%2];
 }
-unsigned int memalloc_X(){
+static unsigned int memalloc_X(){
     db_X++;
     return l1_memory+l1_X_off[db_X%2];
 }
-unsigned int memalloc_Y(){
+static unsigned int memalloc_Y(){
     db_Y++;
     return l1_memory+l1_Y_off[db_Y%2];
 }
-unsigned int memalloc_W(){
+static unsigned int memalloc_W(){
     db_W++;
     return l1_memory+l1_W_off[db_W%2];
 }
 
-void cluster_init_platform(void (inner_function)(unsigned int* args_inner_function),unsigned int* args){
+void cluster_init_platform(void (inner_function)(unsigned int* args_inner_function),unsigned int* args,common_kernel* common_kernel){
     //printf("Cluster init platform!\n");
     pi_cluster_task(&cluster_task,inner_function,args);
     pi_cluster_send_task_to_cl(&cluster_dev, &cluster_task);
@@ -45,7 +45,11 @@ void cluster_init_platform(void (inner_function)(unsigned int* args_inner_functi
     return;
 }
 
-void cluster_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsigned char first_op_db,dimension_I* dim_I,
+void cluster_init_l1_memory(){
+    l1_memory=pi_cl_l1_malloc(NULL, 12*1024*8);
+}
+
+void cluster_startup_memory(unsigned int task_id,common_kernel* common_kernel,int* first_op_sizes,unsigned char first_op_db,dimension_I* dim_I,
                                 int* second_op_sizes,unsigned char second_op_db,dimension_W* dim_W,
                                 int* third_op_sizes,unsigned char third_op_db,dimension_O* dim_O,
                                 int* paddings,int* strides){
@@ -60,7 +64,7 @@ void cluster_startup_memory(common_kernel* common_kernel,int* first_op_sizes,uns
         l1_bias_off=0x0;
     }
     l1_O_off[0]=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1];l1_O_off[1]=l1_O_off[0]+third_op_sizes[1]*third_op_db;
-    l1_memory=pi_cl_l1_malloc(NULL, 12*1024*8);
+    cluster_init_l1_memory();
     l1_im2col_off=l1_O_off[0]+third_op_sizes[1]*(third_op_db+1);
     if(common_kernel->specific_pattern!=elemwise_add)    l1_im2col_off+=dim_O->size_K[l2_mem]*4;
     if(common_kernel->pattern_name==dense_bnorm_requant || common_kernel->pattern_name==conv2d_bnorm_requant)   l1_im2col_off*=2;
@@ -72,12 +76,12 @@ void cluster_startup_memory(common_kernel* common_kernel,int* first_op_sizes,uns
     transfer = dma_transfer_create();
 }
 
-void cluster_shutdown_mem(common_kernel* common_kernel){
+void cluster_shutdown_mem(unsigned int task_id,common_kernel* common_kernel){
     pi_cl_l1_free(NULL, l1_memory, 12*1024*8);
 }
 
 
-unsigned int cluster_mem_transfer_O(common_kernel* common_kernel,dimension_O* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+unsigned int cluster_mem_transfer_O(unsigned int task_id,common_kernel* common_kernel,dimension_O* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     //printf("Mem transfer O: K %d OY %d OX %d from %d to %d int mem idx %d\n",dim->size_K[int_mem],dim->size_OY[int_mem],
     //dim->size_OX[int_mem],ext_pt,0,int_mem);
     return memalloc_O();
@@ -102,19 +106,19 @@ void copy_out_computation_(dimension_O* dim,unsigned int int_pt,unsigned int ext
     return;
 }
 
-void cluster_copy_out_curr_computation(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
+void cluster_copy_out_curr_computation(unsigned int task_id,common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
     if(common_kernel->specific_pattern==elemwise_add)    copy_out_computation_(dim,int_pt,ext_pt,int_mem,ext_mem);
     return;
 }
 
-void cluster_copy_out_prev_computation(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
+void cluster_copy_out_prev_computation(unsigned int task_id,common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
     if(common_kernel->specific_pattern!=elemwise_add)    copy_out_computation_(dim,int_pt,ext_pt,int_mem,ext_mem);
     return;
 }
 
-unsigned int cluster_mem_transfer_I(common_kernel* common_kernel,dimension_I* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+unsigned int cluster_mem_transfer_I(unsigned int task_id,common_kernel* common_kernel,dimension_I* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     unsigned int dst=memalloc_I();
     //printf("Mem transfer I: C %d IY %d IX %d from %d to %d int mem idx %d\n",dim->size_C[int_mem],dim->size_IY[int_mem],
     //dim->size_IX[int_mem],ext_pt,dst-l1_memory,int_mem);
@@ -133,7 +137,7 @@ unsigned int cluster_mem_transfer_I(common_kernel* common_kernel,dimension_I* di
     return dst;
 }
 
-unsigned int cluster_mem_transfer_X(common_kernel* common_kernel,dimension_X* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+unsigned int cluster_mem_transfer_X(unsigned int task_id,common_kernel* common_kernel,dimension_X* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     unsigned int dst=memalloc_X();
     unsigned int src=ext_pt;
     dma_transfer_async((DmaTransferConf) {
@@ -150,7 +154,7 @@ unsigned int cluster_mem_transfer_X(common_kernel* common_kernel,dimension_X* di
     return dst;
 }
 
-unsigned int cluster_mem_transfer_Y(common_kernel* common_kernel,dimension_Y* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+unsigned int cluster_mem_transfer_Y(unsigned int task_id,common_kernel* common_kernel,dimension_Y* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     unsigned int dst=memalloc_Y();
     unsigned int src=ext_pt;
     dma_transfer_async((DmaTransferConf) {
@@ -167,7 +171,7 @@ unsigned int cluster_mem_transfer_Y(common_kernel* common_kernel,dimension_Y* di
     return dst;
 }
 
-unsigned int cluster_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+unsigned int cluster_mem_transfer_W(unsigned int task_id,common_kernel* common_kernel,dimension_W* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     unsigned int dst=memalloc_W();
     //printf("Mem transfer W: K %d C %d FY %d FX %d from %d to %d int mem idx %d\n",dim->size_K[int_mem],dim->size_C[int_mem],
     //dim->size_FY[int_mem],dim->size_FX[int_mem],ext_pt,dst-l1_memory,int_mem);
@@ -198,7 +202,7 @@ unsigned int cluster_mem_transfer_W(common_kernel* common_kernel,dimension_W* di
     return dst;
 }
 
-void cluster_wait_any_transfer(common_kernel* common_kernel){
+void cluster_wait_any_transfer(unsigned int task_id,common_kernel* common_kernel){
     dma_transfer_wait(transfer);
 }
 
@@ -206,15 +210,15 @@ void wait_any_computation(){
     pi_team_offload_wait();
 }
 
-void cluster_wait_prev_computation(common_kernel* common_kernel){
+void cluster_wait_prev_computation(unsigned int task_id,common_kernel* common_kernel){
     if(common_kernel->specific_pattern!=elemwise_add) return wait_any_computation();
 }
 
-void cluster_wait_curr_computation(common_kernel* common_kernel){
+void cluster_wait_curr_computation(unsigned int task_id,common_kernel* common_kernel){
     if(common_kernel->specific_pattern==elemwise_add) return wait_any_computation();
 }
 
-void cluster_pattern_constant_loading(cluster_kernel* kernel,unsigned int iter,void* weights_and_constant_buf){
+void cluster_pattern_constant_loading(unsigned int task_id,cluster_kernel* kernel,unsigned int iter,void* weights_and_constant_buf){
     if(kernel->common_kernel->specific_pattern!=elemwise_add){
         int batchnorm_act=kernel->common_kernel->pattern_name==dense_bnorm_requant || kernel->common_kernel->pattern_name==conv2d_bnorm_requant;
         if(iter==0){
@@ -250,4 +254,8 @@ unsigned int get_im2col_pt(){
 
 unsigned int get_pwtbuf(){
     return l1_memory+l1_pwt_off;
+}
+
+unsigned int cluster_get_l1_memory_addr(){
+    return l1_memory;
 }

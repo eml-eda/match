@@ -16,9 +16,9 @@ from typing import Dict,List,Type
 from match.matchutils import mock_func
 from match.target import get_target
 
-def get_code(mod: tvm.ir.IRModule,pattern_name:str=""):
+def get_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:str=""):
     target=get_target.get_target()
-    temporal_mapping,layer_data,exec_module=target.get_layer_from_module(mod=mod,pattern_name=pattern_name)
+    temporal_mapping,layer_data,exec_module=target.get_layer_from_module(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
     tempgen = TemplateDataGenerator(mod,temporal_mapping=temporal_mapping,
                                     layer_data=layer_data,exec_module=exec_module,pattern_name=pattern_name)
     tempgen.generate_hw_dependent_template_data()
@@ -28,8 +28,8 @@ def get_code(mod: tvm.ir.IRModule,pattern_name:str=""):
     return tempengine.get_code()
 
 def codegen(mod: tvm.ir.IRModule):
-    _,pattern_name = mod.body.op.attrs["Composite"].split(".")[1:]
-    code, error_codegen = get_code(mod=mod,pattern_name=pattern_name)
+    _,exec_module_name,pattern_name = mod.body.op.attrs["Composite"].split(".")[1:]
+    code, error_codegen = get_code(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
     if error_codegen:
         raise Exception("Couldn't generate output")
     return code

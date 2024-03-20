@@ -21,7 +21,7 @@ def _requant_pattern(prev_op):
     return cast
 
 def conv2d_bnorm_requant_pattern():
-    conv2d = is_op("nn.conv2d")(
+    conv2d = is_op("nn.dense")(
             wildcard(), wildcard()
     )
     cast = is_op("cast")(conv2d)
@@ -45,7 +45,7 @@ def _biasadd_requant_pattern(linear_op):
 
 def conv2d_pattern():
     """Create pattern for conv2D with optional fused relu."""
-    conv2d = is_op("nn.conv2d")(
+    conv2d = is_op("nn.dense")(
             wildcard(), wildcard()
     )
     return _biasadd_requant_pattern(conv2d)

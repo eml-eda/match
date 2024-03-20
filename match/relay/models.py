@@ -8,8 +8,8 @@ from numpy import typing as npt
 
 def create_model_conv_2d(weight_bits: int = 8,
                  act: bool = True,
-                 input_shape: Tuple[int, ...] = (1, 32, 32, 32),
-                 weights_shape: Tuple[int, ...] = (32, 32, 3, 3),
+                 input_shape: Tuple[int, ...] = (1, 16, 16, 16),
+                 weights_shape: Tuple[int, ...] = (16, 16, 3, 3),
                  weights_values: Optional[tvm.nd.array] = None,
                  bias_values: Optional[tvm.nd.array] = None,
                  padding: Tuple[int, int] = (1, 1),

@@ -3,7 +3,7 @@ from tvm.driver.tvmc.model import TVMCModel
 import os
 from typing import Dict
 import tvm
-from match.relay.utils import utils
+from match.relay.utils.utils import tvmc_compile_and_unpack,create_build_dir
 import pathlib
 
 
@@ -11,7 +11,7 @@ class MatchDriver:
     def __init__(self,
                  mod: tvm.ir.IRModule,
                  params: Dict[str, tvm.nd.array],
-                 build_dir: pathlib.Path = "./output/last_build",
+                 build_dir: pathlib.Path = "./match_output",
                  no_of_inputs: int = 1,
                  target: MatchTarget=DefaultMatchTarget):
         self.model = TVMCModel(mod, params)
@@ -19,7 +19,7 @@ class MatchDriver:
         self.no_of_inputs = no_of_inputs
         self.target = target
         ## Placeholders in case profiling code is added
-        utils.create_build_dir(self.build_dir, os.path.dirname(__file__)+"/../codegen/template/lib",target=self.target)
+        create_build_dir(self.build_dir, os.path.dirname(__file__)+"/../codegen/template/lib",target=self.target)
         
     def tvm_compile(self, 
                     target_additional_options: Dict[str,str] = {"requant_transform":"0"},
@@ -43,7 +43,7 @@ class MatchDriver:
         target_options=""
         for key,val in target_additional_options.items():
             target_options+=f"-{key}={val} "
-        utils.tvmc_compile_and_unpack(self.model, 
+        tvmc_compile_and_unpack(self.model, 
                                       target=f'match {target_options} ,c',
                                       fuse_layers=fusion,
                                       build_path=self.build_dir)
@@ -51,7 +51,8 @@ class MatchDriver:
 
 def driver(mod: tvm.ir.IRModule, 
            params: Dict[str, tvm.nd.array],
-           target: MatchTarget=DefaultMatchTarget):
+           target: MatchTarget=DefaultMatchTarget,
+           output_path="./match_output"):
     """Compile a model for MATCH
 
     Args:
@@ -60,5 +61,6 @@ def driver(mod: tvm.ir.IRModule,
         target (MatchTarget, optional): target instance for the compilation. Defaults to DefaultMatchTarget.
     """
     match_driver = MatchDriver(mod, params,
-                          target=target)
+                          target=target,
+                          build_dir=output_path)
     match_driver.tvm_compile(fusion=True)

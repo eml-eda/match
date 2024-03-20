@@ -69,6 +69,7 @@ typedef struct match_kernel_t
   common_kernel* common_kernel;
 }match_kernel;
 
+void match_init_other_kernel_params(unsigned int task_id,match_kernel* kernel);
 
 void init_common_kernel_params(common_kernel* kernel,unsigned int pattern_name,unsigned int specific_pattern);
 
@@ -84,7 +85,7 @@ void init_kernel_dimension_params_X_Y_O(
     dimension_O* dim_O,unsigned int innermost_O_mem_level,unsigned int prec_O
 );
 
-void match_innermost_computation(match_kernel* kernel,unsigned int pattern_name);
+void match_innermost_computation(unsigned int task_id,match_kernel* kernel,unsigned int pattern_name);
 
 void kernel_set_padding(common_kernel* kernel,dimension_I* dim);
 

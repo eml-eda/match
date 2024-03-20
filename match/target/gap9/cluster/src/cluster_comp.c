@@ -1,7 +1,7 @@
 #include <cluster_comp.h>
 #include <cluster_mem.h>
 
-void cluster_init_other_kernel_params(cluster_kernel* kernel){
+void cluster_init_other_kernel_params(unsigned int task_id,cluster_kernel* kernel){
     kernel->im2col_pt=get_im2col_pt();
     kernel->pwtbuf_pt=get_pwtbuf();
 }
@@ -202,7 +202,7 @@ void dense_comp(void* args){
         act,batch_norm
     );
 }
-void cluster_kernel_function_wrapper(cluster_kernel* kernel){
+void cluster_kernel_function_wrapper(unsigned int task_id,cluster_kernel* kernel){
     if(kernel->common_kernel->specific_pattern==pointwise_conv2d)
         pi_team_offload_preset(pw_conv_2d_comp, kernel);
     else if(kernel->common_kernel->specific_pattern==depthwise_conv2d_less_4)

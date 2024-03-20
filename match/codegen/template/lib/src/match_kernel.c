@@ -1,5 +1,9 @@
 #include <match_kernel.h>
 
+void match_init_other_kernel_params(unsigned int task_id,match_kernel* kernel){
+    return;
+}
+
 void init_common_kernel_params(common_kernel* kernel,unsigned int pattern_name,unsigned int specific_pattern){
     kernel->pattern_name=pattern_name;
     kernel->specific_pattern=specific_pattern;
@@ -87,7 +91,7 @@ void init_kernel_dimension_params_X_Y_O(
     kernel->oy=dim_O->size_OY[innermost_O_mem_level];
 }
 
-void match_innermost_computation(match_kernel* kernel,unsigned int pattern_name){
+void match_innermost_computation(unsigned int task_id,match_kernel* kernel,unsigned int pattern_name){
     return;
 }
 

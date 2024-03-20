@@ -8,16 +8,16 @@
             "name": "MATCH",
             "type": "python",
             "request": "launch",
-            //"program": "${workspaceFolder}/match/run.py",
-            "program": "${workspaceFolder}/docker-gap/gap_run.py",
+            "program": "${workspaceFolder}/match/run.py",
             "args": [
-                //"-t","gap9",
-                "-i",
-                "onnx",
-                "-f","examples/temponet_ht 2.onnx"
+                "-t","gap9",
+                //"-i",
+                //"onnx",
+                //"-f","examples/temponet_ht 2.onnx"
                 //"relay",
                 //"-a",
-                //"-c"
+                "-c",
+                "-o","./output/last_build"
                 //"-f","examples/quant_conv.relay",
                 //"-p","examples/params_quant_conv.txt",
                 
