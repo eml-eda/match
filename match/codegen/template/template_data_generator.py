@@ -23,7 +23,7 @@ class TemplateDataGenerator:
             
     def generate_hw_dependent_template_data(self):
         hw_dependent_template_data = dict()
-        hw_dependent_template_data["weights_and_constants"] = self.exec_module.weights_and_constants(self.layer_data.layer_arguments)
+        hw_dependent_template_data["weights_and_constants"] = self.exec_module.weights_and_constants(self.pattern_name,self.layer_data,self.layer_data.layer_arguments)
         hw_dependent_template_data["mem_apis"] = self.exec_module.match_mem_apis(pattern_name=self.pattern_name)
         hw_dependent_template_data["comp_apis"] = self.exec_module.match_comp_apis(pattern_name=self.pattern_name)
         hw_dependent_template_data["platform_apis"] = self.exec_module.match_platform_apis(pattern_name=self.pattern_name)

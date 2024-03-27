@@ -47,7 +47,7 @@ class PlatformApis:
     """
     def __init__(self, pattern_name="conv2d"):
         self.init_platform="match_init_platform"
-        self.get_task_id="match_task_id"
+        self.set_task_id="match_task_id"
 
 class SyncApis:
     """All the APIs for the synchronization that are used by templates of MATCH
@@ -58,7 +58,7 @@ class SyncApis:
         self.curr_computation="match_curr_computation"
         self.sync_multilevel_transfer="match_sync_multilevel_transfer"
         self.wait_input_transfers="match_wait_input_transfers"
-        self.wait_ouput_transfers="match_wait_output_transfers"
+        self.wait_output_transfers="match_wait_output_transfers"
 
 class MatchTypes:
     """MACROS and types that can be used by MATCH
@@ -222,11 +222,11 @@ class ExecModule(ABC):
     def template_data(self):
         return {}
     
-    def weights_and_constants(self,layer_arguments:Dict={}):
+    def weights_and_constants(self,pattern_name,layer_data,layer_arguments:List=[]):
         """define how the weights and constants of a layer must be saved in C on the generated code
 
         Args:
-            layer_arguments (Dict, optional): Dict of the arguments(parameters) for the node. Defaults to {}.
+            layer_arguments (List, optional): Dict of the arguments(parameters) for the node. Defaults to [].
         """
         def c_friendly_npvalue(arr):
             # params: arr is expected to be a numpy version of the value, it should be an array but it may be also just a single value
@@ -240,7 +240,7 @@ class ExecModule(ABC):
             return np.frombuffer(value.tobytes(),dtype='uint8')
         arguments=np.array([],dtype=np.uint8)
         single_constants=dict()
-        for layer_arg_name,layer_arg_val in layer_arguments.items():
+        for (layer_arg_name,layer_arg_val) in layer_arguments:
             if isinstance(layer_arg_val, tvm.relay.Constant):
                 if len(layer_arg_val.data.shape)==0:
                     single_constants[layer_arg_name]=str(layer_arg_val.data)

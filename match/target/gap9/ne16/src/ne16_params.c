@@ -25,15 +25,15 @@ unsigned int get_nnx_db_W(int n){
 }
 
 void inc_nnx_db_O(int n){
-    nnx_db_O[n]++;
+    nnx_db_O[n]=(nnx_db_O[n]+1)%DB_BUFFER_SIZE;
 }
 
 void inc_nnx_db_I(int n){
-    nnx_db_I[n]++;
+    nnx_db_I[n]=(nnx_db_I[n]+1)%DB_BUFFER_SIZE;
 }
 
 void inc_nnx_db_W(int n){
-    nnx_db_W[n]++;
+    nnx_db_W[n]=(nnx_db_W[n]+1)%DB_BUFFER_SIZE;
 }
 
 nnx_monitor_t* get_nnx_monitor(){

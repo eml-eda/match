@@ -377,25 +377,26 @@ class WorkloadParser:
                             var_and_consts_not_unrolled[a.name_hint] = self.args_list[
                                 len(var_and_consts_not_unrolled)
                             ]
+                            self.layer_data.layer_arguments.append((a.name_hint,self.args_list[
+                                len(var_and_consts_not_unrolled)-1
+                            ]))
                         else:
-                            var_and_consts_not_unrolled[
-                            c.op.name
-                            + f".param.{sum([c.op.name in k for k in var_and_consts_not_unrolled.keys()])}"
-                            ] = self.args_list[len(var_and_consts_not_unrolled)]
+                            v_name=c.op.name+ f".param.{sum([c.op.name in k for k in var_and_consts_not_unrolled.keys()])}"
+                            var_and_consts_not_unrolled[v_name] = self.args_list[len(var_and_consts_not_unrolled)]
+                            self.layer_data.layer_arguments.append((v_name,self.args_list[len(var_and_consts_not_unrolled)-1]))
                     else:
                         var_and_consts_not_unrolled[
                             a.name_hint
                         ] = a
+                        self.layer_data.layer_arguments.append((a.name_hint,a))
                 elif isinstance(a, tvm.relay.Constant):
-                    var_and_consts_unrolled[
-                        c.op.name
-                        + f".param.{sum([c.op.name in k for k in var_and_consts_not_unrolled.keys()])}"
-                    ] = a
+                    v_name=c.op.name+ f".param.{sum([c.op.name in k for k in var_and_consts_not_unrolled.keys()])}"
+                    var_and_consts_unrolled[v_name] = a
+                    self.layer_data.layer_arguments.append((v_name,a))
             self.index += 1
             self.layer_data.pattern_operations.append(c.op.name)
             self.visit_call(c)
             self.callsindexes[c] = self.index
-        self.layer_data.layer_arguments = {**var_and_consts_not_unrolled, **var_and_consts_unrolled}
 
     def visit_call(self, call):
         if call.op.name not in self.supported_operators:

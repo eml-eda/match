@@ -13,6 +13,7 @@ class TemplateEngine:
         self.pattern_name=pattern_name
         self.template_data=template_data
         self.template_engine=template_engine
+        self.debug_template=False
     
     def get_code(self) -> str:
         # layer file
@@ -24,7 +25,8 @@ class TemplateEngine:
         except:
             code=exceptions.html_error_template().render()
             error_codegen=True
-        with open(f"./output/last_out.{'html' if error_codegen else 'c'}",
-            "wb" if error_codegen else "w") as fw:
-            fw.write(code)
+        if self.debug_template:
+            with open(f"./output/last_out.{'html' if error_codegen else 'c'}",
+                "wb" if error_codegen else "w") as fw:
+                fw.write(code)
         return code,error_codegen

@@ -129,10 +129,10 @@ def relay_gap9_conv2d(input_tensor: relay.Var, layer_name: str,
         #input_shape = [int(x) for x in input_tensor.type_annotation.shape]
         lambda_name = layer_name + '_lambda'
         k_name = layer_name + '_k' 
-        lambda_var=relay.var(lambda_name, relay.TensorType(input_shape, 'int32'))
-        k_var=relay.var(k_name,  relay.TensorType(input_shape, 'int32'))
-        params[lambda_name]=numpy_to_array(np.zeros(input_shape, dtype = np.int32), 'int32')
-        params[k_name]=numpy_to_array(np.ones(input_shape, dtype=  np.int32), 'int32')
+        lambda_var=relay.var(lambda_name, relay.TensorType((w_value.shape[0],1,1,1), 'int32'))
+        k_var=relay.var(k_name,  relay.TensorType((w_value.shape[0],1,1,1), 'int32'))
+        params[lambda_name]=numpy_to_array(np.ones((w_value.shape[0],1,1,1), dtype = np.int32), 'int32')
+        params[k_name]=numpy_to_array(np.ones((w_value.shape[0],1,1,1), dtype=  np.int32), 'int32')
         #x = relay.op.nn.batch_norm()
         x = relay.op.multiply(x, k_var)
         x = relay.op.add(x, lambda_var)

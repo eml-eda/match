@@ -150,25 +150,45 @@ static void init_common_kernel_static_params(
 }
 
 
-## setup static kernel params
-${types.kernel_struct} kernel;
-common_kernel comm_kernel;
-## define dimension structures
-% for i_operand in input_operands:
-static dimension_${i_operand}_${func_number} dim_${i_operand}; static tile_indexes_${i_operand} abs_tile_idxs_${i_operand};
-% endfor
-% if layer_has_weights:
-static dimension_W_${func_number} dim_W; static tile_indexes_W abs_tile_idxs_W;
-% endif
-static dimension_O_${func_number} dim_O; static tile_indexes_O abs_tile_idxs_O;
-static layer_loops_indexes layer_loops_idxs;
-
 void __attribute__ ((noinline)) ${func_name}_inner(void* args)
 {
     % if "start_codegen" in debug_level:
     printf("Start of ${func_name} codegen function!\n");
     % endif
-    unsigned int task_id=${platform_apis.get_task_id}();
+    ## setup static kernel params
+    ${types.kernel_struct} kernel;
+    common_kernel comm_kernel;
+    ## define dimension structures
+    % for i_operand in input_operands:
+    dimension_${i_operand}_${func_number} dim_${i_operand}; tile_indexes_${i_operand} abs_tile_idxs_${i_operand};
+    % endfor
+    % if layer_has_weights:
+    dimension_W_${func_number} dim_W; tile_indexes_W abs_tile_idxs_W;
+    % endif
+    dimension_O_${func_number} dim_O; tile_indexes_O abs_tile_idxs_O;
+    layer_loops_indexes layer_loops_idxs;
+    // setup(init) dimensions
+    match_initial_setup(
+        % for i_operand in input_operands:
+        &dim_${i_operand}, &abs_tile_idxs_${i_operand},
+        % endfor
+        % if layer_has_weights:
+        &dim_W, &abs_tile_idxs_W,
+        % endif
+        &dim_O, &abs_tile_idxs_O, &layer_loops_idxs
+    );
+    kernel.common_kernel=&comm_kernel;
+    init_common_kernel_static_params(
+        &comm_kernel,
+        % for i_operand in input_operands:
+        &dim_${i_operand}, 
+        % endfor
+        % if layer_has_weights:
+        &dim_W,
+        % endif
+        &dim_O
+    );
+    ${platform_apis.set_task_id}(&comm_kernel);
     // recover args of function
     unsigned int *real_args = (unsigned int *) args;
     % for i_index,i_operand in enumerate(input_operands):
@@ -190,7 +210,6 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     ## to replace with a function tho
     // init memory api call --> malloc L1 memory and other params
     ${mem_apis.startup_memory}(
-        task_id,
         &comm_kernel,
         % for init_mem_op in input_operands+[op for op in operands if op not in input_operands and op!='O']+['O']:
         mem_level_${init_mem_op}_sizes,${int(db_opportunities[init_mem_op])},&(dim_${init_mem_op}.common_dim),
@@ -198,7 +217,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         padding_array,strides_array
     );
     
-    ${comp_apis.init_other_kernel_params}( task_id, &kernel );
+    ${comp_apis.init_other_kernel_params}( &kernel );
     ## TODO: MANAGE LOOPS
     
     ## FOR LOOPS
@@ -219,19 +238,16 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     // sync prev transfer in a multi memory system with data dependency
     if(layer_loops_idxs.${for_loop["fullname"]}==0)
         ${sync_apis.sync_multilevel_transfer}(
-            task_id,
             &comm_kernel,
             ${default_mem[mem_transfer_operand] if idx==0 else sw_for_loops[idx-1][f'mem_{mem_transfer_operand}']},
             ${for_loop[f'mem_{mem_transfer_operand}']});
     % endif
     unsigned int loop_${mem_transfer_operand}_${idx}_ext_pt = ${mem_apis.pointer_offset[mem_transfer_operand]}(
-        task_id,
         &comm_kernel,
         &tile_idxs_${mem_transfer_operand}_${idx}_relative,
         ${default_mem[mem_transfer_operand] if idx==0 else sw_for_loops[idx-1][f"mem_{mem_transfer_operand}"]}
     ) + ${f"base_{mem_transfer_operand}_pt" if last_movements[mem_transfer_operand]==-1 else f"loop_{mem_transfer_operand}_{last_movements[mem_transfer_operand]}_int_pt"};
     unsigned int loop_${mem_transfer_operand}_${idx}_int_pt = ${mem_apis.mem_transfer[mem_transfer_operand]}(
-        task_id,
         &comm_kernel,
         &(dim_${mem_transfer_operand}.common_dim),
         loop_${mem_transfer_operand}_${idx}_ext_pt,
@@ -259,7 +275,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         &layer_loops_idxs
     );
     add_relative_idxs_${mem_transfer_operand}(&tile_idxs_${mem_transfer_operand}_${idx}_relative,&abs_tile_idxs_${mem_transfer_operand});
-    unsigned int kernel_${operand}_pt = loop_${operand}_${last_movements[operand]}_int_pt+${mem_apis.pointer_offset[operand]}(task_id,&comm_kernel,&tile_idxs_${operand}_kernel_relative,${for_loop[f"mem_{operand}"]});
+    unsigned int kernel_${operand}_pt = loop_${operand}_${last_movements[operand]}_int_pt+${mem_apis.pointer_offset[operand]}(&comm_kernel,&tile_idxs_${operand}_kernel_relative,${for_loop[f"mem_{operand}"]});
     % if operand in input_operands and layer_has_padding:
     calc_padding_${operand}_${for_loop[f"mem_{operand}"]}(&dim_${operand},&tile_idxs_${operand}_kernel_relative);
     kernel_set_padding(kernel.common_kernel,&(dim_${operand}.common_dim));
@@ -273,14 +289,13 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     % endif
     kernel.common_kernel->${operand}_pt = kernel_${operand}_pt;
     % endfor
-    ${mem_apis.pattern_constants_loading}(task_id,&kernel,iter,weights_and_constants);
-    ${sync_apis.async_transfers}(task_id,&comm_kernel);
-    if(iter>0)  ${sync_apis.prev_computation}(task_id,&comm_kernel);
-    ${comp_apis.innermost_computation}(task_id,&kernel);
-    ${sync_apis.curr_computation}(task_id,&comm_kernel);
+    ${mem_apis.pattern_constants_loading}(&kernel,iter,weights_and_constants);
+    ${sync_apis.async_transfers}(&comm_kernel);
+    if(iter>0)  ${sync_apis.prev_computation}(&comm_kernel);
+    ${comp_apis.innermost_computation}(&kernel);
+    ${sync_apis.curr_computation}(&comm_kernel);
     % if last_movements["O"]!=idx:
     kernel_offset_ext_O=${mem_apis.pointer_offset["O"]}(
-        task_id,
         &comm_kernel,
         &tile_idxs_O_kernel_relative,
         ${sw_for_loops[last_movements["O"]-1]["mem_O"]}
@@ -290,13 +305,12 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     kernel_O_curr_int=kernel_O_pt;
     ## ITER CAN BE USED TO HAVE DOUBLE BUFFERING
     ${mem_apis.copy_out_curr_computation}(
-        task_id,
         &comm_kernel,
         &dim_O,kernel_O_curr_int,kernel_O_curr_ext,
         ${for_loop["mem_O"]},${sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
+    ${sync_apis.wait_output_transfers}(&comm_kernel);
     if(iter>0)  ${mem_apis.copy_out_prev_computation}(
-        task_id,
         &comm_kernel,
         &dim_O,kernel_O_prev_int,kernel_O_prev_ext,
         ${for_loop["mem_O"]},${sw_for_loops[last_movements["O"]-1]["mem_O"]}
@@ -323,13 +337,13 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     substract_relative_idxs_${mem_transfer_operand}(&tile_idxs_${mem_transfer_operand}_${idx}_relative,&abs_tile_idxs_${mem_transfer_operand});
     % endfor
     % endfor
-    ${sync_apis.prev_computation}(task_id,&comm_kernel);
+    ${sync_apis.prev_computation}(&comm_kernel);
     ${mem_apis.copy_out_prev_computation}(
-        task_id,&comm_kernel,&dim_O,kernel_O_prev_int,kernel_O_prev_ext,
+        &comm_kernel,&dim_O,kernel_O_prev_int,kernel_O_prev_ext,
         ${for_loop["mem_O"]},${sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
-    ${sync_apis.async_transfers}(task_id,&comm_kernel);
-    ${mem_apis.shutdown_mem}(task_id,&comm_kernel);
+    ${sync_apis.async_transfers}(&comm_kernel);
+    ${mem_apis.shutdown_mem}(&comm_kernel);
     % if "end_codegen" in debug_level:
     printf("End of ${func_name} codegen function!\n");
     % endif
@@ -341,6 +355,18 @@ void __attribute__ ((noinline)) ${func_name}(
     % endfor
     void* output_pt)
 {
+    ## setup static kernel params
+    ${types.kernel_struct} kernel;
+    common_kernel comm_kernel;
+    ## define dimension structures
+    % for i_operand in input_operands:
+    dimension_${i_operand}_${func_number} dim_${i_operand}; tile_indexes_${i_operand} abs_tile_idxs_${i_operand};
+    % endfor
+    % if layer_has_weights:
+    dimension_W_${func_number} dim_W; tile_indexes_W abs_tile_idxs_W;
+    % endif
+    dimension_O_${func_number} dim_O; tile_indexes_O abs_tile_idxs_O;
+    layer_loops_indexes layer_loops_idxs;
     // setup(init) dimensions
     match_initial_setup(
         % for i_operand in input_operands:

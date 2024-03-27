@@ -1,0 +1,6 @@
+{
+    "files.associations": {
+        "ne16_params.h": "c",
+        "ne16_monitor.h": "c"
+    }
+}

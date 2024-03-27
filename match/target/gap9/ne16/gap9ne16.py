@@ -1,9 +1,14 @@
-from typing import Dict
+from math import ceil
+from typing import Dict, List
 from match.target.gap9.ne16.cost_model import Gap9NE16CostModel
 from match.target.gap9.ne16.network_transformations import network_transformations as gap9network_transformations
 from match.target.gap9.ne16.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
 from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
 import os
+import numpy as np
+import numpy.typing as npt
+
+import tvm
 
 class Gap9NE16(ExecModule):
     def __init__(self):
@@ -93,13 +98,13 @@ class Gap9NE16(ExecModule):
     
     def platform_apis_def(self,platform_apis: PlatformApis=PlatformApis()):
         platform_apis.init_platform="ne16_init_platform"
-        platform_apis.get_task_id="ne16_get_task_id"
+        platform_apis.set_task_id="ne16_set_task_id"
         return platform_apis
     
     def sync_apis_def(self,sync_apis: SyncApis=SyncApis()):
         sync_apis.curr_computation="ne16_wait_curr_computation"
         sync_apis.wait_input_transfers="ne16_wait_input_transfers"
-        sync_apis.wait_ouput_transfers="ne16_wait_output_transfers"
+        sync_apis.wait_output_transfers="ne16_wait_output_transfers"
         return sync_apis
 
     def types_def(self,types: MatchTypes=MatchTypes()):
@@ -112,3 +117,84 @@ class Gap9NE16(ExecModule):
     
     def layout_per_operand_def(self, pattern_name, specific_pattern, operands):
         return {operand:"NHWC" for operand in operands}
+    
+    @staticmethod
+    def weightEncode(
+        weight: npt.NDArray[np.uint8], bits: int, depthwise: bool = False
+    ) -> npt.NDArray[np.uint8]:
+        """Unroll weight into expected memory format
+
+        Expected weight shape is (cout, cin, height, width).
+        The output shape is: (cout, cinMajor, Bits, height x width, cinMinorBytes),
+        where cinMajor is the ceil(cin / CIN_SUBTILE) and cinMinor has to be padded with 0 to CIN_SUBTILE.
+        """
+        if depthwise:
+            weight = weight.transpose(1, 0, 2, 3)  # Swap cout and cin
+
+        cout, cin, height, width = weight.shape
+
+        # Pad cin to be divisible with CIN_SUBTILE
+        if cin % 16 != 0:
+            cinPad = 16 - cin % 16
+            weight = np.pad(
+                weight,
+                ((0, 0), (0, cinPad), (0, 0), (0, 0)),
+                "constant",
+                constant_values=0,
+            )
+            cin = cin + cinPad
+
+        # Reshape into (cout, cinMajor, cinMinor, flattened spatial, 1)
+        # The 1 at the end is required by the unpacking
+        cinMajor = cin // 16
+        cinMinor = 16
+        weight = weight.reshape(cout, cinMajor, cinMinor, height * width, 1)
+
+        # Unpack 'bits' bits in little order, e.g. bits=4: 3 => [1, 1, 0, 0]
+        # (cout, cinMajor, cinMinor, flattened spatial, Bits)
+        weight = np.unpackbits(weight, axis=-1, count=bits, bitorder="little")
+
+        # Shuffle bits so that the final shape is:
+        # (cout, cinMajor, Bits, flattened spatial, cinMinor)
+        weight = weight.transpose(0, 1, 4, 3, 2)
+
+        # Prepare for packing
+        # (cout, cinMajor, Bits, flattened spatial, cinMinorBytes, 8)
+        cinMinorBytes = int(np.ceil(cinMinor / 8))
+        weight = np.stack(np.split(weight, cinMinorBytes, axis=-1), axis=-2)
+
+        # Pack
+        # (cout, cinMajor, Bits, flattened spatial, cinMinorBytes)
+        weight = np.packbits(weight, axis=-1, bitorder="little")
+
+        return weight.flatten()
+
+    def weights_and_constants(self,pattern_name,layer_data,layer_arguments:List=[]):
+        def c_friendly_npvalue(arr):
+            # params: arr is expected to be a numpy version of the value, it should be an array but it may be also just a single value
+            if len(arr.shape)>0:
+                # this is actually an array and not a single value
+                arr=arr.reshape([arr.shape[0]]).astype(np.uint8)
+                return f'{{{str(list(arr))[1:len(str(list(arr)))-1]}}}'
+            else:
+                return str(arr)
+        def bytaze(value):
+            return np.frombuffer(value.tobytes(),dtype='uint8')
+        arguments=np.array([],dtype=np.uint8)
+        single_constants=dict()
+        for idx,(layer_arg_name,layer_arg_val) in enumerate(layer_arguments):
+            if isinstance(layer_arg_val, tvm.relay.Constant):
+                if len(layer_arg_val.data.shape)==0:
+                    single_constants[layer_arg_name]=str(layer_arg_val.data)
+                else:
+                    if idx==0:
+                        constbytes=self.weightEncode(layer_arg_val.data.numpy(),1,"nn.conv2d_depthwise" in layer_data.layer_attrs and layer_data.layer_attrs["nn.conv2d_depthwise"])
+                    else:
+                        constbytes=bytaze(layer_arg_val.data.numpy())
+                    arguments=np.concatenate((arguments,constbytes))
+        return {
+            "value":c_friendly_npvalue(arguments),
+            "len":arguments.shape[0],
+            "shape":f"[{ceil(arguments.shape[0])}]",
+            "single_costants":single_constants,
+        }

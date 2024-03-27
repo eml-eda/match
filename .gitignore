@@ -9,3 +9,4 @@ results
 output
 match.egg-info
 dist
+.eggs
