@@ -13,7 +13,7 @@ import operator
 from collections import OrderedDict
 import copy
 from typing import Dict,List,Type
-from match.matchutils import mock_func
+from match.utils import mock_func
 from match.target import get_target
 
 def get_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:str=""):

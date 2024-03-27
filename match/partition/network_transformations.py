@@ -104,8 +104,8 @@ class MatchSaveModule:
         global_var=mod.get_global_var("main")
         func=mod.functions[global_var]
         relay_inputs=func.params
-        match_inputs=[{"name":inp_.name_hint,"size":prod(inp_.type_annotation.shape),"type":inp_.type_annotation.dtype} for inp_ in relay_inputs]
-        match_output={"size":prod(func.ret_type.shape),"type":func.ret_type.dtype}
+        match_inputs=[{"name":inp_.name_hint,"size":prod(inp_.type_annotation.shape[1:]),"type":inp_.type_annotation.dtype} for inp_ in relay_inputs]
+        match_output={"size":prod(func.ret_type.shape[1:]),"type":func.ret_type.dtype}
         CompiledModule.define_compiled_module(mod=mod,match_inputs=match_inputs,match_output=match_output)
         return mod
 
