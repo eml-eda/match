@@ -1,6 +1,5 @@
 import os
 import pathlib
-from subprocess import Popen,PIPE
 import json
 import subprocess
 from mako.template import Template
@@ -13,12 +12,15 @@ def mock_func(*args):
 def get_x86_result(output_path: str, verbose: bool = False):
     output={"output":[-1,-1,-1,-1]}
     print("Building ...")
-    subprocess.run(["./run_x86_match.sh",output_path],cwd=os.path.dirname(__file__)+"/x86_lib")
-
+    
+    with open(output_path/"x86_output.json","wb") as logfile:
+        output1 = subprocess.Popen([pathlib.Path(os.path.dirname(__file__)+"/x86_lib/run_x86_match.sh"),output_path,pathlib.Path(os.path.dirname(__file__)+"/x86_lib")],stdout=subprocess.PIPE)
+        output2 = subprocess.Popen(["grep","]}"],stdin=output1.stdout,stdout=logfile)
+        output2.wait()
     with open(output_path/"x86_output.json") as logfile:
         output=json.load(logfile)
 
-    Popen(["rm",output_path/"x86_output.json"])
+    subprocess.run(["rm",output_path/"x86_output.json"])
     return output
 
 def x86_run_match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, output_path="./tmp/x86_test"):
