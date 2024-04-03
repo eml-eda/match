@@ -13,7 +13,7 @@ class MatchDriver:
                  params: Dict[str, tvm.nd.array],
                  build_dir: pathlib.Path = "./match_output",
                  no_of_inputs: int = 1,
-                 target: MatchTarget=DefaultMatchTarget):
+                 target: MatchTarget=DefaultMatchTarget()):
         self.model = TVMCModel(mod, params)
         self.build_dir = build_dir
         self.no_of_inputs = no_of_inputs
@@ -51,7 +51,7 @@ class MatchDriver:
 
 def driver(mod: tvm.ir.IRModule, 
            params: Dict[str, tvm.nd.array],
-           target: MatchTarget=DefaultMatchTarget,
+           target: MatchTarget=DefaultMatchTarget(),
            output_path="./match_output"):
     """Compile a model for MATCH
 

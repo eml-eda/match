@@ -72,11 +72,11 @@ void ne16_init_platform_(
                     .function = quantFunctionIdentity,
                     .flag_rounding = ne16TaskFlagFalse
                 }, (ne16_norm_t) {
-                    .mode  = normMode8Bit,
+                    .mode  = normMode32Bit,
                     .flag_bias  = ne16TaskFlagTrue,
                     .flag_shift = ne16TaskFlagFalse
                 });
-        ne16_task_set_weight_offset(match_ne16_get_nnx_task(i), weightOffsetModeLayerWise, -128);
+        ne16_task_set_weight_offset(match_ne16_get_nnx_task(i), weightOffsetModeLayerWise, 0);
     }
 
     // Fork
@@ -104,7 +104,7 @@ void __attribute__ ((noinline)) ne16_init_platform(void (inner_function)(unsigne
     //void* cl_ne16_args[4];
     //cl_ne16_args[0]=args[0];cl_ne16_args[1]=args[1];cl_ne16_args[2]=inner_function;cl_ne16_args[3]=common_kernel;
     pi_cluster_send_task_to_cl(&cluster_dev, pi_cluster_task(&cluster_task,ne16_init_platform_,args));
-    printf("finihed\n");
+    printf("finished cluster\n");
 }
 void ne16_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsigned char first_op_db,dimension_I* dim_I,
                                 int* second_op_sizes,unsigned char second_op_db,dimension_W* dim_W,
@@ -117,6 +117,7 @@ void ne16_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsign
     l1_O_off[0]=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1];l1_O_off[1]=l1_O_off[0]+third_op_sizes[1]*third_op_db;
     //input_transfers = dma_transfer_create();
     //output_transfers = dma_transfer_create();
+    printf("L1 off I [ %d %d ] W [ %d %d ] O [ %d %d ] Bias %d\n",l1_I_off[0],l1_I_off[1],l1_W_off[0],l1_W_off[1],l1_O_off[0],l1_O_off[1],l1_bias_off);
 }
 
 void ne16_shutdown_mem(common_kernel* common_kernel){
@@ -128,9 +129,8 @@ void ne16_shutdown_mem(common_kernel* common_kernel){
 unsigned int ne16_mem_transfer_O(common_kernel* common_kernel,dimension_O* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     //printf("Mem transfer O: K %d OY %d OX %d from %d to %d int mem idx %d\n",dim->size_K[int_mem],dim->size_OY[int_mem],
     //dim->size_OX[int_mem],ext_pt,0,int_mem);
-    unsigned int dst = memalloc_O(common_kernel->task_id);
     inc_nnx_db_O(common_kernel->task_id);
-    return dst;
+    return memalloc_O(common_kernel->task_id);
 }
 
 void ne16_copy_out_curr_computation(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
@@ -155,8 +155,8 @@ void ne16_copy_out_curr_computation(common_kernel* common_kernel,dimension_O* di
 }
 
 unsigned int ne16_mem_transfer_I(common_kernel* common_kernel,dimension_I* dim,unsigned int ext_pt,int ext_mem,int int_mem){
-    unsigned int dst=memalloc_I(common_kernel->task_id);
     inc_nnx_db_I(common_kernel->task_id);
+    unsigned int dst=memalloc_I(common_kernel->task_id);
     if(common_kernel->task_id==LOADER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
         printf("Dst I %d src %d task id %d\n",dst,ext_pt,common_kernel->task_id);
         if(!input_dma_active){
@@ -181,8 +181,8 @@ unsigned int ne16_mem_transfer_I(common_kernel* common_kernel,dimension_I* dim,u
 }
 
 unsigned int ne16_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,unsigned int ext_pt,int ext_mem,int int_mem){
-    unsigned int dst=memalloc_W(common_kernel->task_id);
     inc_nnx_db_W(common_kernel->task_id);
+    unsigned int dst=memalloc_W(common_kernel->task_id);
     if(common_kernel->task_id==LOADER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
         printf("Dst W %d src %d task id %d\n",dst,ext_pt,common_kernel->task_id);
         if(!input_dma_active){

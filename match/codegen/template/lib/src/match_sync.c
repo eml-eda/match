@@ -15,3 +15,11 @@ void match_async_transfers(common_kernel* common_kernel){
 void match_sync_multilevel_transfer(common_kernel* common_kernel){
     return;
 }
+
+void match_wait_input_transfers(common_kernel* common_kernel){
+    return;
+}
+
+void match_wait_output_transfers(common_kernel* common_kernel){
+    return;
+}

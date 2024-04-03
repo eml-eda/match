@@ -77,6 +77,7 @@ class MatchTarget(ABC):
         self.name=name
         self.match_patterns=[]
         self.exec_modules=[]
+        self.disabled_exec_modules=[]
         self.optimize_param="energy" if optimize_param=="energy" else "latency"
         self.__cached_pattern_results__=[]
         for exec_module in exec_modules:
@@ -249,16 +250,20 @@ class MatchTarget(ABC):
             PartitioningPattern(name=m_pt.name,pattern=m_pt.pattern,
                                 ordered_operation=m_pt.ordered_operation,additional_checks=m_pt.match_additional_checks)
             for m_pt in self.match_patterns
+            if m_pt.exec_module.name not in self.disabled_exec_modules
         ]
 
     def adjust_network(self,opts):
         pipeline=[]
-        for exec_module in self.exec_modules:
+        for exec_module in [ex_mod for ex_mod in self.exec_modules if ex_mod.name not in self.disabled_exec_modules]:
             pipeline+=exec_module.network_transformations(opts=opts)
         return pipeline
     
     def network_transformations(self,opts):
         return []
+    
+    def disable_exec_module(self,exec_module_name:str=""):
+        self.disabled_exec_modules.append(exec_module_name)
     
 class DefaultMatchTarget(MatchTarget):
     def __init__(self):

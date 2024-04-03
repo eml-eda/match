@@ -152,7 +152,7 @@ class Gap9NE16(ExecModule):
 
         # Unpack 'bits' bits in little order, e.g. bits=4: 3 => [1, 1, 0, 0]
         # (cout, cinMajor, cinMinor, flattened spatial, Bits)
-        weight = np.unpackbits(weight, axis=-1, count=bits, bitorder="little")
+        weight = np.unpackbits(weight.astype(np.uint8), axis=-1, count=bits, bitorder="little")
 
         # Shuffle bits so that the final shape is:
         # (cout, cinMajor, Bits, flattened spatial, cinMinor)
@@ -187,8 +187,8 @@ class Gap9NE16(ExecModule):
                 if len(layer_arg_val.data.shape)==0:
                     single_constants[layer_arg_name]=str(layer_arg_val.data)
                 else:
-                    if idx==0:
-                        constbytes=self.weightEncode(layer_arg_val.data.numpy(),1,"nn.conv2d_depthwise" in layer_data.layer_attrs and layer_data.layer_attrs["nn.conv2d_depthwise"])
+                    if "nn.conv2d" in layer_arg_name:
+                        constbytes=self.weightEncode(layer_arg_val.data.numpy(),8,"nn.conv2d_depthwise" in layer_data.layer_attrs and layer_data.layer_attrs["nn.conv2d_depthwise"])
                     else:
                         constbytes=bytaze(layer_arg_val.data.numpy())
                     arguments=np.concatenate((arguments,constbytes))

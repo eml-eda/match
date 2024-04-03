@@ -21,11 +21,11 @@ def _requant_pattern(prev_op):
     return cast
 
 def conv2d_bnorm_requant_pattern():
-    conv2d = is_op("nn.dense")(
+    conv2d = is_op("nn.conv2d")(
             wildcard(), wildcard()
     )
-    cast = is_op("cast")(conv2d)
-    bnorm = batchnorm_pattern(cast)
+    cast_optional = conv2d.optional(is_op("cast")(conv2d))
+    bnorm = batchnorm_pattern(cast_optional)
     return _requant_pattern(bnorm)
 
 def dense_bnorm_requant_pattern():

@@ -1,3 +1,4 @@
+import ctypes
 import match.relay.utils.utils as utils
 import tvm
 import tvm.relay as relay
@@ -6,12 +7,29 @@ import numpy as np
 from typing import Tuple, Optional
 from numpy import typing as npt
 
+def numpy_to_array_models(np_arr: npt.NDArray, dtype: str):
+    """ Convert a numpy array to a TVM array with datatype `dtype`.
+    Although such a function exists in TVM, it does not support creating TVM arrays with dtypes
+    that are not supported in numpy, like 'int4' or 'int2'.
+    :param np_arr: the given numpy array
+    :param dtype:  the resulting data type of the TVM array
+    :return: the TVM array
+    """
+    assert np_arr.flags["C_CONTIGUOUS"]
+
+    arr = tvm.nd.empty(np_arr.shape, dtype)
+    data = np_arr.ctypes.data_as(ctypes.c_void_p)
+    nbytes = ctypes.c_size_t(np_arr.size * np_arr.dtype.itemsize)
+    tvm.nd.check_call(tvm.nd._LIB.TVMArrayCopyFromBytes(arr.handle, data, nbytes))
+
+    return arr
+
 def create_model_conv_2d(weight_bits: int = 8,
                  act: bool = True,
                  input_shape: Tuple[int, ...] = (1, 16, 16, 16),
                  weights_shape: Tuple[int, ...] = (16, 16, 3, 3),
-                 weights_values: Optional[tvm.nd.array] = None,
-                 bias_values: Optional[tvm.nd.array] = None,
+                 weights_values: Optional[npt.NDArray] = None,
+                 bias_values: Optional[npt.NDArray] = None,
                  padding: Tuple[int, int] = (1, 1),
                  strides: Tuple[int, int] = (1, 1),
                  shift_bits: int = 4
@@ -26,13 +44,13 @@ def create_model_conv_2d(weight_bits: int = 8,
                                             f'int{weight_bits}')
         weights = utils.numpy_to_array(np.ones(weights_shape,f"int{weight_bits}"),f"int{weight_bits}")
     else:
-        weights = weights_values
+        weights = numpy_to_array_models(weights_values,weights_values.dtype.name)
     # Get or generate bias values
     if bias_values is None:
         bias = utils.create_random_array(weights_shape[0], 'int32')
         bias = utils.numpy_to_array(np.ones(weights_shape[0],"int32"),"int32")
     else:
-        bias = bias_values
+        bias = numpy_to_array_models(bias_values,bias_values.dtype.name)
     # Generate the conv2d call
     x, params1 = utils.relay_gap9_conv2d(x, 'conv1', weights, bias, 
                                          padding=padding, 

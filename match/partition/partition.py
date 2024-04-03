@@ -18,7 +18,7 @@ Operations to support the SOMA accelerator.
 """
 
 from typing import Any, List
-from match.partition.network_transformations import MatchOnnxBiasAdd,MatchOnnxBiasAddRemoveFromMain, MatchSaveModule
+from match.partition.network_transformations import MatchOnnxBiasAdd,MatchOnnxBiasAddRemoveFromMain, MatchSaveModule, MatchAddCastInMain
 import tvm
 import logging
 from functools import partial
@@ -88,6 +88,7 @@ def partition(mod, params, dpu, opts):
     pipeline.append(transform.InferType())
 
     pipeline.append(MatchOnnxBiasAddRemoveFromMain())
+    pipeline.append(MatchAddCastInMain())
     pipeline.append(transform.InferType())
 
     pipeline.append(MatchSaveModule())

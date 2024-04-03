@@ -5,13 +5,12 @@ from match.driver.driver import driver
 import argparse
 from match.relay.get_relay import get_relay_from
 
-def match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, target_class=None, target_name=None,output_path="./match_output"):
+def match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, target=None, target_name=None,output_path="./match_output"):
     if relay_mod==None:    
         relay_mod,relay_params=get_relay_from(input_type,filename,params_filename)
-    target=None
     reset_target()
-    if target_class!=None:
-        set_target(target_class=target_class)
+    if target!=None:
+        set_target(target=target)
     target=get_target(target_name=target_name)
     driver(relay_mod, relay_params, target=target,output_path=output_path)
     return CompiledModule.result
@@ -92,7 +91,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     input_type=args.input_type
     target_name=args.target
-    target_class=None
+    target=None
     mod=None
     params=None
     filename=args.filename
@@ -115,7 +114,7 @@ if __name__ == "__main__":
         relay_params=params,
         filename=filename,
         params_filename=params_filename,
-        target_class=target_class,
+        target=target,
         target_name=target_name,
         output_path=output_path,
     )
