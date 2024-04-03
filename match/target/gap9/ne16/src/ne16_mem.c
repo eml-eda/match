@@ -71,7 +71,7 @@ void ne16_init_platform_(
         ne16_task_set_norm_quant(match_ne16_get_nnx_task(i),
                 (ne16_quant_t) {
                     .shift_amount = ne16_common_kernel->right_shift,
-                    .function = quantFunctionIdentity,
+                    .function = ne16_common_kernel->activation_function?quantFunctionRelu:quantFunctionIdentity,
                     .flag_rounding = ne16TaskFlagFalse
                 }, (ne16_norm_t) {
                     .mode  = normMode32Bit,
