@@ -3,7 +3,6 @@ __pycache__
 .pkl_memoize_py3
 build
 __tmp__
-docker
 tmp
 results
 output
