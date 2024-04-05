@@ -12,7 +12,6 @@
 #define EXECUTE_TASK (1)
 #define STORER_TASK (2)
 #define SINGLE_CORE_TASK (3)
-#define RUN_SINGLE_CORE 1
 
 typedef struct nnx_monitor_s{
     Monitor input, output;

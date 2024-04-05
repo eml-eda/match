@@ -77,11 +77,13 @@ class MatchTarget(ABC):
         self.name=name
         self.match_patterns=[]
         self.exec_modules=[]
+        self.exec_modules_dict=dict()
         self.disabled_exec_modules=[]
         self.optimize_param="energy" if optimize_param=="energy" else "latency"
         self.__cached_pattern_results__=[]
         for exec_module in exec_modules:
             self.add_exec_module(exec_module)
+            self.exec_modules_dict[exec_module.name]=exec_module
 
     def singleton_instantiated(self):
         return hasattr(self,"match_patterns")
@@ -203,6 +205,8 @@ class MatchTarget(ABC):
                 return False
             # check all the patterns that are after me
             for other_pt in self.match_patterns[match_pt.idx+1:]:
+                if other_pt.exec_module.name in self.disabled_exec_modules:
+                    continue
                 # if pattern is fully matching get results
                 if is_pattern_matching(other_pt.pattern(),node) and other_pt.additional_checks(node):
                     try:

@@ -21,4 +21,10 @@ typedef enum{
 }patterns_list;
 % endif
 
+% for exec_module in exec_modules:
+% for module_option_name,module_option_value in exec_module.module_options.items():
+#define ${module_option_name} ${module_option_value}
+% endfor
+% endfor
+
 #endif

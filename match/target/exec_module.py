@@ -91,6 +91,7 @@ class ExecModule(ABC):
         self.layout_operand=dict()
         self.src_path=src_path
         self.inc_path=inc_path
+        self.module_options=dict()
 
     def partitioning_patterns(self):
 
@@ -319,4 +320,5 @@ class ExecModule(ABC):
             for operand in operands
         }
     
-    
+    def add_option_to_module(self,option,value):
+        self.module_options[option]=value

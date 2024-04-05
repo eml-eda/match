@@ -23,8 +23,11 @@ static unsigned int memalloc_W(unsigned int task_id){
 }
 
 void ne16_set_task_id(common_kernel* kernel){
+    #ifndef MATCH_NE16_RUN_SINGLE_CORE
     kernel->task_id=pi_core_id();
-    //kernel->task_id=SINGLE_CORE_TASK;
+    #else
+    kernel->task_id=SINGLE_CORE_TASK;
+    #endif
 }
 
 void ne16_init_platform_(
@@ -35,12 +38,14 @@ void ne16_init_platform_(
     unsigned int args_ne16[2];
     args_ne16[0] = (unsigned int) input_I_pt;
     args_ne16[1] = (unsigned int) output_pt;
-    //dma_mutex_init();
+    #ifndef MATCH_NE16_RUN_SINGLE_CORE
+    dma_mutex_init();
+    #endif
     match_ne16_set_nnx_dev();
     ne16_nnx_init(match_ne16_get_nnx_dev(),(ne16_pulp_conf_t){
         .max_stall = 8
     });
-    #ifndef RUN_SINGLE_CORE
+    #ifndef MATCH_NE16_RUN_SINGLE_CORE
     int err = 0;
 
     if (err = monitor_init(&get_nnx_monitor()->input, DB_BUFFER_SIZE)) {
@@ -82,7 +87,7 @@ void ne16_init_platform_(
     }
 
     // Fork
-    #ifndef RUN_SINGLE_CORE
+    #ifndef MATCH_NE16_RUN_SINGLE_CORE
     pi_cl_team_barrier();
     pi_cl_team_fork(NE16_TASKS, (void *)ne16_callback, (void*)args_ne16);
     pi_cl_team_barrier();
@@ -93,7 +98,7 @@ void ne16_init_platform_(
     //print("Qua...\n");
     cluster_shutdown_mem(ne16_common_kernel);
     ne16_nnx_term(match_ne16_get_nnx_dev());
-    #ifndef RUN_SINGLE_CORE
+    #ifndef MATCH_NE16_RUN_SINGLE_CORE
     monitor_term(get_nnx_monitor()->input);
     monitor_term(get_nnx_monitor()->output);
     #endif
@@ -119,14 +124,12 @@ void ne16_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsign
 
     l1_O_off[0]=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1];l1_O_off[1]=l1_O_off[0]+third_op_sizes[1]*third_op_db;
     //print("L1 off I [ %d %d ] W [ %d %d ] O [ %d %d ] Bias %d\n",l1_I_off[0],l1_I_off[1],l1_W_off[0],l1_W_off[1],l1_O_off[0],l1_O_off[1],l1_bias_off);
-    #ifdef RUN_SINGLE_CORE
+    #ifdef MATCH_NE16_RUN_SINGLE_CORE
     transfers = dma_transfer_create();
     #endif
 }
 
 void ne16_shutdown_mem(common_kernel* common_kernel){
-    //if(task_id==LOADER_TASK)    cluster_shutdown_mem(task_id,common_kernel);
-    //pi_cl_team_barrier();
     return;
 }
 
@@ -140,8 +143,8 @@ unsigned int ne16_mem_transfer_O(common_kernel* common_kernel,dimension_O* dim,u
 void ne16_copy_out_curr_computation(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
     if(common_kernel->task_id==STORER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
-        //dma_mutex_lock();
-        #ifndef RUN_SINGLE_CORE
+        #ifndef MATCH_NE16_RUN_SINGLE_CORE
+        dma_mutex_lock();
         output_transfers=dma_transfer_create();
         #endif
         dma_transfer_async((DmaTransferConf) {
@@ -155,7 +158,9 @@ void ne16_copy_out_curr_computation(common_kernel* common_kernel,dimension_O* di
             .stride_1d = dim->size_K[ext_mem],
             .dir = 0
         });
-        //dma_mutex_unlock();
+        #ifndef MATCH_NE16_RUN_SINGLE_CORE
+        dma_mutex_unlock();
+        #endif
     }
     return;
 }
@@ -165,9 +170,9 @@ unsigned int ne16_mem_transfer_I(common_kernel* common_kernel,dimension_I* dim,u
     unsigned int dst=memalloc_I(common_kernel->task_id);
     if(common_kernel->task_id==LOADER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
         //print("Dst I %d src %d task id %d\n",dst,ext_pt,common_kernel->task_id);
-        #ifndef RUN_SINGLE_CORE
+        #ifndef MATCH_NE16_RUN_SINGLE_CORE
         if(!input_dma_active){
-            //dma_mutex_lock();
+            dma_mutex_lock();
             input_transfers=dma_transfer_create();
             input_dma_active++;
         }
@@ -193,10 +198,10 @@ unsigned int ne16_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,u
     unsigned int dst=memalloc_W(common_kernel->task_id);
     if(common_kernel->task_id==LOADER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
         //print("Dst W %d src %d task id %d\n",dst,ext_pt,common_kernel->task_id);
-        #ifndef RUN_SINGLE_CORE
+        #ifndef MATCH_NE16_RUN_SINGLE_CORE
         if(!input_dma_active){
             monitor_produce_begin(get_nnx_monitor()->input);
-            //dma_mutex_lock();
+            dma_mutex_lock();
             input_transfers=dma_transfer_create();
             input_dma_active++;
         }
@@ -215,13 +220,13 @@ unsigned int ne16_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,u
 void ne16_wait_input_transfers(common_kernel* common_kernel){
     //print("Wait input transfers task id %d\n",common_kernel->task_id);
     if(common_kernel->task_id==LOADER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
-        #ifndef RUN_SINGLE_CORE
+        #ifndef MATCH_NE16_RUN_SINGLE_CORE
         //print("Start waiting input transfers\n");
-        //dma_mutex_lock();
+        dma_mutex_lock();
         dma_transfer_wait(input_transfers);
         input_dma_active=0;
         //dma_transfer_free(input_transfers);
-        //dma_mutex_unlock();
+        dma_mutex_unlock();
         //print("Finished waiting input transfers\n");
         #else
         dma_transfer_wait(transfers);
@@ -231,12 +236,12 @@ void ne16_wait_input_transfers(common_kernel* common_kernel){
 
 void ne16_wait_output_transfers(common_kernel* common_kernel){
     if(common_kernel->task_id==STORER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
-        #ifndef RUN_SINGLE_CORE
+        #ifndef MATCH_NE16_RUN_SINGLE_CORE
         //print("Wait output transfers\n");
-        //dma_mutex_lock();
+        dma_mutex_lock();
         dma_transfer_wait(output_transfers);
         //dma_transfer_free(output_transfers);
-        //dma_mutex_unlock();
+        dma_mutex_unlock();
         monitor_consume_end(get_nnx_monitor()->output);
         //print("Waited output transfers\n");
         #else
@@ -265,9 +270,9 @@ void ne16_wait_curr_computation(common_kernel* common_kernel){
 void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,void* weights_and_constant_buf){
     if(kernel->common_kernel->task_id==LOADER_TASK || kernel->common_kernel->task_id==SINGLE_CORE_TASK){
         //print("Constants loading\n");
-        #ifndef RUN_SINGLE_CORE
+        #ifndef MATCH_NE16_RUN_SINGLE_CORE
         if(!input_dma_active){
-            //dma_mutex_lock();
+            dma_mutex_lock();
             input_transfers=dma_transfer_create();
             input_dma_active++;
         }
@@ -288,7 +293,9 @@ void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,void* 
             kernel->common_kernel->batchnorm_mul=l1_bias_off+cluster_get_l1_memory_addr()+4*iter*kernel->common_kernel->k_o;
             kernel->common_kernel->batchnorm_add=l1_bias_off+cluster_get_l1_memory_addr()+4*iter*kernel->common_kernel->k_o+4*kernel->common_kernel->k_o;
         }
-        //dma_mutex_unlock();
+        #ifndef MATCH_NE16_RUN_SINGLE_CORE
+        dma_mutex_unlock();
+        #endif
         //print("Finished constant loading\n");
     }
 }

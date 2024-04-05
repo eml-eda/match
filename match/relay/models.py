@@ -32,7 +32,7 @@ def create_model_conv_2d(weight_bits: int = 8,
                  bias_values: Optional[npt.NDArray] = None,
                  padding: Tuple[int, int] = (1, 1),
                  strides: Tuple[int, int] = (1, 1),
-                 shift_bits: int = 4
+                 shift_bits: int = 6
                  ):
     """Generate a small network in TVM Relay IR that performs a requantized convolution
     """
