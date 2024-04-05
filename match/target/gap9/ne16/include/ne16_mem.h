@@ -34,7 +34,8 @@ void ne16_wait_output_transfers(common_kernel* common_kernel);
 
 void ne16_wait_curr_computation(common_kernel* common_kernel);
 
-void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,void* weights_and_constant_buf);
+void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,tile_indexes_W* abs_tile_idx,
+                                    tile_indexes_W* relative_tile_idx,void* weights_and_constant_buf);
 
 static inline void execute_wait(ne16_task_t *task) {
   while (!ne16_nnx_resolve_check(match_ne16_get_nnx_dev(), task))

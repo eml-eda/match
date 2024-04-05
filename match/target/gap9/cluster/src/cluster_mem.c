@@ -218,7 +218,8 @@ void cluster_wait_curr_computation(common_kernel* common_kernel){
     if(common_kernel->specific_pattern==elemwise_add) return wait_any_computation();
 }
 
-void cluster_pattern_constant_loading(cluster_kernel* kernel,unsigned int iter,void* weights_and_constant_buf){
+void cluster_pattern_constant_loading(cluster_kernel* kernel,unsigned int iter,tile_indexes_W* abs_tile_idx,
+                                    tile_indexes_W* relative_tile_idx,void* weights_and_constant_buf){
     if(kernel->common_kernel->specific_pattern!=elemwise_add){
         int batchnorm_act=kernel->common_kernel->pattern_name==dense_bnorm_requant || kernel->common_kernel->pattern_name==conv2d_bnorm_requant;
         if(iter==0){
@@ -239,10 +240,10 @@ void cluster_pattern_constant_loading(cluster_kernel* kernel,unsigned int iter,v
         }
         else{
             if(!batchnorm_act)
-                kernel->common_kernel->bias_pt=l1_bias_off+l1_memory+4*iter*kernel->common_kernel->k_o;
+                kernel->common_kernel->bias_pt=l1_bias_off+l1_memory+4*abs_tile_idx->tile_K*kernel->common_kernel->k_o;
             else{
-                kernel->common_kernel->batchnorm_mul=l1_bias_off+l1_memory+4*iter*kernel->common_kernel->k_o;
-                kernel->common_kernel->batchnorm_add=l1_bias_off+l1_memory+4*iter*kernel->common_kernel->k_o+4*kernel->common_kernel->k_o;
+                kernel->common_kernel->batchnorm_mul=l1_bias_off+l1_memory+4*abs_tile_idx->tile_K*kernel->common_kernel->k_o;
+                kernel->common_kernel->batchnorm_add=l1_bias_off+l1_memory+4*abs_tile_idx->tile_K*kernel->common_kernel->k_o+4*kernel->common_kernel->k_o;
             }
         }
     }

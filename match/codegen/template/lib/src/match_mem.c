@@ -82,6 +82,28 @@ unsigned int match_pointer_offset_NHWC_W(common_kernel* common_kernel,tile_index
             tile_idxs->tile_FX*common_kernel->dim_W->size_C[memory_level]+tile_idxs->tile_C)*bytes_per_obj;
 }
 
-void match_pattern_constants_loading(match_kernel* kernel,unsigned int iter,void* weights_and_constant_buf){
+void match_pattern_constants_loading(match_kernel* kernel,unsigned int iter,tile_indexes_W* abs_tile_idx,
+                                    tile_indexes_W* relative_tile_idx,void* weights_and_constant_buf){
     return;
+}
+
+
+unsigned int match_mem_transfer_O(common_kernel* common_kernel,dimension_O* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+    return ext_pt;
+}
+
+unsigned int match_mem_transfer_I(common_kernel* common_kernel,dimension_I* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+    return ext_pt;
+}
+
+unsigned int match_mem_transfer_X(common_kernel* common_kernel,dimension_X* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+    return ext_pt;
+}
+
+unsigned int match_mem_transfer_Y(common_kernel* common_kernel,dimension_Y* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+    return ext_pt;
+}
+
+unsigned int match_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+    return ext_pt;
 }

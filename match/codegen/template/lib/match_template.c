@@ -289,7 +289,16 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     % endif
     kernel.common_kernel->${operand}_pt = kernel_${operand}_pt;
     % endfor
-    ${mem_apis.pattern_constants_loading}(&kernel,iter,weights_and_constants);
+    % if layer_has_weights:
+    ${mem_apis.pattern_constants_loading}(&kernel,iter,
+    &abs_tile_idxs_W,
+    % if last_movements["W"]!=idx:
+    &tile_idxs_W_kernel_relative,
+    % else:
+    &tile_idxs_W_${last_movements["W"]}_relative,
+    % endif
+    weights_and_constants);
+    % endif
     ${sync_apis.async_transfers}(&comm_kernel);
     if(iter>0)  ${sync_apis.prev_computation}(&comm_kernel);
     ${comp_apis.innermost_computation}(&kernel);

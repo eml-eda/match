@@ -45,7 +45,8 @@ void cluster_wait_prev_computation(common_kernel* common_kernel);
 
 void cluster_wait_curr_computation(common_kernel* common_kernel);
 
-void cluster_pattern_constant_loading(cluster_kernel* kernel,unsigned int iter,void* weights_and_constant_buf);
+void cluster_pattern_constant_loading(cluster_kernel* kernel,unsigned int iter,tile_indexes_W* abs_tile_idx,
+                                    tile_indexes_W* relative_tile_idx,void* weights_and_constant_buf);
 
 unsigned int get_im2col_pt();
 

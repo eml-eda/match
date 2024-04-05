@@ -88,9 +88,9 @@ void ne16_init_platform_(
 
     // Fork
     #ifndef MATCH_NE16_RUN_SINGLE_CORE
-    pi_cl_team_barrier();
+    //pi_cl_team_barrier();
     pi_cl_team_fork(NE16_TASKS, (void *)ne16_callback, (void*)args_ne16);
-    pi_cl_team_barrier();
+    //pi_cl_team_barrier();
     #else
     ((void (*)(unsigned int *))ne16_callback)((void*)args_ne16);
     #endif
@@ -267,7 +267,8 @@ void ne16_wait_curr_computation(common_kernel* common_kernel){
     }
 }
 
-void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,void* weights_and_constant_buf){
+void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,tile_indexes_W* abs_tile_idx,
+                                    tile_indexes_W* relative_tile_idx,void* weights_and_constant_buf){
     if(kernel->common_kernel->task_id==LOADER_TASK || kernel->common_kernel->task_id==SINGLE_CORE_TASK){
         //print("Constants loading\n");
         #ifndef MATCH_NE16_RUN_SINGLE_CORE
@@ -290,8 +291,8 @@ void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,void* 
             kernel->common_kernel->batchnorm_add=l1_bias_off+cluster_get_l1_memory_addr()+4*kernel->common_kernel->k_o;
         }
         else{
-            kernel->common_kernel->batchnorm_mul=l1_bias_off+cluster_get_l1_memory_addr()+4*iter*kernel->common_kernel->k_o;
-            kernel->common_kernel->batchnorm_add=l1_bias_off+cluster_get_l1_memory_addr()+4*iter*kernel->common_kernel->k_o+4*kernel->common_kernel->k_o;
+            kernel->common_kernel->batchnorm_mul=l1_bias_off+cluster_get_l1_memory_addr()+4*abs_tile_idx->tile_K*kernel->common_kernel->k_o;
+            kernel->common_kernel->batchnorm_add=l1_bias_off+cluster_get_l1_memory_addr()+4*abs_tile_idx->tile_K*kernel->common_kernel->k_o+4*kernel->common_kernel->k_o;
         }
         #ifndef MATCH_NE16_RUN_SINGLE_CORE
         dma_mutex_unlock();
