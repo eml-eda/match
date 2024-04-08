@@ -138,12 +138,12 @@ static void init_common_kernel_static_params(
     init_kernel_dimension_params_${"_".join(input_operands+(["W","O"] if layer_has_weights else ["O"]))}(
         kernel,
     % for i_operand in input_operands:
-    &(dim_${i_operand}->common_dim),${sw_for_loops[::-1][0][f"mem_{i_operand}"]},${layer_data.operand_precision[i_operand]},
+    &(dim_${i_operand}->common_dim),mem_computation,${layer_data.operand_precision[i_operand]},
     % endfor
     % if layer_has_weights:
-    &(dim_W->common_dim),${sw_for_loops[::-1][0]["mem_W"]},${layer_data.operand_precision["W"]},
+    &(dim_W->common_dim),mem_computation,${layer_data.operand_precision["W"]},
     % endif
-    &(dim_O->common_dim),${sw_for_loops[::-1][0][f"mem_O"]},${layer_data.operand_precision["O"]}
+    &(dim_O->common_dim),mem_computation,${layer_data.operand_precision["O"]}
     );
     // TODO: set each attribute of the pattern correctly
     //kernel->dilation_x=----layer_attrs["dilation"][0]---;kernel->dilation_y=---layer_attrs["dilation"][1]---;
@@ -283,7 +283,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         &layer_loops_idxs
     );
     add_relative_idxs_${operand}(&tile_idxs_${operand}_kernel_relative,&abs_tile_idxs_${operand});
-    unsigned int kernel_${operand}_pt = loop_${operand}_${last_movements[operand]}_int_pt+${mem_apis.pointer_offset[operand]}(&comm_kernel,&tile_idxs_${operand}_kernel_relative,${for_loop[f"mem_{operand}"]});
+    unsigned int kernel_${operand}_pt = loop_${operand}_${last_movements[operand]}_int_pt+${mem_apis.pointer_offset[operand]}(&comm_kernel,&tile_idxs_${operand}_kernel_relative,mem_computation);
     % if operand in input_operands and layer_has_padding:
     calc_padding_${operand}_mem_computation(&dim_${operand},&abs_tile_idxs_${operand});
     kernel_set_padding(kernel.common_kernel,&(dim_${operand}.common_dim));
