@@ -27,7 +27,8 @@ typedef struct dimension_${operand}_${func_number}_t{
     % endfor
 }dimension_${operand}_${func_number};
 
-% for mem_level in ordered_operand_memories[operand]: 
+% for mem_level in ordered_operand_memories[operand]+["mem_computation"]:
+% if mem_level!="mem_computation": 
 static void setup_relative_tile_idxs_${operand}_${mem_level}(
     dimension_${operand}_${func_number}* dim,
     tile_indexes_${operand}* tile_idxs,
@@ -50,10 +51,12 @@ static void setup_relative_tile_idxs_${operand}_${mem_level}(
     ## EVALUATE IDX ALSO WITH STRIDES
     % if operand in input_operands:
     % for stride_dim,stride_val in layer_attrs["strides"].items():
-    tile_idxs->tile_${stride_dim}*=${stride_val};
+    //FIXED: bug for tile number calculation, stride doesn't matter
+    //tile_idxs->tile_${stride_dim}*=${stride_val};
     % endfor
     % endif
 }
+% endif
 % if operand in input_operands and layer_has_padding:
 static void calc_padding_${operand}_${mem_level}(dimension_${operand}_${func_number}* dim,tile_indexes_${operand}* abs_tile_idxs){
     // IX dimension pads
@@ -232,7 +235,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     );
     add_relative_idxs_${mem_transfer_operand}(&tile_idxs_${mem_transfer_operand}_${idx}_relative,&abs_tile_idxs_${mem_transfer_operand});
     % if mem_transfer_operand in input_operands and layer_has_padding:
-    calc_padding_${mem_transfer_operand}_${mem_level}(&dim_${mem_transfer_operand},&tile_idxs_${mem_transfer_operand}_${idx}_relative);
+    calc_padding_${mem_transfer_operand}_${sw_for_loops[idx][f'mem_{mem_transfer_operand}']}(&dim_${mem_transfer_operand},&abs_tile_idxs_${mem_transfer_operand});
     % endif
     % if last_movements[mem_transfer_operand]!=-1:
     // sync prev transfer in a multi memory system with data dependency
@@ -268,16 +271,21 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     % for operand in operands:
     % if last_movements[operand]!=idx:
     ## CALC IDXS AGAIN, THEY MAY HAVE CHANGED FOR SOME OPERAND (UNEVEN MAPPING)
+    % if operand in input_operands and layer_has_padding:
+    ## WE ARE INSIDE THE LOWEST MEMORY LEVEL SO WE SHOULDNT HAVE A NEGATIVE OFFSET
+    dim_${operand}.common_dim.pad_IX_x=dim_${operand}.common_dim.overlap_IX_x;dim_${operand}.common_dim.pad_IX_y=dim_${operand}.common_dim.overlap_IX_y;
+    dim_${operand}.common_dim.pad_IY_x=dim_${operand}.common_dim.overlap_IY_x;dim_${operand}.common_dim.pad_IY_y=dim_${operand}.common_dim.overlap_IY_y;
+    % endif
     tile_indexes_${operand} tile_idxs_${operand}_kernel_relative;
     setup_relative_tile_idxs_${operand}_${for_loop[f"mem_{operand}"]}(
         &dim_${operand},
         &tile_idxs_${operand}_kernel_relative,
         &layer_loops_idxs
     );
-    add_relative_idxs_${mem_transfer_operand}(&tile_idxs_${mem_transfer_operand}_${idx}_relative,&abs_tile_idxs_${mem_transfer_operand});
+    add_relative_idxs_${operand}(&tile_idxs_${operand}_kernel_relative,&abs_tile_idxs_${operand});
     unsigned int kernel_${operand}_pt = loop_${operand}_${last_movements[operand]}_int_pt+${mem_apis.pointer_offset[operand]}(&comm_kernel,&tile_idxs_${operand}_kernel_relative,${for_loop[f"mem_{operand}"]});
     % if operand in input_operands and layer_has_padding:
-    calc_padding_${operand}_${for_loop[f"mem_{operand}"]}(&dim_${operand},&tile_idxs_${operand}_kernel_relative);
+    calc_padding_${operand}_mem_computation(&dim_${operand},&abs_tile_idxs_${operand});
     kernel_set_padding(kernel.common_kernel,&(dim_${operand}.common_dim));
     % endif
     % else:
@@ -327,7 +335,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     kernel_O_prev_ext=kernel_O_curr_ext;kernel_O_prev_int=kernel_O_curr_int;
     % for operand in operands:
     % if last_movements[operand]!=idx:
-    substract_relative_idxs_${mem_transfer_operand}(&tile_idxs_${operand}_kernel_relative,&abs_tile_idxs_${operand});
+    substract_relative_idxs_${operand}(&tile_idxs_${operand}_kernel_relative,&abs_tile_idxs_${operand});
     % endif
     % endfor
     iter++;

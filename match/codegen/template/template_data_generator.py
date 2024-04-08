@@ -1,5 +1,5 @@
 import copy
-from math import ceil
+from math import ceil, floor
 from typing import Any, Dict, List
 
 import numpy as np
@@ -117,16 +117,19 @@ class TemplateDataGenerator:
         for input_op in general_template_data["input_operands"]:
             for overlapped_dim,overlapped_val in general_template_data["overlaps"].items():
                 current_dims[input_op][overlapped_dim]+=max(overlapped_val)
+        fl_input_translations={i_op:dict() for i_op in general_template_data["input_operands"]}
         #print(f"For {general_template_data['func_name']} Dims {current_dims} overlap {general_template_data['overlaps']}\n\n")
         for fl in general_template_data["sw_for_loops"]:
             if fl["fullname"] in tiled_dimensions:
                 for operand in [op for op in general_template_data["operands"] if fl["name"] in general_template_data["ordered_relevant_loops"][op]]:
                     dim_name=fl["name"] if operand not in general_template_data["input_operands"] else general_template_data["input_dim_mapping"][fl["name"]]
                     fl_fullname = dim_name if fl["index"] == 0 else f'{dim_name}_{fl["index"]}'
-                    size_ = current_dims[operand][dim_name] / fl["size"]
+                    if operand in general_template_data["input_operands"]:
+                        fl_input_translations[operand][fl["fullname"]]=fl_fullname
+                    size_ = floor(current_dims[operand][dim_name] / fl["size"])
                     tiling_sizes[operand][fl_fullname] = {"name":fl["name"],"size":size_,"index":fl["index"]}
                     current_dims[operand][dim_name] = size_
-        
+        general_template_data["fl_input_translations"]=fl_input_translations
         #print(f"For {general_template_data['func_name']} tiling sizes {tiling_sizes}\n\n")
 
         general_template_data["tiling_sizes"] = tiling_sizes
@@ -181,7 +184,33 @@ class TemplateDataGenerator:
             }
             for operand in general_template_data["operands"]
         }
-
+        
+        # mem computation sizes
+        for operand in general_template_data["operands"]:
+            is_op_input=operand in general_template_data["input_operands"]
+            for rel_dim in general_template_data["ordered_relevant_loops"][operand]:
+                rel_dim_name=general_template_data["input_dim_mapping"][rel_dim] if is_op_input else rel_dim
+                if is_op_input and "nn.conv2d" in self.layer_data.pattern_operations\
+                                     and self.layer_data.layer_attrs["nn.conv2d_depthwise"]\
+                                     and rel_dim in ["K","C"]:
+                    general_template_data["size_loops_mem"][operand][rel_dim]\
+                            [self.template_data['ordered_operand_memories'][operand][::-1][0]]=general_template_data["size_loops_mem"]\
+                                ["O"]["K"][self.template_data['ordered_operand_memories']["O"][::-1][0]]
+                elif rel_dim!="C":
+                    # get last tile of dim
+                    for sl in general_template_data["sw_for_loops"][::-1][1:]:
+                        if sl["name"]==rel_dim:
+                            general_template_data["size_loops_mem"][operand]\
+                                [rel_dim]["mem_computation"]=\
+                                    general_template_data["tiling_sizes"][operand]\
+                                    [general_template_data["fl_input_translations"][operand][sl["fullname"]] if is_op_input else sl["fullname"]]["size"]
+                            break
+                rel_dim_name=rel_dim
+                if "mem_computation" not in general_template_data["size_loops_mem"][operand][rel_dim_name]:
+                    general_template_data["size_loops_mem"][operand]\
+                            [rel_dim_name]["mem_computation"]=general_template_data["size_loops_mem"][operand]\
+                            [rel_dim_name][self.template_data['ordered_operand_memories'][operand][::-1][0]]
+        #print(general_template_data["size_loops_mem"])
         # calc db opportunites
         general_template_data["db_opportunities"]={
             operand:any([p.double_buffering_support for p in self.exec_module.platform_memories]) and general_template_data["sw_for_loops"][::-1][0][f'mem_{operand}']!=\

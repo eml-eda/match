@@ -288,15 +288,20 @@ void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,tile_i
                 .dir = 1
             });
             kernel->common_kernel->batchnorm_mul=l1_bias_off+cluster_get_l1_memory_addr();
-            kernel->common_kernel->batchnorm_add=l1_bias_off+cluster_get_l1_memory_addr()+4*kernel->common_kernel->k_o;
+            kernel->common_kernel->batchnorm_add=l1_bias_off+cluster_get_l1_memory_addr()+4*kernel->common_kernel->dim_W->size_K[l2_mem];
         }
         else{
-            kernel->common_kernel->batchnorm_mul=l1_bias_off+cluster_get_l1_memory_addr()+4*abs_tile_idx->tile_K*kernel->common_kernel->k_o;
-            kernel->common_kernel->batchnorm_add=l1_bias_off+cluster_get_l1_memory_addr()+4*abs_tile_idx->tile_K*kernel->common_kernel->k_o+4*kernel->common_kernel->k_o;
+            kernel->common_kernel->batchnorm_mul=l1_bias_off+cluster_get_l1_memory_addr()+4*abs_tile_idx->tile_K;
+            kernel->common_kernel->batchnorm_add=l1_bias_off+cluster_get_l1_memory_addr()+4*kernel->common_kernel->dim_W->size_K[l2_mem]+4*abs_tile_idx->tile_K;
         }
         #ifndef MATCH_NE16_RUN_SINGLE_CORE
         dma_mutex_unlock();
         #endif
         //print("Finished constant loading\n");
     }
+}
+
+unsigned int ne16_pointer_offset_NHWC_W(common_kernel* common_kernel,tile_indexes_W* tile_idxs,unsigned int memory_level){
+    return common_kernel->specific_pattern==depthwise_conv2d?
+    tile_idxs->tile_C*common_kernel->prec_W/8:match_pointer_offset_NHWC_W(common_kernel,tile_idxs,memory_level);
 }

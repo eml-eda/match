@@ -32,7 +32,8 @@ def create_model_conv_2d(weight_bits: int = 8,
                  bias_values: Optional[npt.NDArray] = None,
                  padding: Tuple[int, int] = (1, 1),
                  strides: Tuple[int, int] = (1, 1),
-                 shift_bits: int = 6
+                 shift_bits: int = 6,
+                 depthwise: bool = False,
                  ):
     """Generate a small network in TVM Relay IR that performs a requantized convolution
     """
@@ -56,7 +57,9 @@ def create_model_conv_2d(weight_bits: int = 8,
                                          padding=padding, 
                                          strides=strides,
                                          act=act, 
-                                         shift_bits=shift_bits)
+                                         shift_bits=shift_bits,
+                                         groups=weights_shape[0] if depthwise else 1,
+                                         batchnorm=True)
     params = params1
     # create an IR module from the relay expression
     mod = tvm.ir.IRModule()
@@ -96,12 +99,14 @@ def create_model_add_convs(weight_bits: int = 8,
                                          padding=padding, 
                                          strides=strides,
                                          act=act, 
-                                         shift_bits=shift_bits)
+                                         shift_bits=shift_bits,
+                                         batchnorm=True)
     y, params2 = utils.relay_gap9_conv2d(y, 'conv2', weights, bias, 
                                          padding=padding, 
                                          strides=strides,
                                          act=act, 
-                                         shift_bits=shift_bits)
+                                         shift_bits=shift_bits,
+                                         batchnorm=True)
     z = utils.relay_gap9_add(x,y,"add")
     params1.update(params2)
     params = params1

@@ -136,8 +136,8 @@ class ExecModule(ABC):
         """
         return [
             # from lower level to higher level memories
-            MemoryInst(name="l1_mem",k_bytes=32,operands=operands),
-            MemoryInst(name="l2_mem",k_bytes=128,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
+            MemoryInst(name="l1_mem",k_bytes=64,operands=operands,double_buffering_support=True),
+            MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]
 
     def get_all_memories_names(self):

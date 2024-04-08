@@ -132,10 +132,10 @@ void conv_2d_comp(void* args){
     cluster_kernel* kernel = (cluster_kernel*)args;
     void* im_2_col=kernel->im2col_pt;
     int i_channels=kernel->common_kernel->c_i;
-    int i_width=kernel->common_kernel->ix_i;
+    int i_width=kernel->common_kernel->ix_i
     +kernel->common_kernel->dim_I->overlap_IX_x+kernel->common_kernel->dim_I->overlap_IX_y
     -kernel->common_kernel->dim_I->pad_IX_x-kernel->common_kernel->dim_I->pad_IX_y;
-    int i_height=kernel->common_kernel->iy_i;
+    int i_height=kernel->common_kernel->iy_i
     +kernel->common_kernel->dim_I->overlap_IY_x+kernel->common_kernel->dim_I->overlap_IY_y
     -kernel->common_kernel->dim_I->pad_IY_x-kernel->common_kernel->dim_I->pad_IY_y;
     int o_channels=kernel->common_kernel->k_o;

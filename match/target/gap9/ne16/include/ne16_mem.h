@@ -42,4 +42,5 @@ static inline void execute_wait(ne16_task_t *task) {
     ;
 }
 
+unsigned int ne16_pointer_offset_NHWC_W(common_kernel* common_kernel,tile_indexes_W* tile_idxs,unsigned int memory_level);
 #endif

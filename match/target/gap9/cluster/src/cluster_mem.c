@@ -67,7 +67,7 @@ void cluster_startup_memory(common_kernel* common_kernel,int* first_op_sizes,uns
     cluster_init_l1_memory();
     l1_im2col_off=l1_O_off[0]+third_op_sizes[1]*(third_op_db+1);
     if(common_kernel->specific_pattern!=elemwise_add)    l1_im2col_off+=dim_O->size_K[l2_mem]*4;
-    if(common_kernel->pattern_name==dense_bnorm_requant || common_kernel->pattern_name==conv2d_bnorm_requant)   l1_im2col_off*=2;
+    if(common_kernel->pattern_name==dense_bnorm_requant || common_kernel->pattern_name==conv2d_bnorm_requant)   l1_im2col_off+=dim_O->size_K[l2_mem]*4;
     int im2coldim=1*(dim_W->size_FX[l2_mem]*dim_W->size_FY[l2_mem]*(dim_I->size_IY[l1_mem]+paddings[0]+paddings[2])+dim_W->size_FX[l2_mem]*dim_W->size_FY[l2_mem]);
     l1_pwt_off=l1_im2col_off+im2coldim;
     //printf("L1 memory at %d offsets: I {%d,%d} W {%d,%d} O {%d,%d} bias %d im2col %d\n",l1_memory,l1_I_off[0],l1_I_off[1],l1_W_off[0],l1_W_off[1],
@@ -235,15 +235,15 @@ void cluster_pattern_constant_loading(cluster_kernel* kernel,unsigned int iter,t
                 kernel->common_kernel->bias_pt=l1_bias_off+l1_memory;
             else{
                 kernel->common_kernel->batchnorm_mul=l1_bias_off+l1_memory;
-                kernel->common_kernel->batchnorm_add=l1_bias_off+l1_memory+4*kernel->common_kernel->k_o;
+                kernel->common_kernel->batchnorm_add=l1_bias_off+l1_memory+4*kernel->common_kernel->dim_W->size_K[l2_mem];
             }
         }
         else{
             if(!batchnorm_act)
-                kernel->common_kernel->bias_pt=l1_bias_off+l1_memory+4*abs_tile_idx->tile_K*kernel->common_kernel->k_o;
+                kernel->common_kernel->bias_pt=l1_bias_off+l1_memory+4*abs_tile_idx->tile_K;
             else{
-                kernel->common_kernel->batchnorm_mul=l1_bias_off+l1_memory+4*abs_tile_idx->tile_K*kernel->common_kernel->k_o;
-                kernel->common_kernel->batchnorm_add=l1_bias_off+l1_memory+4*abs_tile_idx->tile_K*kernel->common_kernel->k_o+4*kernel->common_kernel->k_o;
+                kernel->common_kernel->batchnorm_mul=l1_bias_off+l1_memory+4*abs_tile_idx->tile_K;
+                kernel->common_kernel->batchnorm_add=l1_bias_off+l1_memory+4*kernel->common_kernel->dim_W->size_K[l2_mem]+4*abs_tile_idx->tile_K;
             }
         }
     }

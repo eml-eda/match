@@ -31,7 +31,7 @@ class Gap9NE16(ExecModule):
             ]
         elif layer_attrs["nn.conv2d_depthwise"]:
             return [
-                ("K",8),("OX",4),("OY",self.FULL_DIM)
+                ("K",16),("OX",4),("OY",self.FULL_DIM)
             ]
         else:
             # DEFAULT LIKE CONV2D
@@ -49,26 +49,6 @@ class Gap9NE16(ExecModule):
         else:
             # DEFAULT LIKE CONV2D
             return "conv2d"
-
-    #def memories_def(self, pattern_name, operands):
-    #    memories=super().memories_def(pattern_name=pattern_name,operands=operands)
-    #    if pattern_name!="add_requant":
-    #        memories[0].double_buffering_support=True
-    #
-    #    def buffers_for_l1_mem(layer_data,pattern_name):
-    #        buff_mem=0
-    #        # buffer for the cores of the accelerator (weights dimensions)
-    #        if pattern_name!='add_requant' :
-    #            buff_mem=2*layer_data.loop_dim_size['C']*layer_data.loop_dim_size['FY']*layer_data.loop_dim_size['FX']
-    #        # buff for each core
-    #        buff_mem*=8
-    #        # bias
-    #        if pattern_name!="add_requant":
-    #            buff_mem+=layer_data.loop_dim_size['K']*4
-    #        return buff_mem
-    #    
-    #    memories[0].buffer_for_layer_func=buffers_for_l1_mem
-    #    return memories
     
     def partitioning_patterns(self):
         return gap9partitioning_patterns()
@@ -89,6 +69,7 @@ class Gap9NE16(ExecModule):
         mem_apis.pattern_constants_loading="ne16_pattern_constant_loading"
         mem_apis.shutdown_mem="ne16_shutdown_mem"
         mem_apis.startup_memory="ne16_startup_memory"
+        mem_apis.pointer_offset["W"]="ne16_pointer_offset_NHWC_W"
         return mem_apis
 
     def comp_apis_def(self,comp_apis: ComputationalApis=ComputationalApis()):
