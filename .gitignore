@@ -9,3 +9,4 @@ output
 match.egg-info
 dist
 .eggs
+gap9_results

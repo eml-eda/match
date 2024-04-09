@@ -4,7 +4,7 @@ import tvm
 import tvm.relay as relay
 from tvm.driver.tvmc.model import TVMCModel
 import numpy as np
-from typing import Tuple, Optional
+from typing import Dict, List, Tuple, Optional
 from numpy import typing as npt
 
 def numpy_to_array_models(np_arr: npt.NDArray, dtype: str):
@@ -34,6 +34,7 @@ def create_model_conv_2d(weight_bits: int = 8,
                  strides: Tuple[int, int] = (1, 1),
                  shift_bits: int = 6,
                  depthwise: bool = False,
+                 pad_goals: List=None
                  ):
     """Generate a small network in TVM Relay IR that performs a requantized convolution
     """
@@ -53,6 +54,8 @@ def create_model_conv_2d(weight_bits: int = 8,
     else:
         bias = numpy_to_array_models(bias_values,bias_values.dtype.name)
     # Generate the conv2d call
+    if pad_goals is not None:
+        x= relay.nn.pad(x,pad_goals)
     x, params1 = utils.relay_gap9_conv2d(x, 'conv1', weights, bias, 
                                          padding=padding, 
                                          strides=strides,
