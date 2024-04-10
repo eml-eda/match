@@ -34,7 +34,7 @@ def create_model_conv_2d(weight_bits: int = 8,
                  strides: Tuple[int, int] = (1, 1),
                  shift_bits: int = 6,
                  depthwise: bool = False,
-                 pad_goals: List=None
+                 input_pad: List=None
                  ):
     """Generate a small network in TVM Relay IR that performs a requantized convolution
     """
@@ -54,8 +54,8 @@ def create_model_conv_2d(weight_bits: int = 8,
     else:
         bias = numpy_to_array_models(bias_values,bias_values.dtype.name)
     # Generate the conv2d call
-    if pad_goals is not None:
-        x= relay.nn.pad(x,pad_goals)
+    if input_pad is not None:
+        x= relay.nn.pad(x,input_pad,pad_mode="constant",pad_value=0)
     x, params1 = utils.relay_gap9_conv2d(x, 'conv1', weights, bias, 
                                          padding=padding, 
                                          strides=strides,
