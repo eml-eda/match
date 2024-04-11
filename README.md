@@ -34,6 +34,7 @@ To install the latest release (with pip):
 
 ```
 $ git clone --recursive https://github.com/eml-eda/match
+$ cd match
 $ make all
 ```
 
