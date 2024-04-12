@@ -70,13 +70,19 @@ def _check_biasadd_requant(pattern):
 
     return bias_add.args[0]
 
+def get_conv2d(pattern):
+    while pattern.op.name!="nn.conv2d":
+        pattern=pattern.args[0]
+    return pattern
+
 def check_conv2d(pattern):
     """Check if the Conv2D is supported by the soma dory accelerator"""
-    conv2d = _check_biasadd_requant(pattern)
+    conv2d = get_conv2d(pattern)
     if conv2d is None:
         return False
 
     num_output_channels = conv2d.args[1].data.shape[0]
+    num_input_channels = conv2d.args[1].data.shape[1]
 
     def is_conv2d_attr_value_supported(attrs, name, supported_values):
         attr = attrs[name]
@@ -100,8 +106,10 @@ def check_conv2d(pattern):
 
         # In topi, padding is [padt, padl, padb, padr]
         padding = list(attrs["padding"])
-
-        return (all([ksize==3 for ksize in kernel_size]) and all([pad==1 for pad in padding])) or (all([ksize==1 for ksize in kernel_size]) and all([pad==0 for pad in padding]) and attrs["groups"]==1)
+        
+        return (all([ksize==3 for ksize in kernel_size])\
+                and all([pad==1 for pad in padding])) or (all([ksize==1 for ksize in kernel_size]) \
+                                                          and all([pad==0 for pad in padding]) and attrs["groups"]==1)
 
 
     # check conv2d attributes
@@ -109,8 +117,8 @@ def check_conv2d(pattern):
         or not is_conv2d_attr_value_supported(conv2d.attrs, 'strides', [[1, 1], [2, 2]])
         or not is_conv2d_attr_value_supported(conv2d.attrs, 'dilation', [[1, 1]])
         or not is_conv2d_attr_value_supported(conv2d.attrs, 'groups', [1, num_output_channels])
-        or not is_conv2d_attr_value_supported(conv2d.attrs, 'kernel_layout', ['OIHW'])
-        or not is_conv2d_attr_value_supported(conv2d.attrs, 'data_layout', ['NCHW'])):
+        or not (((num_input_channels%16)==0 and conv2d.attrs["groups"]==1)
+        or ((num_output_channels%16)==0 and conv2d.attrs["groups"]>1))):
 
         return False
 
@@ -118,5 +126,5 @@ def check_conv2d(pattern):
 
 def partitioning_patterns():
     return [
-        PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,additional_checks=check_conv2d,ordered_operation="nn.conv2d"),
     ]
