@@ -66,6 +66,9 @@ void dw_conv_2d_comp(void* args){
     int p_bottom=kernel->common_kernel->pad_IY_y;
     int p_left=kernel->common_kernel->pad_IX_x;
     int p_right=kernel->common_kernel->pad_IX_y;
+    //printf("Conv 2d :: pad ^ %d v %d < %d > %d\n",p_top,p_bottom,p_left,p_right);
+    //printf("Conv 2d :: I [ C %d IY %d IX %d ] O [ K %d OY %d OX %d ] W [ FY %d FX %d ]\n",i_channels,i_height,i_width,o_channels,o_height,o_width,w_y_height,w_y_width);
+    //printf("Conv 2d :: addr I %d O %d W %d\n",kernel->common_kernel->I_pt,kernel->common_kernel->O_pt,kernel->common_kernel->W_pt);
     pulp_nn_depthwise_generic(
         kernel->common_kernel->I_pt,
         im_2_col,
@@ -149,6 +152,9 @@ void conv_2d_comp(void* args){
     int p_bottom=kernel->common_kernel->pad_IY_y;
     int p_left=kernel->common_kernel->pad_IX_x;
     int p_right=kernel->common_kernel->pad_IX_y;
+    //printf("Conv 2d :: pad ^ %d v %d < %d > %d\n",p_top,p_bottom,p_left,p_right);
+    //printf("Conv 2d :: I [ C %d IY %d IX %d ] O [ K %d OY %d OX %d ] W [ FY %d FX %d ]\n",i_channels,i_height,i_width,o_channels,o_height,o_width,w_y_height,w_y_width);
+    //printf("Conv 2d :: addr I %d O %d W %d\n",kernel->common_kernel->I_pt,kernel->common_kernel->O_pt,kernel->common_kernel->W_pt);
     pulp_nn_conv_Ho_parallel(
         kernel->common_kernel->I_pt,
         im_2_col,

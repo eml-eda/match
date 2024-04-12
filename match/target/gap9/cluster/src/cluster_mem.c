@@ -89,6 +89,7 @@ unsigned int cluster_mem_transfer_O(common_kernel* common_kernel,dimension_O* di
 
 void copy_out_computation_(dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
+    transfer = dma_transfer_create();
     //printf("Copy out int %d\n",int_pt-l1_memory);
     //printf("Dim O K [int %d,ext %d] OY [int %d,ext %d] OX [int %d,ext %d]\n",dim->size_K[int_mem],dim->size_K[ext_mem],
     //dim->size_OY[int_mem],dim->size_OY[ext_mem],dim->size_OX[int_mem],dim->size_OX[ext_mem]);
