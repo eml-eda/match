@@ -63,6 +63,8 @@ def create_model_conv_2d(weight_bits: int = 8,
                                          shift_bits=shift_bits,
                                          groups=weights_shape[0] if depthwise else 1,
                                          batchnorm=True)
+    #if input_pad is not None:
+    #    x= relay.reshape(x,(16))
     params = params1
     # create an IR module from the relay expression
     mod = tvm.ir.IRModule()

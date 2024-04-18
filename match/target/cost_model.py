@@ -75,7 +75,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
             for (operand, val) in self.temp_mapping.items()
         }
         self.outermost_loop_iters = {
-            operand: prod([self.loop_iters_per_mem_level[operand][idx] 
+            operand: prod([self.loop_iters_per_mem_level[operand][idx+1] 
                            for idx in range(len(self.loop_iters_per_mem_level[operand])-1)])
             for operand in self.operands
         }

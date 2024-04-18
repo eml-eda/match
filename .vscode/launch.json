@@ -11,12 +11,11 @@
             "program": "${workspaceFolder}/match/run.py",
             "args": [
                 "-t","gap9",
-                //"-i",
-                //"onnx",
-                //"-f","examples/temponet_ht 2.onnx"
+                "-i",
+                "onnx",
+                "-f","examples/small_mobilenet_V1.onnx",
                 //"relay",
                 //"-a",
-                "-c",
                 "-o","./output/last_build"
                 //"-f","examples/quant_conv.relay",
                 //"-p","examples/params_quant_conv.txt",
@@ -24,6 +23,19 @@
             ],
             "console": "integratedTerminal",
             "justMyCode": true
+        },
+        {
+            "name": "GAP9 SINGLE",
+            "type": "python",
+            "request": "launch",
+            "program": "${workspaceFolder}/docker/gap/gap_run.py",
+            "args": [
+                "-c",
+                "-o","./output/last_build",
+                "--ne16"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
         }
     ]
 }

@@ -21,23 +21,9 @@ class Gap9NE16(ExecModule):
                                           inc_path=os.path.dirname(__file__)+"/include")
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "gap9NE16_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
-        if pattern_name=="conv2d_bnorm_requant" and (dim_sizes['FY']*dim_sizes['FX'])==1:
-            return [
-                ("OY",4),("OX",4),("K",4)
-            ]
-        elif pattern_name=="conv2d_bnorm_requant" and (dim_sizes['FY']*dim_sizes['FX'])==8:
-            return [
-                ("K",8),("OX",4),("OY",self.FULL_DIM)
-            ]
-        elif layer_attrs["nn.conv2d_depthwise"]:
-            return [
-                ("K",16),("OX",4),("OY",self.FULL_DIM)
-            ]
-        else:
-            # DEFAULT LIKE CONV2D
-            return [
-                ("OY",8),("OX",2),("K",4)
-            ]
+        return [
+            ("K",32)
+        ]
     
     def specific_pattern_def(self, pattern_name: str = "conv_2d", dim_sizes: Dict[str, int] = ..., layer_attrs: Dict = ...):
         if pattern_name=="conv2d_bnorm_requant" and (dim_sizes['FY']*dim_sizes['FX'])==1:

@@ -28,7 +28,7 @@ def unsqueeze_axes(op_type,tensor_shape):
 
 SKIP_BIAS_ADD=True
 
-def sanitize_onnx(onnx_model: onnx.ModelProto):
+def sanitize_onnx_plinio(onnx_model: onnx.ModelProto):
     def create_initializer_tensor(
         name: str,
         tensor_array: np.ndarray,

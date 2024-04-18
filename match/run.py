@@ -8,6 +8,7 @@ from match.relay.get_relay import get_relay_from
 def match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, target=None, target_name=None,output_path="./match_output"):
     if relay_mod==None:    
         relay_mod,relay_params=get_relay_from(input_type,filename,params_filename)
+    #print(f"Model received {relay_mod}")
     reset_target()
     if target!=None:
         set_target(target=target)

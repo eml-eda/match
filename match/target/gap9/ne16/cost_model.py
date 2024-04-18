@@ -1,6 +1,193 @@
 from match.target.cost_model import ZigZagMatchCostModel
 from math import prod,ceil,floor
 
+import numpy as np
+from numpy import prod
+
+
+def div_and_ceil(a, b):
+    return ((a - 1) // b) + 1
+
+
+def FloorSTE(ch,N):
+    return np.floor_divide(ch,N)
+
+def DivAndCeilSTE(a,b):
+    return ((a - 1) // b) + 1
+
+
+def ModuloSTE(a,b):
+    return a % b
+
+
+class Ne16PerfModel:
+    INPUT_BUFFER_SHAPE = (5, 5, 16)
+    OUTPUT_BUFFER_SHAPE = (3, 3, 32)
+    FIFO_LATENCY = 6
+    SHIFTER_COUNT = 4
+    ADDER_COUNT = 8
+    MULTIPLIER_COUNT = 4
+    MEMORY_THROUGHPUT = 256  # bits per cycle
+
+    def __init__(self, operation, kernel_shape, depthwise=False, nq_shift=False, nq_bias=False, nq_bits=32, WEIGHTS_BITWIDTH = 8):
+        """
+        print(f'Latency breakdown:\n'
+              f'  - load: {total_load_latency} ({total_load_latency / total_latency:.2%})\n'
+              f'  - weight offset: {total_weight_offset_latency} ({total_weight_offset_latency / total_latency:.2%})\n'
+              f'  - matrixvec: {total_matrixvec_latency} ({total_matrixvec_latency / total_latency:.2%})\n'
+              f'  - update idx: {total_update_idx_latency} ({total_update_idx_latency / total_latency:.2%})\n'
+              f'  - normquant: {total_normquant_latency} ({total_normquant_latency / total_latency:.2%})\n'
+              f'  - streamout: {total_streamout_latency} ({total_streamout_latency / total_latency:.2%})\n'
+              f'TOTAL: {total_latency}')
+        """
+        self.operation = operation
+        self.kernel_shape = kernel_shape
+        self.depthwise = depthwise
+        self.nq_shift = nq_shift
+        self.nq_bias = nq_bias
+        self.nq_bits = nq_bits
+        self.WEIGHTS_BITWIDTH = WEIGHTS_BITWIDTH
+        self.INPUT_BITWIDTH = 8
+        self.OUTPUT_BITWIDTH = 8
+        self.layer = (
+                self.OUTPUT_BUFFER_SHAPE[0],
+                self.OUTPUT_BUFFER_SHAPE[1],
+                self.OUTPUT_BUFFER_SHAPE[2] if not depthwise else self.INPUT_BUFFER_SHAPE[2],
+                self.INPUT_BUFFER_SHAPE[2])
+
+    def set_layer(self, layer):
+        self.layer = layer
+        return self
+
+    def set_subtile(self, h_out=None, w_out=None, k_out=None, k_in=None):
+        #print(f"Setting subtile as {h_out} {w_out} {k_out} {k_in}")
+        h_out = h_out if h_out is not None else self.OUTPUT_BUFFER_SHAPE[0]
+        w_out = w_out if w_out is not None else self.OUTPUT_BUFFER_SHAPE[1]
+        k_out = k_out if k_out is not None else self.OUTPUT_BUFFER_SHAPE[2]
+        k_in  = k_in  if k_in  is not None else self.INPUT_BUFFER_SHAPE[2]
+        self.INPUT_BUFFER_SHAPE = (h_out + 2, w_out + 2, k_in)
+        self.OUTPUT_BUFFER_SHAPE = (h_out, w_out, k_out)
+
+    @property
+    def is_3x3(self):
+        return self.operation == 'conv' and self.kernel_shape == (3, 3) and not self.depthwise
+
+    @property
+    def is_1x1(self):
+        return self.operation == 'conv' and self.kernel_shape == (1, 1) and not self.depthwise
+
+    @property
+    def is_dw(self):
+        return self.operation == 'conv' and self.kernel_shape == (3, 3) and self.depthwise
+
+    @property
+    def load_latency(self):
+        return 10 + self.OUTPUT_BUFFER_SHAPE[0] * self.OUTPUT_BUFFER_SHAPE[1] * DivAndCeilSTE(self.INPUT_BUFFER_SHAPE[2] * self.INPUT_BITWIDTH, self.MEMORY_THROUGHPUT) if self.is_1x1 \
+            else self.FIFO_LATENCY + self.INPUT_BUFFER_SHAPE[0] * self.INPUT_BUFFER_SHAPE[1] * DivAndCeilSTE(self.INPUT_BUFFER_SHAPE[2] * self.INPUT_BITWIDTH, self.MEMORY_THROUGHPUT)
+
+    def weight_offset_latency(self, k):
+        return (self.FIFO_LATENCY + k) if self.is_dw else self.FIFO_LATENCY
+
+    def matrixvec_latency(self, k):
+        return (self.FIFO_LATENCY + k) if self.is_1x1 else (self.FIFO_LATENCY + k * self.WEIGHTS_BITWIDTH)
+
+    @property
+    def update_idx_latency(self):
+        return 2
+
+    @property
+    def nq_shift_latency(self):
+        return 0 if not self.nq_shift else DivAndCeilSTE(self.OUTPUT_BUFFER_SHAPE[2], self.SHIFTER_COUNT)
+
+    def nq_bias_latency(self, k):
+        return 0 if not self.nq_bias else 8 + DivAndCeilSTE(k, self.ADDER_COUNT)
+
+    def nq_scale_latency(self, k):
+        return 9 + DivAndCeilSTE(k * (self.nq_bits // 8), self.MULTIPLIER_COUNT)
+
+    def normquant_latency(self, k):
+        return self.nq_shift_latency + self.nq_scale_latency(k) + self.nq_bias_latency(k)
+
+    @property
+    def streamout_latency(self):
+        return 3 + self.OUTPUT_BUFFER_SHAPE[0] * self.OUTPUT_BUFFER_SHAPE[1] * DivAndCeilSTE(self.OUTPUT_BUFFER_SHAPE[2] * self.OUTPUT_BITWIDTH, self.MEMORY_THROUGHPUT) + 1  # + end
+    
+    @property
+    def weight_load_latency(self):
+        k_out_body = self.INPUT_BUFFER_SHAPE[2] if self.is_dw else self.OUTPUT_BUFFER_SHAPE[2]
+        n_out_body = FloorSTE(self.layer[2], k_out_body)
+
+        # nothing depends on k_in so no need for remainder
+        n_in = DivAndCeilSTE(self.layer[3], self.INPUT_BUFFER_SHAPE[2])
+
+        # depthwise doesn't care about spatial remainder, it just fetches the same
+        if self.is_dw:
+            return n_out_body*self.weight_offset_latency(k_out_body)
+        else:
+            return n_out_body*n_in*self.weight_offset_latency(k_out_body)
+
+    @property
+    def iter_normquant_latency(self):
+        k_out_body = self.INPUT_BUFFER_SHAPE[2] if self.is_dw else self.OUTPUT_BUFFER_SHAPE[2]
+        n_out_body = FloorSTE(self.layer[2], k_out_body)
+
+        return n_out_body * self.normquant_latency(k_out_body)
+
+    @property
+    def out_store_latency(self):
+        k_out_body = self.INPUT_BUFFER_SHAPE[2] if self.is_dw else self.OUTPUT_BUFFER_SHAPE[2]
+        n_out_body = FloorSTE(self.layer[2], k_out_body)
+
+        return n_out_body * self.streamout_latency
+
+    @property
+    def update_indexes_latency(self):
+        k_out_body = self.INPUT_BUFFER_SHAPE[2] if self.is_dw else self.OUTPUT_BUFFER_SHAPE[2]
+        n_out_body = FloorSTE(self.layer[2], k_out_body)
+
+        return n_out_body * self.update_idx_latency
+
+    @property
+    def input_load_latency(self):
+        k_out_body = self.INPUT_BUFFER_SHAPE[2] if self.is_dw else self.OUTPUT_BUFFER_SHAPE[2]
+        n_out_body = FloorSTE(self.layer[2], k_out_body)
+        return n_out_body * self.load_latency
+    
+    @property
+    def computation_iteration_latency(self):
+        k_out_body = self.INPUT_BUFFER_SHAPE[2] if self.is_dw else self.OUTPUT_BUFFER_SHAPE[2]
+        n_out_body = FloorSTE(self.layer[2], k_out_body)
+
+        # nothing depends on k_in so no need for remainder
+        n_in = DivAndCeilSTE(self.layer[3], self.INPUT_BUFFER_SHAPE[2])
+        
+        if self.is_dw:
+            return n_out_body * self.matrixvec_latency(k_out_body)
+        else:
+            return n_out_body * n_in * self.matrixvec_latency(k_out_body)
+
+    @property
+    def layer_shape_in(self):
+        return (self.layer[0] + self.kernel_shape[0] - 1, self.layer[1] + self.kernel_shape[1] - 1, self.layer[3])
+
+    def dma_latency(self, dma_stall=8, bandwidth=4):
+        h_out, w_out, k_out, _ = self.layer
+        h_in, w_in, k_in = self.layer_shape_in
+        mem = h_in * w_in * k_in + h_out * w_out * k_out + self.kernel_shape[0] * self.kernel_shape[1] * k_out * k_in
+        return (mem / bandwidth) * dma_stall
+
+
+
+def Ne16PerfModel_generalized(name, ks, depthwise, WEIGHTS_BITWIDTH, layer):
+    if ks[0]==3:
+        ne16 = Ne16PerfModel(name, (3,3), depthwise=depthwise, WEIGHTS_BITWIDTH = WEIGHTS_BITWIDTH)
+        ne16.set_layer(layer)
+        return ne16
+    else:
+        ne16 = Ne16PerfModel(name, (1,1), depthwise=depthwise, WEIGHTS_BITWIDTH = WEIGHTS_BITWIDTH)
+        ne16.set_layer(layer)
+        return ne16
+
 class Gap9NE16CostModel(ZigZagMatchCostModel):
     def __init__(
         self,
@@ -17,92 +204,27 @@ class Gap9NE16CostModel(ZigZagMatchCostModel):
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
     
     def def_transfer_cost(self):
-        def get_stride_2_op(operand):
-            if operand in ['I','X','Y']:
-                return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']*self.partial_relevant_loop_sizes['IX']
-            elif operand=='W':
-                return self.loop_sizes['C']*self.loop_sizes['FY']*self.loop_sizes['FX']
-            elif operand=='O':
-                return self.loop_sizes['K']*self.loop_sizes['OX']
-        def get_stride_1_op(operand):
-            if operand in ['I','X','Y']:
-                return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']
-            elif operand=='W':
-                return self.loop_sizes['C']
-            elif operand=='O':
-                return self.loop_sizes['K']
-        def get_num_2d_copies_op(operand):
-            if operand in ['I','X','Y']:
-                return self.partial_relevant_loop_sizes["IY"]//self.size_per_mem_level[operand]["OY"][0]
-            elif operand=='W':
-                return self.loop_sizes['K']//self.size_per_mem_level["W"]["K"][0] if self.pattern_name!='depthwise_conv_2d' else 1
-            elif operand=='O':
-                return self.loop_sizes['OY']//self.size_per_mem_level["O"]["OY"][0]
-        def get_num_1d_copies_op(operand):
-            if operand in ['I','X','Y']:
-                return self.partial_relevant_loop_sizes["IX"]//self.size_per_mem_level[operand]["OX"][0]
-            elif operand=='W':
-                return self.loop_sizes['FY']*self.loop_sizes['FX']*self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else 1
-            elif operand=='O':
-                return self.loop_sizes['OX']//self.size_per_mem_level["O"]["OX"][0]
-        def get_len_1d_copy_op(operand):
-            if operand in ['I','X','Y']:
-                return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']//self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
-            elif operand=='W':
-                return self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else (self.loop_sizes['K']//self.size_per_mem_level["W"]["K"][0])*self.loop_sizes['FY']*self.loop_sizes['FX']
-            elif operand=='O':
-                return self.loop_sizes['K']//self.size_per_mem_level["O"]["K"][0]
-        
-        dmaconfstruct={
-            operand:{
-                'hwc_to_cwh':operand=='I' and self.pattern_name=='depthwise_conv_2d',
-                'stride_2d':get_stride_2_op(operand),
-                'stride_1d':get_stride_1_op(operand),
-                'num_2d_copies':get_num_2d_copies_op(operand),
-                'num_1d_copies':get_num_1d_copies_op(operand),
-                'len_1d_copy':get_len_1d_copy_op(operand),
-            } for operand in self.operands
+        layer_params = (
+            self.loop_sizes["OY"],
+            self.loop_sizes["OX"],
+            self.loop_sizes["K"],
+            self.loop_sizes["C"]    
+        )
+        self.ne16=Ne16PerfModel_generalized(
+                name='conv',
+                ks=(self.loop_sizes["FY"],self.loop_sizes["FX"]),
+                depthwise=self.pattern_name=='depthwise_conv_2d',
+                WEIGHTS_BITWIDTH=8,
+                layer=layer_params)
+        self.ne16.set_subtile(self.size_per_mem_level["O"]["OY"][0],
+                              self.size_per_mem_level["O"]["OX"][0],
+                              self.loop_sizes['K']//self.size_per_mem_level["O"]["K"][0],
+                              self.size_per_mem_level["W"]["C"][0])
+        return {
+            "O":int(self.ne16.out_store_latency),
+            "W":int(self.ne16.weight_load_latency),
+            "I":int(self.ne16.input_load_latency)
         }
-        def calc_overhead(operand):
-            if dmaconfstruct[operand]['hwc_to_cwh']:
-                return (27*dmaconfstruct[operand]['len_1d_copy'])+1000
-            elif dmaconfstruct[operand]['num_2d_copies']==1 and dmaconfstruct[operand]['num_1d_copies']==1:
-                return 100+300
-            else:
-                return (27*dmaconfstruct[operand]['num_2d_copies'])+300
-            
-        overhead_per_op={operand:calc_overhead(operand) for operand in self.operands}
-
-        def calc_total_transfer_cost_per_op(operand):
-            if operand=='O':
-                return self.output_transfer_costs[0]+overhead_per_op['O']
-            else:
-                return (self.input_transfer_costs[operand][0]*(2 if dmaconfstruct[operand]['hwc_to_cwh'] else 1))+overhead_per_op[operand]
-        
-        self.dmaconfstruct=dmaconfstruct
-        self.overhead_per_op=overhead_per_op
-        return {operand:calc_total_transfer_cost_per_op(operand) for operand in self.operands}
     
     def def_innermost_loops_cost(self):
-        def _floor(ch, N):
-            return floor((ch + N - 1) / N)
-        latency=0
-        ch_in = self.dmaconfstruct[self.input_operands[0]]['len_1d_copy']
-        ch_out = self.dmaconfstruct['O']['len_1d_copy']
-        kernel_size_x = self.loop_sizes['FX']
-        kernel_size_y = self.loop_sizes['FY']
-        output_shape=[1,self.dmaconfstruct['O']['len_1d_copy'],self.dmaconfstruct['O']['num_2d_copies'],self.dmaconfstruct['O']['num_1d_copies']]
-        strides=[1,1]
-        if self.layer_data.specific_pattern in ["conv2d","pointwise_conv2d"]:
-            iterations = _floor(int(output_shape[2]*strides[0]), 8)* _floor(int(output_shape[3]*strides[1]), 2) * _floor(int(ch_out), 4)
-            im2col = kernel_size_x * kernel_size_y * ch_in * 2
-            matmul = (5 + _floor(kernel_size_x * kernel_size_y * ch_in, 4) * (6 + 8) + 10)
-            latency += iterations * (im2col + matmul)
-        elif self.layer_data.specific_pattern in ['depthwise_conv2d','depthwise_conv2d_less_4']:
-            # 1 MAC/cycle
-            latency = 4 * _floor(ch_out, 8)  * _floor(output_shape[3]*strides[1],4) * kernel_size_x * kernel_size_y * int(output_shape[2]*strides[0])
-        elif self.layer_data.specific_pattern=='dense':
-            latency += _floor(ch_in, 2) * _floor(ch_out, 4)
-        else:
-            latency += _floor(ch_in, 2) * _floor(ch_out, 4)
-        return latency
+        return int(self.ne16.computation_iteration_latency+self.ne16.update_indexes_latency+self.ne16.iter_normquant_latency)
