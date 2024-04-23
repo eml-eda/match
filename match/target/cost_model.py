@@ -55,6 +55,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.operands = self.temporal_mapping.operand_list
         self.input_operands = [op for op in self.operands if op!="O"]
         self.operand_loops = self.layer.operand_loop_dim
+        self.spatial_sizes = self.spatial_mapping.spatial_loop_dim_size
         self.pattern_name = self.layer.layer_attrs["operator_type"]
         self.layer_data = self.layer.layer_attrs["match_layer_data"]
 
@@ -87,7 +88,10 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.size_per_mem_level = {
             operand: {
                 reldim: [prod(
-                    [val[1] for val in self.temp_mapping[operand][memory_level] if val[0] == reldim]
+                    [val[1] for m_lev in range(memory_level+1) for val in self.temp_mapping[operand][m_lev] if val[0] == reldim] +
+                    [val[1] for val in self.spatial_sizes if val[0]==reldim] + [
+                        1 if operand not in self.input_operands else self.layer_data.strides[0 if reldim=="OY" else 1]
+                    ]
                 ) for memory_level in range(len(self.temp_mapping[operand]))]
                 for reldim in self.relevancy_map[operand]
             }
@@ -117,6 +121,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         sorted_multiplicities=sorted(set([self.outermost_loop_iters[operand] for operand in self.operands]))
         cycles=0
         prev_mult_=0
+        #print(f"Cost model multiplicities {sorted_multiplicities}")
         for idx,mult_ in enumerate(sorted_multiplicities):
             if idx==0:
                 cycles+=max([0]+[self.transfer_costs[operand] for operand in self.operands if operand!='O' and self.outermost_loop_iters[operand]>=mult_])

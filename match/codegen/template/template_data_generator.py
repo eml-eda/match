@@ -12,14 +12,19 @@ REQUIRED_HW_DEPENDENT_PARAMS=("weights")
 
 class TemplateDataGenerator:
     def __init__(self,mod:tvm.ir.IRModule,temporal_mapping:List=[],
-            layer_data:LayerData=None,exec_module:ExecModule=None,pattern_name:str=""):
+            layer_data:LayerData=None,exec_module:ExecModule=None,pattern_name:str="",
+            latency:int=0,energy:int=0):
         self.mod=mod
         self.temporal_mapping=temporal_mapping
         self.layer_data=layer_data
         self.exec_module=exec_module
         self.pattern_name=pattern_name
         self.template_data=dict()
-        self.template_data["debug_level"]=["start_codegen","end_codegen"]
+        self.template_data["debug_level"]=[]
+        #self.template_data["debug_level"].append("start_codegen")
+        #self.template_data["debug_level"].append("end_codegen")
+        self.latency=latency
+        self.energy=energy
             
     def generate_hw_dependent_template_data(self):
         hw_dependent_template_data = dict()
@@ -37,6 +42,8 @@ class TemplateDataGenerator:
     def generate_general_template_data(self):
         general_template_data=dict()
         ## layer data
+        general_template_data["latency"]=self.latency
+        general_template_data["energy"]=self.energy
         general_template_data["layer_data"] = self.layer_data
         general_template_data["operands"] = self.layer_data.operands
         general_template_data["input_operands"] = self.layer_data.input_operands

@@ -1,6 +1,7 @@
 from typing import Dict
 from match.target.gap9.cluster.cost_model import Gap9ClusterCostModel
 from match.target.gap9.cluster.network_transformations import network_transformations as gap9network_transformations
+from match.target.gap9.cluster.network_transformations import adjust_network as gap_adjust_net
 from match.target.gap9.cluster.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
 from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
 import os
@@ -156,3 +157,6 @@ class Gap9Cluster(ExecModule):
     
     def layout_per_operand_def(self, pattern_name, specific_pattern, operands):
         return {operand:"NHWC" for operand in operands}
+    
+    def adjust_network(self, opts):
+        return gap_adjust_net(opts=opts)

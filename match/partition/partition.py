@@ -75,13 +75,13 @@ def partition(mod, params, dpu, opts):
     pipeline.append(MatchOnnxBiasAdd())
     pipeline.append(transform.InferType())
 
-    pipeline+=target.adjust_network(opts)
+    pipeline+=target.network_transformations(opts)
 
     pipeline.append(transform.InferType())
     pipeline.append(transform.MergeComposite(pattern_table(target=target)))
     pipeline.append(transform.AnnotateTarget(["match"]))
-
-    #pipeline+=target.network_transformations(opts)
+    
+    pipeline+=target.adjust_network(opts)
 
     pipeline.append(transform.InferType())
     pipeline.append(transform.PartitionGraph())

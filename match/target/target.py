@@ -118,7 +118,20 @@ class MatchTarget(ABC):
         layer_data=tmapgen.get_layer_data()
         pt_res=PatternResult(match_pt,layer_data)
         temporal_mapping,latency,energy=self.find_in_cached_list(pt_res)
-        return temporal_mapping,layer_data,match_pt.exec_module
+        if temporal_mapping is None:
+            try:
+                tmapgen.generate_temporal_mapping()
+            except Exception as exc:
+                raise Exception("No valid loop ordering found")
+            tmapgen.constraint_temporal_mapping()
+            temporal_mapping=tmapgen.get_temporal_mapping()
+            latency=tmapgen.get_latency()
+            energy=tmapgen.get_energy()
+            pt_res.set_temporal_mapping(temporal_mapping)
+            pt_res.set_latency(latency)
+            pt_res.set_energy(energy)
+            self.add_pt_res_to_cache(pt_res)
+        return temporal_mapping,layer_data,match_pt.exec_module,latency,energy
 
     def add_pt_res_to_cache(self,pt_res):
         self.__cached_pattern_results__.append(pt_res)
@@ -201,6 +214,7 @@ class MatchTarget(ABC):
             # if supported get latency and energy of pattern
             try:
                 latency,energy=self.evaluate_pattern(node,match_pt)
+                print(f"\nNode is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}\n")
             except Exception as exc:
                 return False
             # check all the patterns that are after me
@@ -211,6 +225,7 @@ class MatchTarget(ABC):
                 if is_pattern_matching(other_pt.pattern(),node) and other_pt.additional_checks(node):
                     try:
                         other_pt_latency,other_pt_energy=self.evaluate_pattern(node,other_pt)
+                        print(f"\nNode is also supported by {other_pt.name} with expected latency {other_pt_latency} and expected energy {other_pt_energy}\n")
                     except Exception as exc:
                         continue
                     # if the result gathered by this other matching pattern is better break all
@@ -259,12 +274,15 @@ class MatchTarget(ABC):
 
     def adjust_network(self,opts):
         pipeline=[]
-        for exec_module in [ex_mod for ex_mod in self.exec_modules if ex_mod.name not in self.disabled_exec_modules]:
-            pipeline+=exec_module.network_transformations(opts=opts)
+        for exec_module in self.exec_modules:
+            pipeline+=exec_module.adjust_network(opts=opts)
         return pipeline
     
     def network_transformations(self,opts):
-        return []
+        pipeline=[]
+        for exec_module in self.exec_modules:
+            pipeline+=exec_module.network_transformations(opts=opts)
+        return pipeline
     
     def disable_exec_module(self,exec_module_name:str=""):
         self.disabled_exec_modules.append(exec_module_name)

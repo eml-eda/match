@@ -15,7 +15,7 @@
                 "onnx",
                 "-f","examples/small_mobilenet_V1.onnx",
                 //"relay",
-                //"-a",
+                //"-c",
                 "-o","./output/last_build"
                 //"-f","examples/quant_conv.relay",
                 //"-p","examples/params_quant_conv.txt",

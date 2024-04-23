@@ -1,3 +1,30 @@
+/*
+ * Mohamed Amine Hamdi <mohamed.hamdi@polito.it>
+ *
+ * Copyright (C) 2024 Politecnico Di Torino
+ * 
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License. 
+*/
+
+/*
+expected latency -> ${latency}
+expected energy -> ${energy}
+*/
+
+/*
+${sw_for_loops}
+*/
+
 % for inc_name in include_list:
 #include <${inc_name}>
 % endfor
@@ -324,13 +351,13 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     ${mem_apis.copy_out_curr_computation}(
         &comm_kernel,
         &dim_O,kernel_O_curr_int,kernel_O_curr_ext,
-        ${for_loop["mem_O"]},${sw_for_loops[last_movements["O"]-1]["mem_O"]}
+        ${for_loop["mem_O"]},${default_mem["O"] if last_movements["O"]==0 else sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
     ${sync_apis.wait_output_transfers}(&comm_kernel);
     if(iter>0)  ${mem_apis.copy_out_prev_computation}(
         &comm_kernel,
         &dim_O,kernel_O_prev_int,kernel_O_prev_ext,
-        ${for_loop["mem_O"]},${sw_for_loops[last_movements["O"]-1]["mem_O"]}
+        ${for_loop["mem_O"]},${default_mem["O"] if last_movements["O"]==0 else sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
     kernel_O_prev_ext=kernel_O_curr_ext;kernel_O_prev_int=kernel_O_curr_int;
     % for operand in operands:
@@ -357,7 +384,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     ${sync_apis.prev_computation}(&comm_kernel);
     ${mem_apis.copy_out_prev_computation}(
         &comm_kernel,&dim_O,kernel_O_prev_int,kernel_O_prev_ext,
-        ${for_loop["mem_O"]},${sw_for_loops[last_movements["O"]-1]["mem_O"]}
+        ${sw_for_loops[last_movements["O"]]["mem_O"]},${default_mem["O"] if last_movements["O"]==0 else sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
     ${sync_apis.async_transfers}(&comm_kernel);
     ${mem_apis.shutdown_mem}(&comm_kernel);

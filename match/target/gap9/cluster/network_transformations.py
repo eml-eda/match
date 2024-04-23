@@ -255,10 +255,79 @@ class RequantRewriterPlinioOnnx:
         return self.transform_module(mod)
 
 
+class FindLayoutTransformShape(ExprVisitor):
+    """Convert relay graph to graph
+    """
+    def __init__(self):
+        super().__init__()
+        self.shapes = []
+
+    def visit_call(self, call):
+        """Extract parameters and construct graph"""
+        self.visit(call.op)
+        for a in call.args:
+            self.visit(a)
+
+        if isinstance(call.op, tvm.ir.Op) and not isinstance(call.args[0], relay.Constant):
+            # we don't want to insert transformations on constants like weights and biases
+            if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'match':
+                self.shapes.append(call.args[0].checked_type.shape)
+
+            elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'match':
+                self.shapes.append(call.args[0].checked_type.shape)
+
+@transform.function_pass(opt_level=0)
+class GapLayoutTransform(ExprMutator):
+    """Insert match specific layout transform before and after each 'match' annotated relay Function
+    TODO: make this smart to avoid unnecessary transformations
+    """
+
+    def transform_function(self, func, mod, ctx):
+        self.f = FindLayoutTransformShape()
+        self.f.visit(func)
+
+        return self.visit(func)
+
+    def create_transform(self, x, shape, end):
+        """NHWC to NCHW transformations
+        """
+        if end and len(shape)==4 and shape[2]>1 and shape[3]>1:
+            x = relay.reshape(x,(shape[0],shape[2],shape[3],shape[1]))
+            x = relay.op.transpose(x,(0,3,1,2))
+        return x
+
+    def visit_call(self, call):
+        """Rewrite ops
+        """
+        new_fn = self.visit(call.op)
+        new_args = [self.visit(arg) for arg in call.args]
+        new_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
+
+        if isinstance(call.op, tvm.ir.Op) and not isinstance(call.args[0], relay.Constant):
+            # we don't want to insert transformations on constants like weights and biases
+            if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'match':
+                # insert transformation before this op
+                shape = self.f.shapes.pop(0)
+                x = self.create_transform(new_args[0], shape, False)
+                new_call = relay.op.annotation.compiler_begin(x, 'match')
+
+            elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'match':
+                # insert transformation after this op
+                shape = self.f.shapes.pop(0)
+                new_call = self.create_transform(new_call, shape, True)
+
+        return new_call
+
 def network_transformations(opts):
     pipeline=[]
     pipeline.append(RequantRewriterPlinioOnnx())  
     #if 'requant_transform' not in opts or opts['requant_transform'] != '0':
     #    pipeline.append(Gap9ClusterOnnxRequantTransform())   
     #pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))
+    return pipeline
+
+def adjust_network(opts):
+    pipeline=[]
+    pipeline.append(GapLayoutTransform())
+    
     return pipeline

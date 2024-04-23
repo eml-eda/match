@@ -33,25 +33,25 @@ class Gap9ClusterCostModel(ZigZagMatchCostModel):
                 return self.loop_sizes['K']
         def get_num_2d_copies_op(operand):
             if operand in ['I','X','Y']:
-                return self.partial_relevant_loop_sizes["IY"]//self.size_per_mem_level[operand]["OY"][0]
+                return self.size_per_mem_level[operand]["OY"][0]
             elif operand=='W':
-                return self.loop_sizes['K']//self.size_per_mem_level["W"]["K"][0] if self.pattern_name!='depthwise_conv_2d' else 1
+                return self.size_per_mem_level["W"]["K"][0] if self.pattern_name!='depthwise_conv_2d' else 1
             elif operand=='O':
-                return self.loop_sizes['OY']//self.size_per_mem_level["O"]["OY"][0]
+                return self.size_per_mem_level["O"]["OY"][0]
         def get_num_1d_copies_op(operand):
             if operand in ['I','X','Y']:
-                return self.partial_relevant_loop_sizes["IX"]//self.size_per_mem_level[operand]["OX"][0]
+                return self.size_per_mem_level[operand]["OX"][0]
             elif operand=='W':
                 return self.loop_sizes['FY']*self.loop_sizes['FX']*self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else 1
             elif operand=='O':
-                return self.loop_sizes['OX']//self.size_per_mem_level["O"]["OX"][0]
+                return self.size_per_mem_level["O"]["OX"][0]
         def get_len_1d_copy_op(operand):
             if operand in ['I','X','Y']:
-                return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']//self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
+                return self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
             elif operand=='W':
-                return self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else (self.loop_sizes['K']//self.size_per_mem_level["W"]["K"][0])*self.loop_sizes['FY']*self.loop_sizes['FX']
+                return self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else (self.size_per_mem_level["W"]["K"][0])*self.loop_sizes['FY']*self.loop_sizes['FX']
             elif operand=='O':
-                return self.loop_sizes['K']//self.size_per_mem_level["O"]["K"][0]
+                return self.size_per_mem_level["O"]["K"][0]
         
         dmaconfstruct={
             operand:{
@@ -92,7 +92,7 @@ class Gap9ClusterCostModel(ZigZagMatchCostModel):
         kernel_size_x = self.loop_sizes['FX']
         kernel_size_y = self.loop_sizes['FY']
         output_shape=[1,self.dmaconfstruct['O']['len_1d_copy'],self.dmaconfstruct['O']['num_2d_copies'],self.dmaconfstruct['O']['num_1d_copies']]
-        strides=[1,1]
+        strides=self.layer_data.strides
         if self.layer_data.specific_pattern in ["conv2d","pointwise_conv2d"]:
             iterations = _floor(int(output_shape[2]*strides[0]), 8)* _floor(int(output_shape[3]*strides[1]), 2) * _floor(int(ch_out), 4)
             im2col = kernel_size_x * kernel_size_y * ch_in * 2

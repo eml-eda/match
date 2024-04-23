@@ -322,3 +322,6 @@ class ExecModule(ABC):
     
     def add_option_to_module(self,option,value):
         self.module_options[option]=value
+
+    def adjust_network(self,opts):
+        return []

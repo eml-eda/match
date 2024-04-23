@@ -111,7 +111,9 @@ void __attribute__ ((noinline)) ne16_init_platform(void (inner_function)(unsigne
     ne16_callback=inner_function;
     //void* cl_ne16_args[4];
     //cl_ne16_args[0]=args[0];cl_ne16_args[1]=args[1];cl_ne16_args[2]=inner_function;cl_ne16_args[3]=common_kernel;
+    //start_g_perf_counter();
     pi_cluster_send_task_to_cl(&cluster_dev, pi_cluster_task(&cluster_task,ne16_init_platform_,args));
+    //stop_g_perf_counter();
     //print("finished cluster\n");
 }
 void ne16_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsigned char first_op_db,dimension_I* dim_I,
