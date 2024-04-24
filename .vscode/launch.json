@@ -11,18 +11,18 @@
             "program": "${workspaceFolder}/match/run.py",
             "args": [
                 "-t","gap9",
-                "-i",
-                "onnx",
-                "-f","examples/small_mobilenet_V1.onnx",
+                //"-i",
+                //"onnx",
+                //"-f","examples/small_mobilenet_V1.onnx",
                 //"relay",
-                //"-c",
+                "-c",
                 "-o","./output/last_build"
                 //"-f","examples/quant_conv.relay",
                 //"-p","examples/params_quant_conv.txt",
                 
             ],
             "console": "integratedTerminal",
-            "justMyCode": true
+            "justMyCode": false
         },
         {
             "name": "GAP9 SINGLE",

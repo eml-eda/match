@@ -26,13 +26,13 @@ def numpy_to_array_models(np_arr: npt.NDArray, dtype: str):
 
 def create_model_conv_2d(weight_bits: int = 8,
                  act: bool = True,
-                 input_shape: Tuple[int, ...] = (1, 1, 32, 32),
-                 weights_shape: Tuple[int, ...] = (32, 1, 3, 3),
+                 input_shape: Tuple[int, ...] = (1, 1, 2, 2),
+                 weights_shape: Tuple[int, ...] = (3, 1, 3, 3),
                  weights_values: Optional[npt.NDArray] = None,
                  bias_values: Optional[npt.NDArray] = None,
                  padding: Tuple[int, int] = (1, 1),
                  strides: Tuple[int, int] = (1, 1),
-                 shift_bits: int = 6,
+                 shift_bits: int = 3,
                  depthwise: bool = False,
                  input_pad: List=None
                  ):

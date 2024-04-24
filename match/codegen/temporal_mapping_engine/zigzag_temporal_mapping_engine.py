@@ -148,14 +148,14 @@ class ZigZagEngine(TemporalMappingEngine):
             self.energy=-1
             self.latency=-1
             self.cme=None
-            print(f"No valid loop ordering found {exc}")
-            raise Exception("No valid loop ordering found")
+            print(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
+            raise Exception(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
         except Exception as exc:
             self.energy=-1
             self.latency=-1
             self.cme=None
-            print(f"Other exception {exc}")
-            raise Exception("No valid loop ordering found")
+            print(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
+            raise Exception(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
         self.cme = cme[0][0]
         self.zigzag_temporal_mapping = self.cme.temporal_mapping.mapping_dic_stationary
         if self.debuglayer:

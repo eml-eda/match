@@ -380,7 +380,7 @@ class GapPadTransform(ExprMutator):
             if int(arg.checked_type.shape[1])%16==0:
                 return arg
             else:
-                return relay.nn.pad(arg,((0,0),(0,16-(int(arg.checked_type.shape[1])%16)),(0,0),(0,0)))
+                return relay.reshape(relay.nn.pad(relay.reshape(arg,(arg.checked_type.shape[0],arg.checked_type.shape[2],arg.checked_type.shape[3],arg.checked_type.shape[1])),((0,0),(0,0),(0,0),(0,16-(int(arg.checked_type.shape[1])%16)))),(arg.checked_type.shape[0],arg.checked_type.shape[1]+16-(int(arg.checked_type.shape[1])%16),arg.checked_type.shape[2],arg.checked_type.shape[3]))
         elif isinstance(arg.op, tvm.ir.Op):
             new_fn = self.visit(arg.op)
             new_args = [self.visit_pad_call_args(arg_) for arg_ in arg.args]

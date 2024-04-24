@@ -337,6 +337,5 @@ class Gap9NE16CostModel(ZigZagMatchCostModel):
                                                          (self.size_per_mem_level["O"]["OY"][0],self.size_per_mem_level["O"]["OX"][0],self.size_per_mem_level["O"]["K"][0])))
         if self.loop_sizes["C"]%16!=0:
             #add software padding cost
-            self.match_overall_latency+=self.partial_relevant_loop_sizes["IY"]*self.partial_relevant_loop_sizes["IX"]*(16-self.loop_sizes["C"]%16)*1.55
+            self.match_overall_latency+=self.partial_relevant_loop_sizes["IY"]*self.partial_relevant_loop_sizes["IX"]*(self.loop_sizes["C"]+(16-self.loop_sizes["C"]%16))*1.5
         self.total_latency=self.match_overall_latency
-        #print(self.total_latency)

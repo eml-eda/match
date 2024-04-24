@@ -270,10 +270,10 @@ class FindLayoutTransformShape(ExprVisitor):
 
         if isinstance(call.op, tvm.ir.Op) and not isinstance(call.args[0], relay.Constant):
             # we don't want to insert transformations on constants like weights and biases
-            if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'match':
+            if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'default':
                 self.shapes.append(call.args[0].checked_type.shape)
 
-            elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'match':
+            elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'default':
                 self.shapes.append(call.args[0].checked_type.shape)
 
 @transform.function_pass(opt_level=0)
@@ -291,7 +291,7 @@ class GapLayoutTransform(ExprMutator):
     def create_transform(self, x, shape, end):
         """NHWC to NCHW transformations
         """
-        if end and len(shape)==4 and shape[2]>1 and shape[3]>1:
+        if len(shape)==4 and shape[2]>1 and shape[3]>1:
             x = relay.reshape(x,(shape[0],shape[2],shape[3],shape[1]))
             x = relay.op.transpose(x,(0,3,1,2))
         return x
@@ -305,13 +305,13 @@ class GapLayoutTransform(ExprMutator):
 
         if isinstance(call.op, tvm.ir.Op) and not isinstance(call.args[0], relay.Constant):
             # we don't want to insert transformations on constants like weights and biases
-            if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'match':
+            if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'default':
                 # insert transformation before this op
                 shape = self.f.shapes.pop(0)
                 x = self.create_transform(new_args[0], shape, False)
-                new_call = relay.op.annotation.compiler_begin(x, 'match')
+                new_call = relay.op.annotation.compiler_begin(x, 'default')
 
-            elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'match':
+            elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'default':
                 # insert transformation after this op
                 shape = self.f.shapes.pop(0)
                 new_call = self.create_transform(new_call, shape, True)
