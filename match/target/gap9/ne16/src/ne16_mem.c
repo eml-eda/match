@@ -107,6 +107,8 @@ void ne16_init_platform_(
 }
 
 void __attribute__ ((noinline)) ne16_init_platform(void (inner_function)(unsigned int* args_inner_function),unsigned int* args,common_kernel* common_kernel){
+    stop_g_perf_counter();
+    start_g_perf_counter();
     ne16_common_kernel=common_kernel;
     ne16_callback=inner_function;
     //void* cl_ne16_args[4];
@@ -115,6 +117,9 @@ void __attribute__ ((noinline)) ne16_init_platform(void (inner_function)(unsigne
     pi_cluster_send_task_to_cl(&cluster_dev, pi_cluster_task(&cluster_task,ne16_init_platform_,args));
     //stop_g_perf_counter();
     //print("finished cluster\n");
+    int32_t cycles=stop_g_perf_counter();
+    printf(",%d",cycles);
+    start_g_perf_counter();
 }
 void ne16_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsigned char first_op_db,dimension_I* dim_I,
                                 int* second_op_sizes,unsigned char second_op_db,dimension_W* dim_W,

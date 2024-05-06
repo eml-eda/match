@@ -38,12 +38,17 @@ static unsigned int memalloc_W(){
 }
 
 void cluster_init_platform(void (inner_function)(unsigned int* args_inner_function),unsigned int* args,common_kernel* common_kernel){
+    stop_g_perf_counter();
+    start_g_perf_counter();
     //printf("Cluster init platform!\n");
     //start_g_perf_counter();
     pi_cluster_task(&cluster_task,inner_function,args);
     pi_cluster_send_task_to_cl(&cluster_dev, &cluster_task);
     //stop_g_perf_counter();
     //printf("Finished cluster init_platform\n");
+    int32_t cycles=stop_g_perf_counter();
+    printf(",%d",cycles);
+    start_g_perf_counter();
     return;
 }
 

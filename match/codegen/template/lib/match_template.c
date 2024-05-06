@@ -310,10 +310,13 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         &layer_loops_idxs
     );
     add_relative_idxs_${operand}(&tile_idxs_${operand}_kernel_relative,&abs_tile_idxs_${operand});
-    unsigned int kernel_${operand}_pt = loop_${operand}_${last_movements[operand]}_int_pt+${mem_apis.pointer_offset[operand]}(&comm_kernel,&tile_idxs_${operand}_kernel_relative,mem_computation);
     % if operand in input_operands and layer_has_padding:
     calc_padding_${operand}_mem_computation(&dim_${operand},&abs_tile_idxs_${operand});
     kernel_set_padding(kernel.common_kernel,&(dim_${operand}.common_dim));
+    % endif
+    unsigned int kernel_${operand}_pt = loop_${operand}_${last_movements[operand]}_int_pt+${mem_apis.pointer_offset[operand]}(&comm_kernel,&tile_idxs_${operand}_kernel_relative,mem_computation);
+    % if operand in input_operands and layer_has_padding:
+    if(kernel_${operand}_pt<loop_${operand}_${last_movements[operand]}_int_pt)  kernel_${operand}_pt=loop_${operand}_${last_movements[operand]}_int_pt;
     % endif
     % else:
     ## NOTHING HAS CHANGED
