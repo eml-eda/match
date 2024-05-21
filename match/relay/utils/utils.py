@@ -17,6 +17,7 @@ from typing import Tuple, Dict, Optional, Union
 import numpy.typing as npt
 from match.target.target import MatchTarget
 from mako.template import Template
+from match.utils import get_output_path
 
 def numpy_to_array(np_arr: npt.NDArray, dtype: str):
     """ Convert a numpy array to a TVM array with datatype `dtype`.
@@ -285,8 +286,10 @@ def tvmc_wrapper(model: TVMCModel, target: str = "gap9, c",
     compile_model(tvmc_model=model,
                   target=target,
                   executor=Executor("aot",
-                                    {"interface-api": "c",
-                                     "unpacked-api": 1}
+                                    {
+                                        "interface-api": "c",
+                                        "unpacked-api": 1
+                                    }
                                     ),
                   runtime=Runtime("crt"),
                   output_format="mlf",

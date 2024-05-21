@@ -3,6 +3,7 @@ from tvm.relay.dataflow_pattern import match as is_pattern_matching
 from match.partition.partitioning_pattern import PartitioningPattern
 from tvm.relay.dataflow_pattern import CallPattern,AttrPattern,AltPattern
 from match.codegen.temporal_mapping_generator import TemporalMappingGenerator
+from match.utils import save_codegen_schedule
 from functools import partial
 import tvm 
 
@@ -116,6 +117,7 @@ class MatchTarget(ABC):
         tmapgen.generate_workload()
         tmapgen.set_exec_module_for_layer()
         layer_data=tmapgen.get_layer_data()
+        spatial_mapping=tmapgen.get_spatial_mapping()
         pt_res=PatternResult(match_pt,layer_data)
         temporal_mapping,latency,energy=self.find_in_cached_list(pt_res)
         if temporal_mapping is None:
@@ -131,6 +133,7 @@ class MatchTarget(ABC):
             pt_res.set_latency(latency)
             pt_res.set_energy(energy)
             self.add_pt_res_to_cache(pt_res)
+        save_codegen_schedule(node,temporal_mapping,spatial_mapping)
         return temporal_mapping,layer_data,match_pt.exec_module,latency,energy
 
     def add_pt_res_to_cache(self,pt_res):

@@ -136,7 +136,7 @@ class ExecModule(ABC):
         """
         return [
             # from lower level to higher level memories
-            MemoryInst(name="l1_mem",k_bytes=128,operands=operands,double_buffering_support=True),
+            MemoryInst(name="l1_mem",k_bytes=90,operands=operands,double_buffering_support=True),
             MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]
 
@@ -201,7 +201,7 @@ class ExecModule(ABC):
                         dim_size=layer_data.layer_attrs["loop_sizes"][opt_sptmap[0]],optimal_spat=self.get_optimal_spat_size(opt_sptmap[1],layer_data.layer_attrs["loop_sizes"][opt_sptmap[0]])))\
                                         for opt_idx,opt_sptmap in enumerate(self.optimal_spatial_mapping)},
                     "memory_operand_links": {op:op_link_name(op) for op in layer_data.operands},
-                    "unordered_loops":["FX","FY"]+(["C"] if "nn.dense" != pattern_inst.ordered_operation else []),
+                    "unordered_loops":["FX","FY","C"],#+(["C"] if "nn.dense" != pattern_inst.ordered_operation else []),
                 }
         }
     

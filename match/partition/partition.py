@@ -18,7 +18,7 @@ Operations to support the SOMA accelerator.
 """
 
 from typing import Any, List
-from match.partition.network_transformations import MatchOnnxBiasAdd,MatchOnnxBiasAddRemoveFromMain, MatchSaveModule, MatchAddCastInMain
+from match.partition.network_transformations import MatchOnnxBiasAdd,MatchOnnxBiasAddRemoveFromMain, MatchSaveModule, MatchAddCastInMain, MatchSaveRelay
 import tvm
 import logging
 from functools import partial
@@ -70,27 +70,31 @@ def partition(mod, params, dpu, opts):
     target=get_target()
 
     pipeline = []
-
+    pipeline.append(MatchSaveRelay("hw_independent"))
     pipeline.append(transform.InferType())
     pipeline.append(MatchOnnxBiasAdd())
     pipeline.append(transform.InferType())
 
+    pipeline.append(MatchSaveRelay("pre_hw_dependent"))
     pipeline+=target.network_transformations(opts)
 
     pipeline.append(transform.InferType())
+    pipeline.append(MatchSaveRelay("hw_dependent"))
     pipeline.append(transform.MergeComposite(pattern_table(target=target)))
     pipeline.append(transform.AnnotateTarget(["match"]))
-    
+    pipeline.append(MatchSaveRelay("merged"))
     pipeline+=target.adjust_network(opts)
-
+    pipeline.append(MatchSaveRelay("hw_adjust"))
     pipeline.append(transform.InferType())
     pipeline.append(transform.PartitionGraph())
     pipeline.append(transform.InferType())
+    pipeline.append(MatchSaveRelay("partitioned"))
 
     pipeline.append(MatchOnnxBiasAddRemoveFromMain())
     pipeline.append(MatchAddCastInMain())
+    pipeline.append(MatchSaveRelay("fixes"))
     pipeline.append(transform.InferType())
-
+    
     pipeline.append(MatchSaveModule())
     seq = tvm.transform.Sequential(pipeline)
     with tvm.transform.PassContext(opt_level=3):

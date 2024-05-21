@@ -34,11 +34,6 @@ class MatchDriver:
         :param target: target parameter passed to TVMC
         :param fusion: Enable/Disable operator fusion pass for TVM generated
             kernels
-        :param init_value: input value set in calling wrapper
-        :param indefinite: put infinite loop around TVM network. Useful for
-            power measurements.
-        :param boot_cluster: put cluster cores boot code in C wrapper before
-            calling TVM generated code.
         """
         target_options=""
         for key,val in target_additional_options.items():

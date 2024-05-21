@@ -5,16 +5,29 @@ from match.driver.driver import driver
 import argparse
 from match.relay.get_relay import get_relay_from
 
+from match.utils import save_all_relay,add_save_relay,reset_relay_list,reset_output_path,set_output_path,reset_schedules,save_all_schedules
+import copy
+
 def match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, target=None, target_name=None,output_path="./match_output"):
     if relay_mod==None:    
         relay_mod,relay_params=get_relay_from(input_type,filename,params_filename)
-    #print(f"Model received {relay_mod}")
+    reset_output_path()
+    reset_relay_list()
+    reset_schedules()
+    set_output_path(output_path)
+    add_save_relay(prefix="start",mod=relay_mod,params=relay_params)
     reset_target()
     if target!=None:
         set_target(target=target)
     target=get_target(target_name=target_name)
     driver(relay_mod, relay_params, target=target,output_path=output_path)
+    save_all_relay()
+    save_all_schedules()
     return CompiledModule.result
+
+def get_relay_network(input_type="onnx",filename="examples/temponet_ht.onnx",params_filename=None):
+    return get_relay_from(input_type,filename,params_filename)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -101,11 +114,6 @@ if __name__ == "__main__":
 
     if args.convexample:
         mod,params=create_model_conv_2d()
-        #from tvm import relay as relay_tvm
-        #with open("examples/quant_conv.relay","w") as mod_file:
-        #    mod_file.write(relay_tvm.astext(mod))
-        #with open("examples/params_quant_conv.txt","wb") as par_file:
-        #    par_file.write(relay_tvm.save_param_dict(params=params))
     elif args.addexample:
         mod,params=create_model_add_convs()
         

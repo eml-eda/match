@@ -1,10 +1,13 @@
+import json
 from math import prod
+import re
 from match.relay.compiled_module import CompiledModule
 from tvm.relay.expr_functor import ExprMutator, ExprVisitor
 from tvm.relay.dataflow_pattern import DFPatternCallback, is_op, rewrite, wildcard
 from tvm.relay import transform
 from tvm import relay
 import tvm
+from match.utils import add_save_relay
 
 class RewriteOnnxBiasesCallback(DFPatternCallback):
     def __init__(self, require_type=False):
@@ -138,3 +141,20 @@ class MatchSaveModule:
 
     def __call__(self, mod):
         return self.transform_module(mod)
+    
+@tvm.ir.transform.module_pass(opt_level=0)
+class MatchSaveRelay:
+
+    def __init__(self,prefix_relay:str=""):
+        super().__init__()
+        self.prefix_relay=prefix_relay
+
+    def transform_module(
+        self, mod: tvm.ir.IRModule, ctx: tvm.ir.transform.PassContext
+    ) -> tvm.ir.IRModule:
+        add_save_relay(prefix=self.prefix_relay,mod=mod)
+        return mod
+    
+    def __call__(self, mod):
+        return self.transform_module(mod)
+    

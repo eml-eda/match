@@ -3,8 +3,38 @@ import pathlib
 import json
 import subprocess
 from mako.template import Template
-
+from tvm import relay as relay_tvm
 import match
+
+class RelaySave:
+    def __init__(self,prefix,mod,params):
+        self.prefix=prefix
+        self.mod=mod
+        self.params=params
+        
+output_path=None
+relay_list=[]
+schedules=[]
+
+def reset_schedules():
+    global schedules
+    schedules=[]
+
+def reset_relay_list():
+    global relay_list
+    relay_list=[]
+
+def reset_output_path():
+    global output_path
+    output_path=None
+
+def set_output_path(path):
+    global output_path
+    output_path=path
+
+def get_output_path():
+    global output_path
+    return output_path
 
 def mock_func(*args):
     return None
@@ -37,3 +67,40 @@ def x86_run_match(input_type="onnx",relay_mod=None, relay_params=None, filename=
 
     x86_result=get_x86_result(pathlib.Path(output_path),keep_result=keep_result)
     return x86_result
+
+def add_save_relay(prefix="",mod=None,params=None):
+    global relay_list
+    relay_list.append(RelaySave(
+        prefix=prefix,
+        mod=None if mod is None else relay_tvm.astext(mod),
+        params=None if params is None else relay_tvm.save_param_dict(params=params)
+    ))
+
+def save_all_relay():
+    global relay_list
+    for relay_save in relay_list:
+        if relay_save.mod is not None:
+            with open(f"{get_output_path()}/{relay_save.prefix}_graph.relay","w") as mod_file:
+                mod_file.write(relay_save.mod)
+        if relay_save.params is not None:
+            with open(f"{get_output_path()}/{relay_save.prefix}_params.txt","wb") as par_file:
+                par_file.write(relay_save.params)
+
+def save_codegen_schedule(node,temporal_mapping,spatial_mapping):
+    loops_str=""
+    for idx,tmap in enumerate(temporal_mapping):
+        loops_str+="\t"*idx
+        ops=[k[4:] for k in tmap.keys() if 'mem_' in k]
+        op_str=""
+        for op in ops:
+            mem_op=f'mem_{op}'
+            op_str+=f" [{op} in {tmap[mem_op]}] "
+        loops_str+=f"for {tmap['fullname']} in {tmap['size']}: {op_str}"
+
+    schedules.append(f"\nFor node\n{node}\
+                    \nMATCH found that the best schedule has the following temporal mapping\
+                    \n{loops_str}\n")
+    
+def save_all_schedules():
+    with open(f"{get_output_path()}/match_schedules.log","w") as scheds_file:
+        scheds_file.writelines(schedules)

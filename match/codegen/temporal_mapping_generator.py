@@ -59,7 +59,10 @@ class TemporalMappingGenerator:
 
     def get_temporal_mapping(self):
         return self.temporal_mapping
-    
+
+    def get_spatial_mapping(self):
+        return self.spatial_mapping
+
     def get_layer_data(self):
         return self.layer_data
 
