@@ -9,6 +9,7 @@ from typing import Any, Dict,List,Type
 
 from match.target.exec_module import ExecModule
 from match.codegen.layer_data import LayerData
+
 def get_depth_arr_pattern(pattern_inst_):
     if isinstance(pattern_inst_,tvm.relay.dataflow_pattern.AttrPattern):
         pattern_inst_=pattern_inst_.pattern
@@ -88,176 +89,121 @@ class WorkloadParser:
         # put here other cases
         return 8, "int"
 
+    def get_unique_name_and_update_occs(self,call):
+        unique_name=call.op.name
+        if unique_name in self.occurrences:
+            unique_name+=f"_{self.occurrences[unique_name]}"
+            self.occurrences[unique_name]+=1
+        else:
+            self.occurrences[unique_name]=1
+        return unique_name
+
     def visit_cast(self, call, attrs):
-        attrs = {"cast.prec": self.get_bits(attrs.dtype), "cast.type": self.get_type(attrs.dtype)}
-        self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
+        op = ops.Cast(
+            prec= self.get_bits(attrs.dtype),
+            type= self.get_type(attrs.dtype),
+        )
+        unique_name=self.get_unique_name_and_update_occs(call)
+        self.layer_data.layer_attrs[unique_name]=op
 
     def visit_right_shift(self, call, attrs):
         # nothing to do actually, right shift has no attrs and the arg is already saved before
-        attrs = {
-            "right_shift.prec": self.get_bits(call.checked_type.dtype),
-            "right_shift.type": self.get_type(call.checked_type.dtype),
-        }
-        self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
+        op = ops.RightShift(
+            prec= self.get_bits(call.checked_type.dtype),
+            type= self.get_type(call.checked_type.dtype),
+        )
+        unique_name=self.get_unique_name_and_update_occs(call)
+        self.layer_data.layer_attrs[unique_name]=op
 
     def visit_clip(self, call, attrs):
-        attrs = {
-            "clip.min": int(attrs.a_min),
-            "clip.max": int(attrs.a_max),
-            "activation": "relu" if attrs.a_min >= 0 else None,
-        }
-        self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
+        op = ops.Clip(
+            min=int(attrs.a_min),
+            max=int(attrs.a_max),
+        )
+        unique_name=self.get_unique_name_and_update_occs(call)
+        self.layer_data.layer_attrs[unique_name]=op
 
     def visit_bias_add(self, call, attrs):
-        attrs = {"bias.axis": int(attrs.axis)}
-        self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
+        op=ops.BiasAdd(
+            bias_axis=int(attrs.axis),
+        )
+        unique_name=self.get_unique_name_and_update_occs(call)
+        self.layer_data.layer_attrs[unique_name]=op
+
     def visit_multiply(self,call,atts):
-        attrs = {"batchnorm":True}
-        self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
+        itype = [int(v) for v in call.args[0].args[0].checked_type.shape]
+        iprec = call.args[0].args[0].checked_type.dtype
+        wtype = [int(v) for v in call.args[1].args[0].checked_type.shape]
+        wprec = call.args[1].args[0].checked_type.dtype
+        otype = [int(v) for v in call.checked_type.shape]
+        oprec = call.checked_type.dtype
+        op=ops.Multiply(
+            o_type=otype,
+            o_prec=oprec,
+            i_type=itype,
+            i_prec=iprec,
+            w_type=wtype,
+            w_prec=wprec,
+        )
+        unique_name=self.get_unique_name_and_update_occs(call)
+        self.layer_data.layer_attrs[unique_name]=op
 
     def visit_dense(self, call, attrs):
-        itype = call.args[0].checked_type.shape
+        itype = [int(v) for v in call.args[0].checked_type.shape]
         iprec = call.args[0].checked_type.dtype
-        wtype = call.args[1].checked_type.shape
+        wtype = [int(v) for v in call.args[1].checked_type.shape]
         wprec = call.args[1].checked_type.dtype
         inp_features = itype[1]
         out_features = wtype[0]
-        otype = call.checked_type.shape
-        padding = [0, 0, 0, 0]
-        strides = [1, 1]
-        dilations = [1, 1]
-        groups = None
+        otype = [int(v) for v in call.checked_type.shape]
+        oprec = call.checked_type.dtype
         if itype[1] != wtype[1]:
             raise NotImplementedError(f"The weights shape is not correct")
-        self.layer_data.loop_dim_size = {
-            "B": 1,
-            "K": int(out_features),
-            "C": int(inp_features),
-            "OY": 1,
-            "OX": 1,
-            "FY": 1,
-            "FX": 1,
-        }
-        self.layer_data.dimension_relations = [
-            f"ix={int(strides[0])}*ox+{int(dilations[0])}*fx",
-            f"iy={int(strides[1])}*oy+{int(dilations[1])}*fy",
-        ]
-        self.layer_data.operand_precision = {
-            "O": self.get_bits("int8"),
-            "O_final": self.get_bits("int8"),
-            "W": self.get_bits(wprec),
-            "I": self.get_bits(iprec),
-        }
-        self.layer_data.padding = {
-            "IY": (int(padding[0]), int(padding[2])),
-            "IX": (int(padding[1]), int(padding[3])),
-        }
-        self.layer_data.pr_loop_dim_size = {"IY": 1, "IX": 1}
-        (
-            self.layer_data.loop_dim_size,
-            self.layer_data.pr_loop_dim_size,
-            operand_precision_zigzag,
-            self.layer_data.operand_precision,
-        ) = self.exec_module.adjust_dimensions_and_precision(
-            loop_dim_size=self.layer_data.loop_dim_size, pr_loop_dim_size=self.layer_data.pr_loop_dim_size, operand_precision=self.layer_data.operand_precision, strides=strides, pattern_name=self.pattern_name
+        op = ops.Dense(
+            o_type=otype,
+            o_prec=oprec,
+            i_type=itype,
+            i_prec=iprec,
+            w_type=wtype,
+            w_prec=wprec,
+            inp_features=inp_features,
+            out_features=out_features,
         )
-        attrs = {
-            "padding": padding,
-            "strides": {"IX": int(strides[0]), "IY": int(strides[1])},
-            "dilation": dilations,
-            "groups": groups,
-            "loop_sizes": {**self.layer_data.loop_dim_size, **self.layer_data.pr_loop_dim_size},
-            "dense_prec": self.layer_data.operand_precision,
-        }
-        self.layer_data.ordered_relevant_loops = {
-            "I": ["C", "OY", "OX"],
-            "O": ["K", "OY", "OX"],
-            "W": ["K", "C", "FY", "FX"],
-        }
-        self.layer_data.input_dim_mapping = {"C": "C", "OY": "IY", "OX": "IX"}
-        self.layer_data.operands = ["O", "W", "I"]
-        self.layer_data.input_operands = ["I"]
-        self.layer_data.padded_dims = []
-        self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
+        unique_name=self.get_unique_name_and_update_occs(call)
+        self.layer_data.layer_attrs[unique_name]=op
 
     def visit_add(self, call, attrs):
-        if self.pattern_inst.ordered_operation!="add":
-            return
-        #if len(self.layer_data.loop_dim_size)==0:
-        #    return
-        itype = call.args[0].args[0].checked_type.shape
+        itype = [int(v) for v in call.args[0].args[0].checked_type.shape]
         iprec = call.args[0].args[0].checked_type.dtype
-        wtype = call.args[1].args[0].checked_type.shape
+        wtype = [int(v) for v in call.args[1].args[0].checked_type.shape]
         wprec = call.args[1].args[0].checked_type.dtype
-        otype = call.checked_type.shape
-        i_n, i_c, i_h, i_w = self.get_io_from_layout("NCHW", itype)
-        w_cout, w_cin, w_ksh, w_ksw = self.get_io_from_layout("NCHW", wtype)
-        o_n, o_c, o_h, o_w = self.get_io_from_layout("NCHW", otype)
-        padding = [0, 0, 0, 0]
-        strides = [1, 1]
-        dilations = [1, 1]
-        groups = None
+        otype = [int(v) for v in call.checked_type.shape]
+        oprec = call.checked_type.dtype
         if itype[0] != otype[0]:
             raise NotImplementedError(
-                f"Input batch size is {i_n}, while output batch size is {o_n}"
+                f"Input batch size is {itype[0]}, while output batch size is {otype[0]}"
             )
-        self.layer_data.loop_dim_size = {
-            "B": int(o_n),
-            "K": int(o_c),
-            "OY": int(o_h),
-            "OX": int(o_w),
-            "C": 1,
-            "FX": 1,
-            "FY": 1,
-        }
-        self.layer_data.operand_precision = {
-            "O": self.get_bits("int8"),
-            "O_final": self.get_bits("int8"),
-            "X": self.get_bits(wprec),
-            "Y": self.get_bits(iprec),
-        }
-        self.layer_data.pr_loop_dim_size = {"IY": int(i_h), "IX": int(i_w)}
-        (
-            self.layer_data.loop_dim_size,
-            self.layer_data.pr_loop_dim_size,
-            operand_precision_zigzag,
-            self.layer_data.operand_precision,
-        ) = self.exec_module.adjust_dimensions_and_precision(
-            loop_dim_size=self.layer_data.loop_dim_size, pr_loop_dim_size=self.layer_data.pr_loop_dim_size, operand_precision=self.layer_data.operand_precision, strides=strides, pattern_name=self.pattern_name
+        op = ops.Add(
+            o_type=otype,
+            o_prec=oprec,
+            i_type=itype,
+            i_prec=iprec,
+            w_type=wtype,
+            w_prec=wprec,
         )
-        self.layer_data.equation = "O[b][k][oy][ox]+=X[b][k][oy][ox]*Y[b][k][oy][ox]"
-        self.layer_data.ordered_relevant_loops = {
-            "X": ["K", "OY", "OX"],
-            "O": ["K", "OY", "OX"],
-            "Y": ["K", "OY", "OX"],
-        }
-        self.layer_data.input_dim_mapping = {"K": "C", "OY": "IY", "OX": "IX"}
-        self.layer_data.operands = ["O", "X", "Y"]
-        self.layer_data.input_operands = ["X", "Y"]
-        self.layer_data.padded_dims = []
-        
-        self.layer_data.pr_loop_dim_size["C"] = self.layer_data.loop_dim_size["K"]
-        loop_dim_size_attrs = copy.deepcopy(self.layer_data.loop_dim_size)
-        del loop_dim_size_attrs["C"]
-        attrs = {
-            "padding": padding,
-            "strides": {"IX": int(strides[0]), "IY": int(strides[1])},
-            "dilation": [1, 1],
-            "groups": 1,
-            "loop_sizes": {**loop_dim_size_attrs, **self.layer_data.pr_loop_dim_size},
-            "add_prec": self.layer_data.operand_precision,
-        }
-        self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
+        unique_name=self.get_unique_name_and_update_occs(call)
+        self.layer_data.layer_attrs[unique_name]=op
 
     def visit_conv_2d(self, call, attrs):
         depthwise = False
         if attrs.groups > 1:
             depthwise = True
-        itype = call.args[0].checked_type.shape
+        itype = [int(v) for v in call.args[0].checked_type.shape]
         iprec = call.args[0].checked_type.dtype
-        wtype = call.args[1].checked_type.shape
+        wtype = [int(v) for v in call.args[1].checked_type.shape]
         wprec = call.args[1].checked_type.dtype
-        otype = call.checked_type.shape
+        otype = [int(v) for v in call.checked_type.shape]
+        oprec = call.checked_type.dtype
         i_n, i_c, i_h, i_w = self.get_io_from_layout(attrs.data_layout, itype)
         w_cout, w_cin, w_ksh, w_ksw = self.get_io_from_layout(attrs.data_layout, wtype)
         o_n, o_c, o_h, o_w = self.get_io_from_layout(
@@ -271,70 +217,28 @@ class WorkloadParser:
             raise NotImplementedError(
                 f"Input batch size is {i_n}, while output batch size is {o_n}"
             )
-        self.layer_data.dimension_relations = [
-            f"ix={int(strides[0])}*ox+{int(dilations[0])}*fx",
-            f"iy={int(strides[1])}*oy+{int(dilations[1])}*fy",
-        ]
         kernel_size = list()
         if "kernel_size" in dict(attrs) and attrs["kernel_size"]!=None:
             kernel_size = list(attrs["kernel_size"])
         else:
             kernel_size = list([int(v) for v in wtype][2:])
-        self.layer_data.loop_dim_size = {
-            "B": int(o_n),
-            "K": int(o_c),
-            "C": int(w_cin),
-            "OY": int(o_h),
-            "OX": int(o_w),
-            "FY": int(kernel_size[0]),
-            "FX": int(kernel_size[1]),
+        
+        op = ops.Conv2d(
+            padding= padding,
+            strides= strides,
+            dilation= dilations,
+            groups= groups,
+            o_type=otype,
+            o_prec=oprec,
+            i_type=itype,
+            i_prec=iprec,
+            w_type=wtype,
+            w_prec=wprec,
+            kernel_size=kernel_size,
+            depthwise= depthwise,
         }
-        self.layer_data.operand_precision = {
-            "O": self.get_bits("int8"),
-            "O_final": self.get_bits("int8"),
-            "W": self.get_bits(wprec),
-            "I": self.get_bits(iprec),
-        }
-        self.layer_data.padding = {
-            "IY": (int(padding[0]), int(padding[2])),
-            "IX": (int(padding[1]), int(padding[3])),
-        }
-        self.layer_data.pr_loop_dim_size = {"IY": int(i_h), "IX": int(i_w)}
-        (
-            self.layer_data.loop_dim_size,
-            self.layer_data.pr_loop_dim_size,
-            operand_precision_zigzag,
-            self.layer_data.operand_precision,
-        ) = self.exec_module.adjust_dimensions_and_precision(
-            loop_dim_size=self.layer_data.loop_dim_size, pr_loop_dim_size=self.layer_data.pr_loop_dim_size, operand_precision=self.layer_data.operand_precision, strides=strides, pattern_name=self.pattern_name
-        )
-        self.layer_data.equation = (
-            "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"
-            if depthwise
-            else "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]"
-        )
-        self.layer_data.constant_operands=["W"]
-        self.layer_data.operand_source_dimension_mapping={'I': {'IX': 'OX', 'IY': 'OY','C':'K'}}
-        self.layer_data.operand_source={"W": [], "I": []}
-        self.layer_data.ordered_relevant_loops = {
-            "I": [['OY','OX','C'],[("C" if not depthwise else "K"), "OY", "OX"]][1],
-            "O": [['OY','OX','K'],["K", "OY", "OX"]][1],
-            "W": [['K','C','FY','FX'],["K", "C", "FY", "FX"]][1],
-        }
-        self.layer_data.input_dim_mapping = {("C" if not depthwise else "K"): "C", "OY": "IY", "OX": "IX"}
-        self.layer_data.operands = ["O", "W", "I"]
-        self.layer_data.input_operands = ["I"]
-        self.layer_data.padded_dims = ["OX", "OY"]
-        attrs = {
-            "padding": padding,
-            "strides": {"IX": int(strides[0]), "IY": int(strides[1])},
-            "dilation": dilations,
-            "groups": groups,
-            "loop_sizes": {**self.layer_data.loop_dim_size, **self.layer_data.pr_loop_dim_size},
-            "nn.conv2d_prec": self.layer_data.operand_precision,
-            "nn.conv2d_depthwise": depthwise,
-        }
-        self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
+        unique_name=self.get_unique_name_and_update_occs(call)
+        self.layer_data.layer_attrs[unique_name]=op
 
     def visit_calls_with_depth(self,call,depth_limit=[]):
         if not isinstance(depth_limit,list):
