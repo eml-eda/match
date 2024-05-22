@@ -22,10 +22,17 @@ UNDER REVIEW!!!
 
 # Requirements
 These instructions will consider a Ubuntu installation including:
+- LLVM
 - a C++ compiler with C++17 support, like GCC 7.1 or Clang 5.0
 - CMake 3.18 or higher
 - python3
 - pip3
+
+This can be achieved with
+
+```
+$ sudo apt install -y llvm cmake python3 python3-pip 
+```
 
 A fresh install of Ubuntu 22.04 should satify all requirements.
 
