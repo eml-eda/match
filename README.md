@@ -42,10 +42,12 @@ To install the latest release (with pip):
 ```
 $ git clone --recursive https://github.com/eml-eda/match
 $ cd match
+$ python3 -m venv venv
+$ source venv/bin/activate
 $ make all
 ```
 
-When using a new fresh terminal, users can run `source sourceme.sh` to correctly set the environment. 
+When using a new fresh terminal, users can run `source sourceme.sh` on the repository to correctly set the environment. 
 
 # Usage
 
