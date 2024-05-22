@@ -22,11 +22,11 @@ void ne16_kernel_function_wrapper(match_kernel* kernel){
         int p_left=kernel->common_kernel->pad_IX_x;
         int p_right=kernel->common_kernel->pad_IX_y;
         if(kernel->common_kernel->task_id==EXECUTE_TASK){
-            //print("Waiting monitor\n");
+            //printf("Waiting monitor\n");
             monitor_consume_begin(get_nnx_monitor()->input);
-            //print("Got inp monitor\n");
+            //printf("Got inp monitor\n");
             monitor_produce_begin(get_nnx_monitor()->output);
-            //print("Got the monitor\n");
+            //printf("Got the monitor\n");
         }
         //printf("Setting task #%d\n",get_nnx_db_O(kernel->common_kernel->task_id));
         //printf("I [C %d IY %d IX %d] W [FY %d FX %d] O [K %d OY %d OX %d]\n",i_channels,i_height,i_width,w_y_height,w_y_width,o_channels,o_height,o_width);
@@ -48,9 +48,9 @@ void ne16_kernel_function_wrapper(match_kernel* kernel){
             if(kernel->common_kernel->task_id!=LOADER_TASK){
             
                 ne16_nnx_dispatch_wait(match_ne16_get_nnx_dev());
-                //print("Dispatch wait\n");
+                //printf("Dispatch wait\n");
                 ne16_nnx_dispatch(match_ne16_get_nnx_dev(), match_ne16_get_nnx_task(get_nnx_db_O(kernel->common_kernel->task_id)));
-                //print("Dispatched task #%d\n",get_nnx_db_O(kernel->common_kernel->task_id));
+                //printf("Dispatched task #%d\n",get_nnx_db_O(kernel->common_kernel->task_id));
             }
         }
         else{
@@ -74,6 +74,6 @@ void ne16_kernel_function_wrapper(match_kernel* kernel){
             // ne16_task_set_addr_norm_quant
         }
         if(kernel->common_kernel->task_id==LOADER_TASK) monitor_produce_end(get_nnx_monitor()->input);
-        //print("Gave the monitor\n");
+        //printf("Gave the monitor\n");
     }
 }

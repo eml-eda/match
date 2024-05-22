@@ -38,22 +38,23 @@ static unsigned int memalloc_W(){
 }
 
 void cluster_init_platform(void (inner_function)(unsigned int* args_inner_function),unsigned int* args,common_kernel* common_kernel){
+    #ifdef PROFILE_LAYERS
     stop_g_perf_counter();
     start_g_perf_counter();
-    //printf("Cluster init platform!\n");
-    //start_g_perf_counter();
+    #endif
+
     pi_cluster_task(&cluster_task,inner_function,args);
     pi_cluster_send_task_to_cl(&cluster_dev, &cluster_task);
-    //stop_g_perf_counter();
-    //printf("Finished cluster init_platform\n");
+
+    #ifdef PROFILE_LAYERS
     int32_t cycles=stop_g_perf_counter();
     printf(",%d",cycles);
     start_g_perf_counter();
-    return;
+    #endif
 }
 
 void cluster_init_l1_memory(){
-    l1_memory=pi_cl_l1_malloc(NULL, 12*1024*8);
+    l1_memory=pi_cl_l1_malloc(NULL, 90*1024);
 }
 
 void cluster_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsigned char first_op_db,dimension_I* dim_I,
@@ -84,7 +85,8 @@ void cluster_startup_memory(common_kernel* common_kernel,int* first_op_sizes,uns
 }
 
 void cluster_shutdown_mem(common_kernel* common_kernel){
-    pi_cl_l1_free(NULL, l1_memory, 12*1024*8);
+    dma_transfer_free(transfer);
+    pi_cl_l1_free(NULL, l1_memory, 90*1024);
 }
 
 
@@ -96,7 +98,6 @@ unsigned int cluster_mem_transfer_O(common_kernel* common_kernel,dimension_O* di
 
 void copy_out_computation_(dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
-    transfer = dma_transfer_create();
     //printf("Copy out int %d\n",int_pt-l1_memory);
     //printf("Dim O K [int %d,ext %d] OY [int %d,ext %d] OX [int %d,ext %d]\n",dim->size_K[int_mem],dim->size_K[ext_mem],
     //dim->size_OY[int_mem],dim->size_OY[ext_mem],dim->size_OX[int_mem],dim->size_OX[ext_mem]);
@@ -212,6 +213,7 @@ unsigned int cluster_mem_transfer_W(common_kernel* common_kernel,dimension_W* di
 
 void cluster_wait_any_transfer(common_kernel* common_kernel){
     dma_transfer_wait(transfer);
+    transfer = dma_transfer_create();
 }
 
 void wait_any_computation(){

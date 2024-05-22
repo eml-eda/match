@@ -95,7 +95,7 @@ def save_codegen_schedule(node,temporal_mapping,spatial_mapping):
         for op in ops:
             mem_op=f'mem_{op}'
             op_str+=f" [{op} in {tmap[mem_op]}] "
-        loops_str+=f"for {tmap['fullname']} in {tmap['size']}: {op_str}"
+        loops_str+=f"for {tmap['fullname']} in 0:{tmap['size']}: {op_str}\n"
 
     schedules.append(f"\nFor node\n{node}\
                     \nMATCH found that the best schedule has the following temporal mapping\
