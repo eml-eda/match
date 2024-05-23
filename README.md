@@ -56,7 +56,7 @@ To use MATCH directly, the end user can execute the run.py script, setting the t
 Considering an ONNX network the user that should be compiled for gap9, the user shall execute the following command
 
 ```
-$ python3 match/run.py -t target_name -i onnx -f examples/small_mobilenet_V1.onnx
+$ python3 match/run.py -t gap9 -i onnx -f examples/small_mobilenet_V1.onnx -o net_output
 ```
 
 <!--Additionally there are 2 predefined networks, that can be used to test a newly built target, that can be accessed from MATCH directly.
