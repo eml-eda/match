@@ -22,10 +22,17 @@ UNDER REVIEW!!!
 
 # Requirements
 These instructions will consider a Ubuntu installation including:
+- LLVM
 - a C++ compiler with C++17 support, like GCC 7.1 or Clang 5.0
 - CMake 3.18 or higher
 - python3
 - pip3
+
+This can be achieved with
+
+```
+$ sudo apt install -y llvm cmake python3 python3-pip 
+```
 
 A fresh install of Ubuntu 22.04 should satify all requirements.
 
@@ -35,10 +42,12 @@ To install the latest release (with pip):
 ```
 $ git clone --recursive https://github.com/eml-eda/match
 $ cd match
+$ python3 -m venv venv
+$ source venv/bin/activate
 $ make all
 ```
 
-When using a new fresh terminal, users can run `source sourceme.sh` to correctly set the environment. 
+When using a new fresh terminal, users can run `source sourceme.sh` on the repository to correctly set the environment. 
 
 # Usage
 
@@ -47,7 +56,7 @@ To use MATCH directly, the end user can execute the run.py script, setting the t
 Considering an ONNX network the user that should be compiled for gap9, the user shall execute the following command
 
 ```
-$ python3 match/run.py -t target_name -i onnx -f examples/small_mobilenet_V1.onnx
+$ python3 match/run.py -t gap9 -i onnx -f examples/small_mobilenet_V1.onnx -o net_output
 ```
 
 <!--Additionally there are 2 predefined networks, that can be used to test a newly built target, that can be accessed from MATCH directly.
