@@ -208,6 +208,21 @@ void dense_comp(void* args){
         act,batch_norm
     );
 }
+
+void dense_out_comp(void* args){
+    cluster_kernel* kernel = (cluster_kernel*)args;
+    int i_channels=kernel->common_kernel->c_i>kernel->common_kernel->c_w?kernel->common_kernel->c_w:kernel->common_kernel->c_i;
+    int o_channels=kernel->common_kernel->k_o;
+    int act=kernel->common_kernel->activation_function;
+    int batch_norm=kernel->common_kernel->batchnorm_add!=0x0;
+    pulp_nn_linear_out_32(
+        kernel->common_kernel->I_pt,
+        kernel->common_kernel->bias_pt,
+        kernel->common_kernel->O_pt,
+        kernel->common_kernel->W_pt,
+        i_channels,o_channels
+    );
+}
 void cluster_kernel_function_wrapper(cluster_kernel* kernel){
     if(kernel->common_kernel->specific_pattern==pointwise_conv2d)
         pi_team_offload_preset(pw_conv_2d_comp, kernel);
@@ -219,6 +234,8 @@ void cluster_kernel_function_wrapper(cluster_kernel* kernel){
         pi_team_offload_preset(conv_2d_comp, kernel);
     else if(kernel->common_kernel->specific_pattern==dense)
         pi_team_offload_preset(dense_comp, kernel);
+    else if(kernel->common_kernel->specific_pattern==dense_out)
+        pi_team_offload_preset(dense_out_comp, kernel);
     else if(kernel->common_kernel->specific_pattern==elemwise_add)
         pi_team_offload_preset(add_comp, kernel);
 }

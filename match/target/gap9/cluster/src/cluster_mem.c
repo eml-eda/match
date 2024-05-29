@@ -62,18 +62,18 @@ void cluster_startup_memory(common_kernel* common_kernel,int* first_op_sizes,uns
                                 int* third_op_sizes,unsigned char third_op_db,dimension_O* dim_O,
                                 int* paddings,int* strides){
     if(common_kernel->specific_pattern!=elemwise_add){
-        l1_I_off[0]=0;l1_I_off[1]=first_op_sizes[1]*first_op_db;
-        l1_W_off[0]=(1+first_op_db)*first_op_sizes[1];l1_W_off[1]=l1_W_off[0]+second_op_sizes[1]*second_op_db;
-        l1_bias_off=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1]+(1+third_op_db)*third_op_sizes[1];
+        l1_I_off[0]=0;l1_I_off[1]=first_op_sizes[1]*first_op_db*common_kernel->prec_I/8;
+        l1_W_off[0]=(1+first_op_db)*first_op_sizes[1]*common_kernel->prec_I/8;l1_W_off[1]=l1_W_off[0]+second_op_sizes[1]*second_op_db*common_kernel->prec_I/8;
+        l1_bias_off=(1+first_op_db)*first_op_sizes[1]*common_kernel->prec_I/8+(1+second_op_db)*second_op_sizes[1]*common_kernel->prec_W/8+(1+third_op_db)*third_op_sizes[1]*common_kernel->prec_O/8;
     }
     else{
         l1_X_off[0]=0;l1_X_off[1]=first_op_sizes[1]*first_op_db;
         l1_Y_off[0]=(1+first_op_db)*first_op_sizes[1];l1_Y_off[1]=l1_Y_off[0]+second_op_sizes[1]*second_op_db;
         l1_bias_off=0x0;
     }
-    l1_O_off[0]=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1];l1_O_off[1]=l1_O_off[0]+third_op_sizes[1]*third_op_db;
+    l1_O_off[0]=(1+first_op_db)*first_op_sizes[1]*common_kernel->prec_I/8+(1+second_op_db)*second_op_sizes[1]*common_kernel->prec_W/8;l1_O_off[1]=l1_O_off[0]+third_op_sizes[1]*third_op_db*common_kernel->prec_O/8;
     cluster_init_l1_memory();
-    l1_im2col_off=l1_O_off[0]+third_op_sizes[1]*(third_op_db+1);
+    l1_im2col_off=l1_O_off[0]+third_op_sizes[1]*(third_op_db+1)*common_kernel->prec_O/8;
     if(common_kernel->specific_pattern!=elemwise_add)    l1_im2col_off+=dim_O->size_K[l2_mem]*4;
     if(common_kernel->pattern_name==dense_bnorm_requant || common_kernel->pattern_name==conv2d_bnorm_requant)   l1_im2col_off+=dim_O->size_K[l2_mem]*4;
     int im2coldim=1*(dim_W->size_FX[l2_mem]*dim_W->size_FY[l2_mem]*(dim_I->size_IY[l1_mem]+paddings[0]+paddings[2])+dim_W->size_FX[l2_mem]*dim_W->size_FY[l2_mem]);
@@ -96,7 +96,7 @@ unsigned int cluster_mem_transfer_O(common_kernel* common_kernel,dimension_O* di
     return memalloc_O();
 }
 
-void copy_out_computation_(dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
+void copy_out_computation_(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
     //printf("Copy out int %d\n",int_pt-l1_memory);
     //printf("Dim O K [int %d,ext %d] OY [int %d,ext %d] OX [int %d,ext %d]\n",dim->size_K[int_mem],dim->size_K[ext_mem],
@@ -106,10 +106,10 @@ void copy_out_computation_(dimension_O* dim,unsigned int int_pt,unsigned int ext
             .loc = int_pt,
             .number_of_2d_copies = dim->size_OY[int_mem],
             .number_of_1d_copies = dim->size_OX[int_mem],
-            .length_1d_copy = dim->size_K[int_mem],
+            .length_1d_copy = dim->size_K[int_mem]*common_kernel->prec_O/8,
             .hwc_to_chw = 0,
-            .stride_2d = dim->size_K[ext_mem]*dim->size_OX[ext_mem],
-            .stride_1d = dim->size_K[ext_mem],
+            .stride_2d = dim->size_K[ext_mem]*dim->size_OX[ext_mem]*common_kernel->prec_O/8,
+            .stride_1d = dim->size_K[ext_mem]*common_kernel->prec_O/8,
             .dir = 0
     });
     return;
@@ -117,13 +117,13 @@ void copy_out_computation_(dimension_O* dim,unsigned int int_pt,unsigned int ext
 
 void cluster_copy_out_curr_computation(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
-    if(common_kernel->specific_pattern==elemwise_add)    copy_out_computation_(dim,int_pt,ext_pt,int_mem,ext_mem);
+    if(common_kernel->specific_pattern==elemwise_add)    copy_out_computation_(common_kernel,dim,int_pt,ext_pt,int_mem,ext_mem);
     return;
 }
 
 void cluster_copy_out_prev_computation(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
-    if(common_kernel->specific_pattern!=elemwise_add)    copy_out_computation_(dim,int_pt,ext_pt,int_mem,ext_mem);
+    if(common_kernel->specific_pattern!=elemwise_add)    copy_out_computation_(common_kernel,dim,int_pt,ext_pt,int_mem,ext_mem);
     return;
 }
 

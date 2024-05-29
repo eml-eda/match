@@ -89,6 +89,7 @@ class WorkloadParser:
         return 8, "int"
 
     def visit_cast(self, call, attrs):
+        self.layer_data.operand_precision["O"] = self.get_bits(attrs.dtype)
         attrs = {"cast.prec": self.get_bits(attrs.dtype), "cast.type": self.get_type(attrs.dtype)}
         self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
 
@@ -181,15 +182,17 @@ class WorkloadParser:
         self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
 
     def visit_add(self, call, attrs):
-        if self.pattern_inst.ordered_operation!="add":
-            return
         #if len(self.layer_data.loop_dim_size)==0:
         #    return
+        if self.pattern_inst.ordered_operation!="add":
+            self.layer_data.operand_precision["O"]=self.get_bits(call.checked_type.dtype)
+            return
         itype = call.args[0].args[0].checked_type.shape
         iprec = call.args[0].args[0].checked_type.dtype
         wtype = call.args[1].args[0].checked_type.shape
         wprec = call.args[1].args[0].checked_type.dtype
         otype = call.checked_type.shape
+        oprec = call.checked_type.dtype
         i_n, i_c, i_h, i_w = self.get_io_from_layout("NCHW", itype)
         w_cout, w_cin, w_ksh, w_ksw = self.get_io_from_layout("NCHW", wtype)
         o_n, o_c, o_h, o_w = self.get_io_from_layout("NCHW", otype)
@@ -210,12 +213,6 @@ class WorkloadParser:
             "FX": 1,
             "FY": 1,
         }
-        self.layer_data.operand_precision = {
-            "O": self.get_bits("int8"),
-            "O_final": self.get_bits("int8"),
-            "X": self.get_bits(wprec),
-            "Y": self.get_bits(iprec),
-        }
         self.layer_data.pr_loop_dim_size = {"IY": int(i_h), "IX": int(i_w)}
         (
             self.layer_data.loop_dim_size,
@@ -235,7 +232,12 @@ class WorkloadParser:
         self.layer_data.operands = ["O", "X", "Y"]
         self.layer_data.input_operands = ["X", "Y"]
         self.layer_data.padded_dims = []
-        
+        self.layer_data.operand_precision = {
+            "O": self.get_bits(oprec),
+            "O_final": self.get_bits(oprec),
+            "X": self.get_bits(wprec),
+            "Y": self.get_bits(iprec),
+        }
         self.layer_data.pr_loop_dim_size["C"] = self.layer_data.loop_dim_size["K"]
         loop_dim_size_attrs = copy.deepcopy(self.layer_data.loop_dim_size)
         del loop_dim_size_attrs["C"]

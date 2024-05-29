@@ -35,6 +35,13 @@ def dense_bnorm_requant_pattern():
     bnorm = batchnorm_pattern(cast)
     return _requant_pattern(bnorm)
 
+def dense_out_pattern():
+    dense = is_op("nn.dense")(
+            wildcard(), wildcard()
+    )
+    add = is_op("add")(dense, is_constant()) | is_op("add")(is_op("cast")(dense),is_constant())
+    return add
+
 def _biasadd_requant_pattern(linear_op):
     """Add pattern bias_add-requant to linear_op"""
 
@@ -234,4 +241,5 @@ def partitioning_patterns():
         PartitioningPattern(name="dense_bnorm_requant",pattern=dense_bnorm_requant_pattern,ordered_operation="nn.dense"),
         PartitioningPattern(name="dense_bias_add_requant",pattern=fully_connected_pattern,additional_checks=check_fully_connected,ordered_operation="nn.dense"),
         PartitioningPattern(name="add_requant",pattern=element_wise_add_pattern,additional_checks=check_element_wise_add,ordered_operation="add"),
+        PartitioningPattern(name="dense_out",pattern=dense_out_pattern,ordered_operation="dense")
     ]

@@ -20,6 +20,7 @@ class Gap9Cluster(ExecModule):
                                               "conv2d",
                                               "elemwise_add",
                                               "dense",
+                                              "dense_out"
                                           ],
                                           src_path=os.path.dirname(__file__)+"/src",
                                           inc_path=os.path.dirname(__file__)+"/include")
@@ -33,6 +34,7 @@ class Gap9Cluster(ExecModule):
         dense_patterns=[
             "dense_bnorm_requant",
             "dense_bias_add_requant",
+            "dense_out"
         ]
         if pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])==1:
             return [
@@ -87,6 +89,8 @@ class Gap9Cluster(ExecModule):
             return "elemwise_add"
         elif pattern_name in dense_patterns:
             return "dense"
+        elif pattern_name=="dense_out":
+            return "dense_out"
         else:
             # DEFAULT LIKE CONV2D
             return "conv2d"
