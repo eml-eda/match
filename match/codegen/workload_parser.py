@@ -139,8 +139,8 @@ class WorkloadParser:
             "FX": 1,
         }
         self.layer_data.dimension_relations = [
-            f"ix={int(strides[0])}*ox+{int(dilations[0])}*fx",
-            f"iy={int(strides[1])}*oy+{int(dilations[1])}*fy",
+            f"ix={int(strides[1])}*ox+{int(dilations[1])}*fx",
+            f"iy={int(strides[0])}*oy+{int(dilations[0])}*fy",
         ]
         self.layer_data.operand_precision = {
             "O": self.get_bits("int8"),
@@ -163,7 +163,7 @@ class WorkloadParser:
         )
         attrs = {
             "padding": padding,
-            "strides": {"IX": int(strides[0]), "IY": int(strides[1])},
+            "strides": {"IX": int(strides[1]), "IY": int(strides[0])},
             "dilation": dilations,
             "groups": groups,
             "loop_sizes": {**self.layer_data.loop_dim_size, **self.layer_data.pr_loop_dim_size},
@@ -241,7 +241,7 @@ class WorkloadParser:
         del loop_dim_size_attrs["C"]
         attrs = {
             "padding": padding,
-            "strides": {"IX": int(strides[0]), "IY": int(strides[1])},
+            "strides": {"IX": int(strides[1]), "IY": int(strides[0])},
             "dilation": [1, 1],
             "groups": 1,
             "loop_sizes": {**loop_dim_size_attrs, **self.layer_data.pr_loop_dim_size},
@@ -272,8 +272,8 @@ class WorkloadParser:
                 f"Input batch size is {i_n}, while output batch size is {o_n}"
             )
         self.layer_data.dimension_relations = [
-            f"ix={int(strides[0])}*ox+{int(dilations[0])}*fx",
-            f"iy={int(strides[1])}*oy+{int(dilations[1])}*fy",
+            f"ix={int(strides[1])}*ox+{int(dilations[1])}*fx",
+            f"iy={int(strides[0])}*oy+{int(dilations[0])}*fy",
         ]
         kernel_size = list()
         if "kernel_size" in dict(attrs) and attrs["kernel_size"]!=None:
@@ -327,7 +327,7 @@ class WorkloadParser:
         self.layer_data.padded_dims = ["OX", "OY"]
         attrs = {
             "padding": padding,
-            "strides": {"IX": int(strides[0]), "IY": int(strides[1])},
+            "strides": {"IX": int(strides[1]), "IY": int(strides[0])},
             "dilation": dilations,
             "groups": groups,
             "loop_sizes": {**self.layer_data.loop_dim_size, **self.layer_data.pr_loop_dim_size},

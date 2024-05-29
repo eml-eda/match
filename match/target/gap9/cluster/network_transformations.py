@@ -288,12 +288,19 @@ class GapLayoutTransform(ExprMutator):
 
         return self.visit(func)
 
-    def create_transform(self, x, shape, end):
+    def create_transform(self, x, shape, end, flatten:bool=False):
         """NHWC to NCHW transformations
         """
-        if len(shape)==4 and shape[2]>1 and shape[3]>1:
+        if not end and len(shape)==4 and (shape[2]>1 or shape[3]>1):
+            #sono in realtà in HWC Ma per TVM In CHW 
             x = relay.reshape(x,(shape[0],shape[2],shape[3],shape[1]))
             x = relay.op.transpose(x,(0,3,1,2))
+        if end and len(shape)==4 and (shape[2]>1 or shape[3]>1):
+            # sono in CHW sia per me che per TVM ma voglio ripassare a HWC
+            #x = relay.reshape(x,(shape[0],shape[1],shape[3],shape[1]))
+            x = relay.op.transpose(x,(0,2,3,1))
+            x = relay.reshape(x,(shape[0],shape[1],shape[2],shape[3]))
+            
         return x
 
     def visit_call(self, call):
@@ -308,7 +315,11 @@ class GapLayoutTransform(ExprMutator):
             if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'default':
                 # insert transformation before this op
                 shape = self.f.shapes.pop(0)
-                x = self.create_transform(new_args[0], shape, False)
+                if len(call.args)>0 and call.args[0].op.name=="annotation.compiler_end" and call.args[0].attrs.compiler=="match":
+                    x = self.create_transform(new_args[0], shape, False)
+                    #new_call = relay.op.annotation.compiler_begin(x, 'default-reshape')
+                else:
+                    x = new_args[0]
                 new_call = relay.op.annotation.compiler_begin(x, 'default')
 
             elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'default':
@@ -318,16 +329,53 @@ class GapLayoutTransform(ExprMutator):
 
         return new_call
 
+class Gap9ClusterFlattenRewriter(DFPatternCallback):
+    """Rewriter for digital requant pattern
+    """
+    def __init__(self, require_type=False):
+        super().__init__(require_type)
+        self.x = wildcard()
+        #self.maxpool2d = is_op("nn.max_pool2d")(wildcard())
+        transpose = is_op("transpose")(self.x)
+        reshape = is_op("reshape")(transpose)
+        comp = is_op("annotation.compiler_begin")(reshape)
+        self.pattern = is_op("annotation.compiler_end")(is_op("nn.batch_flatten")(comp))
+        
+
+    def callback(self, pre, post, node_map):
+        #max_pool = node_map[self.maxpool2d][0]
+        x = node_map[self.x][0]
+        return relay.nn.batch_flatten(x)
+
+@tvm.ir.transform.module_pass(opt_level=0)
+class Gap9BatchFlattenTransform:
+    """ Find and rewrite MATCH ONNX requant to requant for internal use:
+        div->div->floor->max->min to
+        right_shift->clip->cast
+    """
+    def transform_module(
+        self, mod: tvm.ir.IRModule, ctx: tvm.ir.transform.PassContext
+    ) -> tvm.ir.IRModule:
+        for global_var, func in mod.functions.items():
+            func = rewrite(Gap9ClusterFlattenRewriter(), func)
+            mod.update_func(global_var, func)
+        return mod
+
+    def __call__(self, mod):
+        return self.transform_module(mod)
+
+
 def network_transformations(opts):
     pipeline=[]
     pipeline.append(RequantRewriterPlinioOnnx())  
     #if 'requant_transform' not in opts or opts['requant_transform'] != '0':
     #    pipeline.append(Gap9ClusterOnnxRequantTransform())   
-    #pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))
+    pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))
     return pipeline
 
 def adjust_network(opts):
     pipeline=[]
     pipeline.append(GapLayoutTransform())
-    
+    pipeline.append(Gap9BatchFlattenTransform())
+    pipeline.append(transform.InferType())
     return pipeline

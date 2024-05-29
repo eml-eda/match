@@ -49,7 +49,7 @@ def sanitize_onnx_plinio(onnx_model: onnx.ModelProto):
 
     def onnx_data_type(dtype_type, dtype_bits):
         return onnx.helper.np_dtype_to_tensor_dtype(
-            numpy_data_type(dtype_type, dtype_bits)
+            numpy_data_type(dtype_type if dtype_bits>8 else "uint", dtype_bits)
         )
     
     def get_more_restrictive_npdtype(dtype_list):

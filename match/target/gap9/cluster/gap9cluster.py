@@ -1,10 +1,14 @@
-from typing import Dict
+from math import ceil
+from typing import Dict, List
+
+import numpy as np
 from match.target.gap9.cluster.cost_model import Gap9ClusterCostModel
 from match.target.gap9.cluster.network_transformations import network_transformations as gap9network_transformations
 from match.target.gap9.cluster.network_transformations import adjust_network as gap_adjust_net
 from match.target.gap9.cluster.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
 from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
 import os
+import tvm
 
 class Gap9Cluster(ExecModule):
     def __init__(self):
@@ -160,3 +164,40 @@ class Gap9Cluster(ExecModule):
     
     def adjust_network(self, opts):
         return gap_adjust_net(opts=opts)
+    
+    def weights_and_constants(self,pattern_name,layer_data,layer_arguments:List=[]):
+        """define how the weights and constants of a layer must be saved in C on the generated code
+
+        Args:
+            layer_arguments (List, optional): Dict of the arguments(parameters) for the node. Defaults to [].
+        """
+        def c_friendly_npvalue(arr):
+            # params: arr is expected to be a numpy version of the value, it should be an array but it may be also just a single value
+            if len(arr.shape)>0:
+                # this is actually an array and not a single value
+                arr=arr.reshape([arr.shape[0]]).astype(np.uint8)
+                return f'{{{str(list(arr))[1:len(str(list(arr)))-1]}}}'
+            else:
+                return str(arr)
+        def bytaze(value):
+            return np.frombuffer(value.tobytes(),dtype='uint8')
+        arguments=np.array([],dtype=np.uint8)
+        single_constants=dict()
+        for (layer_arg_name,layer_arg_val) in layer_arguments:
+            if isinstance(layer_arg_val, tvm.relay.Constant):
+                if len(layer_arg_val.data.shape)==0:
+                    single_constants[layer_arg_name]=str(layer_arg_val.data)
+                else:
+                    if layer_arg_name=="nn.conv2d.param.0":
+                        constbytes=bytaze(layer_arg_val.data.numpy().transpose((0,2,3,1)))
+                    elif layer_arg_name=="nn.dense.param.0":
+                        constbytes=bytaze(layer_arg_val.data.numpy().transpose((0,1)))
+                    else:
+                        constbytes=bytaze(layer_arg_val.data.numpy())
+                    arguments=np.concatenate((arguments,constbytes))
+        return {
+            "value":c_friendly_npvalue(arguments),
+            "len":arguments.shape[0],
+            "shape":f"[{ceil(arguments.shape[0])}]",
+            "single_costants":single_constants,
+        }
