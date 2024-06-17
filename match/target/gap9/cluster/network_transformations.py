@@ -315,7 +315,7 @@ class GapLayoutTransform(ExprMutator):
             if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'default':
                 # insert transformation before this op
                 shape = self.f.shapes.pop(0)
-                if len(call.args)>0 and call.args[0].op.name=="annotation.compiler_end" and call.args[0].attrs.compiler=="match":
+                if len(call.args)>0 and isinstance(call.args[0],tvm.relay.Call) and call.args[0].op.name=="annotation.compiler_end" and call.args[0].attrs.compiler=="match":
                     x = self.create_transform(new_args[0], shape, False)
                     #new_call = relay.op.annotation.compiler_begin(x, 'default-reshape')
                 else:
@@ -367,6 +367,7 @@ class Gap9BatchFlattenTransform:
 
 def network_transformations(opts):
     pipeline=[]
+    #pipeline.append(transform.ConvertLayout({'nn.conv2d': ['NHWC']}))
     pipeline.append(RequantRewriterPlinioOnnx())  
     #if 'requant_transform' not in opts or opts['requant_transform'] != '0':
     #    pipeline.append(Gap9ClusterOnnxRequantTransform())   

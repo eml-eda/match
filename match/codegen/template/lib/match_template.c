@@ -218,6 +218,14 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         % endif
         &dim_O
     );
+    % if layer_has_padding:
+    % for i_operand in input_operands:
+    unsigned int overlap_${i_operand}_IX_x=dim_${i_operand}.common_dim.overlap_IX_x;unsigned int last_overlap_${i_operand}_IX_x=0;
+    unsigned int overlap_${i_operand}_IX_y=dim_${i_operand}.common_dim.overlap_IX_y;unsigned int last_overlap_${i_operand}_IX_y=0;
+    unsigned int overlap_${i_operand}_IY_x=dim_${i_operand}.common_dim.overlap_IY_x;unsigned int last_overlap_${i_operand}_IY_x=0;
+    unsigned int overlap_${i_operand}_IY_y=dim_${i_operand}.common_dim.overlap_IY_y;unsigned int last_overlap_${i_operand}_IY_y=0;
+    % endfor
+    % endif
     ${platform_apis.set_task_id}(&comm_kernel);
     // recover args of function
     unsigned int *real_args = (unsigned int *) args;
@@ -263,6 +271,12 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     add_relative_idxs_${mem_transfer_operand}(&tile_idxs_${mem_transfer_operand}_${idx}_relative,&abs_tile_idxs_${mem_transfer_operand});
     % if mem_transfer_operand in input_operands and layer_has_padding:
     calc_padding_${mem_transfer_operand}_${sw_for_loops[idx][f'mem_{mem_transfer_operand}']}(&dim_${mem_transfer_operand},&abs_tile_idxs_${mem_transfer_operand});
+    % for i_operand in input_operands:
+    last_overlap_${i_operand}_IX_x=dim_${i_operand}.common_dim.pad_IX_x;
+    last_overlap_${i_operand}_IX_y=dim_${i_operand}.common_dim.pad_IX_y;
+    last_overlap_${i_operand}_IY_x=dim_${i_operand}.common_dim.pad_IY_x;
+    last_overlap_${i_operand}_IY_y=dim_${i_operand}.common_dim.pad_IY_y;
+    % endfor
     % endif
     % if last_movements[mem_transfer_operand]!=-1:
     // sync prev transfer in a multi memory system with data dependency
@@ -312,10 +326,22 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     add_relative_idxs_${operand}(&tile_idxs_${operand}_kernel_relative,&abs_tile_idxs_${operand});
     % if operand in input_operands and layer_has_padding:
     calc_padding_${operand}_mem_computation(&dim_${operand},&abs_tile_idxs_${operand});
+    overlap_${operand}_IX_x = dim_${operand}.common_dim.overlap_IX_x;
+    overlap_${operand}_IX_y = dim_${operand}.common_dim.overlap_IX_y;
+    overlap_${operand}_IY_x = dim_${operand}.common_dim.overlap_IY_x;
+    overlap_${operand}_IY_y = dim_${operand}.common_dim.overlap_IY_y;
+    dim_${operand}.common_dim.overlap_IX_x = last_overlap_${operand}_IX_x;
+    dim_${operand}.common_dim.overlap_IX_y = last_overlap_${operand}_IX_y;
+    dim_${operand}.common_dim.overlap_IY_x = last_overlap_${operand}_IY_x;
+    dim_${operand}.common_dim.overlap_IY_y = last_overlap_${operand}_IY_y;
     kernel_set_padding(kernel.common_kernel,&(dim_${operand}.common_dim));
     % endif
     unsigned int kernel_${operand}_pt = loop_${operand}_${last_movements[operand]}_int_pt+${mem_apis.pointer_offset[operand]}(&comm_kernel,&tile_idxs_${operand}_kernel_relative,mem_computation);
     % if operand in input_operands and layer_has_padding:
+    dim_${operand}.common_dim.overlap_IX_x=overlap_${operand}_IX_x;
+    dim_${operand}.common_dim.overlap_IX_y=overlap_${operand}_IX_y;
+    dim_${operand}.common_dim.overlap_IY_x=overlap_${operand}_IY_x;
+    dim_${operand}.common_dim.overlap_IY_y=overlap_${operand}_IY_y;
     if(kernel_${operand}_pt<loop_${operand}_${last_movements[operand]}_int_pt)  kernel_${operand}_pt=loop_${operand}_${last_movements[operand]}_int_pt;
     % endif
     % else:
@@ -337,6 +363,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     % endif
     weights_and_constants);
     % endif
+    ${sync_apis.wait_input_transfers}(&comm_kernel);
     ${sync_apis.async_transfers}(&comm_kernel);
     if(iter>0)  ${sync_apis.prev_computation}(&comm_kernel);
     ${comp_apis.innermost_computation}(&kernel);
@@ -389,7 +416,10 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
         &comm_kernel,&dim_O,kernel_O_prev_int,kernel_O_prev_ext,
         ${sw_for_loops[last_movements["O"]]["mem_O"]},${default_mem["O"] if last_movements["O"]==0 else sw_for_loops[last_movements["O"]-1]["mem_O"]}
     );
+    % if mem_apis.copy_out_prev_computation!="match_copy_out_prev_computation":
+    ${sync_apis.wait_output_transfers}(&comm_kernel);
     ${sync_apis.async_transfers}(&comm_kernel);
+    % endif
     ${mem_apis.shutdown_mem}(&comm_kernel);
     % if "end_codegen" in debug_level:
     printf("End of ${func_name} codegen function!\n");

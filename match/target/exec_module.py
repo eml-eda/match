@@ -136,6 +136,7 @@ class ExecModule(ABC):
         """
         return [
             # from lower level to higher level memories
+            # TEST: set now L1 to 9 kB just to force TILING 
             MemoryInst(name="l1_mem",k_bytes=90,operands=operands,double_buffering_support=True),
             MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]

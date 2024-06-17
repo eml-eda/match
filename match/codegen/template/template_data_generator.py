@@ -136,6 +136,10 @@ class TemplateDataGenerator:
                     size_ = floor(current_dims[operand][dim_name] / fl["size"])
                     tiling_sizes[operand][fl_fullname] = {"name":fl["name"],"size":size_,"index":fl["index"]}
                     current_dims[operand][dim_name] = size_
+            else:
+                for operand in general_template_data["input_operands"]:
+                    dim_name=general_template_data["input_dim_mapping"][fl["name"]]
+                    fl_input_translations[operand][fl["fullname"]]=dim_name
         general_template_data["fl_input_translations"]=fl_input_translations
         #print(f"For {general_template_data['func_name']} tiling sizes {tiling_sizes}\n\n")
 
@@ -191,7 +195,9 @@ class TemplateDataGenerator:
             }
             for operand in general_template_data["operands"]
         }
-        
+       
+        #print(general_template_data["fl_input_translations"],general_template_data["sw_for_loops"])
+        #print(general_template_data["tiling_sizes"])
         # mem computation sizes
         for operand in general_template_data["operands"]:
             is_op_input=operand in general_template_data["input_operands"]
@@ -209,7 +215,7 @@ class TemplateDataGenerator:
                         if sl["name"]==rel_dim:
                             general_template_data["size_loops_mem"][operand]\
                                 [rel_dim]["mem_computation"]=\
-                                    general_template_data["tiling_sizes"][operand]\
+                                    sl["size"] if (general_template_data["fl_input_translations"][operand][sl["fullname"]] if is_op_input else sl["fullname"]) not in general_template_data["tiling_sizes"][operand] else general_template_data["tiling_sizes"][operand]\
                                     [general_template_data["fl_input_translations"][operand][sl["fullname"]] if is_op_input else sl["fullname"]]["size"]
                             break
                 rel_dim_name=rel_dim

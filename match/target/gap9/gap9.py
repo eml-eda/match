@@ -8,4 +8,4 @@ class Gap9(MatchTarget):
             Gap9Cluster(),
             Gap9NE16()
         ],name="gap9")
-        self.disabled_exec_modules=["NE16"]
+        self.disabled_exec_modules=["cluster"]

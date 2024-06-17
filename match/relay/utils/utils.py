@@ -74,7 +74,7 @@ def relay_gap9_conv2d(input_tensor: relay.Var, layer_name: str,
                       groups: int = 1,
                       act: bool = False,
                       shift_bits: int = 0,
-                      batchnorm = False) -> Tuple[relay.Var,
+                      batchnorm = True) -> Tuple[relay.Var,
                                                     Dict[relay.Expr,
                                                          tvm.nd.array]]:
     '''
@@ -123,7 +123,9 @@ def relay_gap9_conv2d(input_tensor: relay.Var, layer_name: str,
                            padding=padding,
                            groups=groups,
                            kernel_size=(w_value.shape[2],w_value.shape[3]),
-                           out_dtype='int32')
+                           #out_dtype='int32'
+                           )
+    x = relay.op.cast(x, 'int32')
     if batchnorm:
         input_shape=simple_basic_type_checker(input_tensor,w_value.shape)
         #input_shape = [int(x) for x in input_tensor.type_annotation.shape]

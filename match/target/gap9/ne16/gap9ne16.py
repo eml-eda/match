@@ -96,11 +96,13 @@ class Gap9NE16(ExecModule):
         The output shape is: (cout, cinMajor, Bits, height x width, cinMinorBytes),
         where cinMajor is the ceil(cin / CIN_SUBTILE) and cinMinor has to be padded with 0 to CIN_SUBTILE.
         """
+        # let's make the weights unsigned
+        weight = weight - 128
         if depthwise:
             weight = weight.transpose(1, 0, 2, 3)  # Swap cout and cin
 
         cout, cin, height, width = weight.shape
-
+        #print(weight.shape)
         # Pad cin to be divisible with CIN_SUBTILE
         if cin % 16 != 0:
             cinPad = 16 - cin % 16
@@ -111,6 +113,8 @@ class Gap9NE16(ExecModule):
                 constant_values=0,
             )
             cin = cin + cinPad
+
+        #print(weight)
 
         # Reshape into (cout, cinMajor, cinMinor, flattened spatial, 1)
         # The 1 at the end is required by the unpacking
@@ -134,7 +138,7 @@ class Gap9NE16(ExecModule):
         # Pack
         # (cout, cinMajor, Bits, flattened spatial, cinMinorBytes)
         weight = np.packbits(weight, axis=-1, bitorder="little")
-
+        print(weight.shape)
         return weight.flatten()
 
     def weights_and_constants(self,pattern_name,layer_data,layer_arguments:List=[]):
@@ -169,3 +173,164 @@ class Gap9NE16(ExecModule):
     
     def adjust_network(self, opts):
         return pad_adjust(opts=opts)
+
+
+
+if __name__=="__main__":
+    weights = np.array(
+        [
+    [
+        [
+            [
+                -26,
+                -108,
+                -57
+            ],
+            [
+                -20,
+                -128,
+                -53
+            ],
+            [
+                46,
+                26,
+                -50
+            ]
+        ]
+    ],
+    [
+        [
+            [
+                -59,
+                -66,
+                -69
+            ],
+            [
+                12,
+                94,
+                15
+            ],
+            [
+                -40,
+                -36,
+                127
+            ]
+        ]
+    ],
+    [
+        [
+            [
+                6,
+                -39,
+                -20
+            ],
+            [
+                -27,
+                18,
+                -39
+            ],
+            [
+                6,
+                -128,
+                0
+            ]
+        ]
+    ],
+    [
+        [
+            [
+                -23,
+                -20,
+                46
+            ],
+            [
+                127,
+                -44,
+                -54
+            ],
+            [
+                25,
+                68,
+                -3
+            ]
+        ]
+    ],
+    [
+        [
+            [
+                -122,
+                127,
+                25
+            ],
+            [
+                -81,
+                -31,
+                90
+            ],
+            [
+                31,
+                12,
+                -65
+            ]
+        ]
+    ],
+    [
+        [
+            [
+                -64,
+                127,
+                -2
+            ],
+            [
+                -7,
+                65,
+                52
+            ],
+            [
+                60,
+                1,
+                -12
+            ]
+        ]
+    ],
+    [
+        [
+            [
+                -81,
+                -31,
+                62
+            ],
+            [
+                -128,
+                -64,
+                -81
+            ],
+            [
+                34,
+                58,
+                -20
+            ]
+        ]
+    ],
+    [
+        [
+            [
+                111,
+                113,
+                116
+            ],
+            [
+                -50,
+                80,
+                -72
+            ],
+            [
+                -7,
+                -56,
+                127
+            ]
+        ]
+    ]
+]
+    )
+    print(Gap9NE16.weightEncode(weight=np.pad(weights,((0,8),(0,0),(0,0),(0,0))),bits=8,depthwise=True).tolist())
