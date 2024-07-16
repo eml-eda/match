@@ -76,11 +76,16 @@ def fully_connected_pattern():
 def element_wise_add_pattern():
     """Create pattern for element-wise-add with optional fused relu."""
 
-    cast_a = is_op("cast")(wildcard()).has_attr({"dtype": "int32"})
-    cast_b = is_op("cast")(wildcard()).has_attr({"dtype": "int32"})
+    cast_a = is_op("cast")(wildcard())
+    cast_b = is_op("cast")(wildcard())
     add = is_op("add")(cast_a, cast_b)
-    return _requant_pattern(add)
-
+    clip = is_op("clip")(add)
+    cast_c = is_op("cast")(clip)
+    cast_d = is_op("cast")(cast_c)
+    mul = is_op("multiply")(is_constant(),cast_d)
+    rshift = is_op("right_shift")(mul, is_constant())
+    pt = is_op("cast")(rshift)
+    return pt
 
 def _check_requant(pattern):
     """Check if requant pattern is supported by the soma dory accelerator
@@ -216,23 +221,6 @@ def check_fully_connected(pattern):
     return True
 
 
-def check_element_wise_add(pattern):
-    """Check if the element-wise-add layer is supported by the soma dory accelerator"""
-    add = _check_requant(pattern)
-    if add is None:
-        return False
-
-    tensor_shape_a = list(add.args[0].checked_type.shape)
-    tensor_shape_b = list(add.args[1].checked_type.shape)
-    if tensor_shape_a != tensor_shape_b:
-        logger.warning(f"Tensor shapes for element-wise-add don't match:"+\
-                " Tensor a: {tensor_shape_a}," + \
-                " Tensor b: {tensor_shape_b}." + \
-                " Acceleration for this element-wise-add is not supported")
-        return False
-
-    return True
-
 def partitioning_patterns():
     return [
         PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,ordered_operation="nn.conv2d"),
@@ -240,6 +228,6 @@ def partitioning_patterns():
         PartitioningPattern(name="conv2d_bias_add",pattern=only_conv_2d_and_bias_pattern,ordered_operation="nn.conv2d"),
         PartitioningPattern(name="dense_bnorm_requant",pattern=dense_bnorm_requant_pattern,ordered_operation="nn.dense"),
         PartitioningPattern(name="dense_bias_add_requant",pattern=fully_connected_pattern,additional_checks=check_fully_connected,ordered_operation="nn.dense"),
-        PartitioningPattern(name="add_requant",pattern=element_wise_add_pattern,additional_checks=check_element_wise_add,ordered_operation="add"),
+        PartitioningPattern(name="add_requant",pattern=element_wise_add_pattern,ordered_operation="add"),
         PartitioningPattern(name="dense_out",pattern=dense_out_pattern,ordered_operation="dense")
     ]

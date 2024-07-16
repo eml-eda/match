@@ -21,6 +21,8 @@ void cluster_startup_memory(common_kernel* common_kernel,int* first_op_sizes,uns
                                 int* third_op_sizes,unsigned char third_op_db,dimension_O* dim_O,
                                 int* paddings,int* strides);
 
+void cluster_free_mem();
+
 void cluster_shutdown_mem(common_kernel* common_kernel);
 
 unsigned int cluster_mem_transfer_O(common_kernel* common_kernel,dimension_O* dim,unsigned int ext_pt,int ext_mem,int int_mem);

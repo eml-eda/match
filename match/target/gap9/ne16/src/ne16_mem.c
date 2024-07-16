@@ -95,7 +95,7 @@ void ne16_init_platform_(
     ((void (*)(unsigned int *))ne16_callback)((void*)args_ne16);
     #endif
     // Terminate
-    cluster_shutdown_mem(ne16_common_kernel);
+    cluster_free_mem();
     ne16_nnx_term(match_ne16_get_nnx_dev());
     #ifdef MATCH_NE16_BUFFERED
     monitor_term(get_nnx_monitor()->input);
@@ -105,7 +105,7 @@ void ne16_init_platform_(
 }
 
 void __attribute__ ((noinline)) ne16_init_platform(void (inner_function)(unsigned int* args_inner_function),unsigned int* args,common_kernel* common_kernel){
-    #ifdef PROFILE_LAYERS
+    #ifdef MATCH_GAP9_PROFILE_LAYERS
     stop_g_perf_counter();
     start_g_perf_counter();
     #endif
@@ -117,7 +117,7 @@ void __attribute__ ((noinline)) ne16_init_platform(void (inner_function)(unsigne
     
     pi_cluster_send_task_to_cl(&cluster_dev, pi_cluster_task(&cluster_task,ne16_init_platform_,args));
     
-    #ifdef PROFILE_LAYERS
+    #ifdef MATCH_GAP9_PROFILE_LAYERS
     int32_t cycles=stop_g_perf_counter();
     printf(",%d",cycles);
     start_g_perf_counter();
@@ -132,7 +132,11 @@ void ne16_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsign
     l1_bias_off=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1]+(1+third_op_db)*third_op_sizes[1];
 
     l1_O_off[0]=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1];l1_O_off[1]=l1_O_off[0]+third_op_sizes[1]*third_op_db;
-    //printf("L1 off I [ %d %d ] W [ %d %d ] O [ %d %d ] Bias %d\n",l1_I_off[0],l1_I_off[1],l1_W_off[0],l1_W_off[1],l1_O_off[0],l1_O_off[1],l1_bias_off);
+    
+    #ifdef MATCH_LOG_GAP9_VERBOSE
+    printf("L1 off I [ %d %d ] W [ %d %d ] O [ %d %d ] Bias %d\n",l1_I_off[0],l1_I_off[1],l1_W_off[0],l1_W_off[1],l1_O_off[0],l1_O_off[1],l1_bias_off);
+    #endif
+    
     #ifndef MATCH_NE16_BUFFERED
     transfers = dma_transfer_create();
     #endif
@@ -143,8 +147,12 @@ void ne16_shutdown_mem(common_kernel* common_kernel){
 }
 
 unsigned int ne16_mem_transfer_O(common_kernel* common_kernel,dimension_O* dim,unsigned int ext_pt,int ext_mem,int int_mem){
-    //printf("Mem transfer O: K %d OY %d OX %d from %d to %d int mem idx %d\n",dim->size_K[int_mem],dim->size_OY[int_mem],
-    //dim->size_OX[int_mem],ext_pt,0,int_mem);
+    
+    #ifdef MATCH_LOG_GAP9_VERBOSE
+    printf("Mem transfer O: K %d OY %d OX %d from %d to %d int mem idx %d\n",dim->size_K[int_mem],dim->size_OY[int_mem],
+    dim->size_OX[int_mem],ext_pt,0,int_mem);
+    #endif
+
     inc_nnx_db_O(common_kernel->task_id);
     return memalloc_O(common_kernel->task_id);
 }
@@ -178,7 +186,11 @@ unsigned int ne16_mem_transfer_I(common_kernel* common_kernel,dimension_I* dim,u
     inc_nnx_db_I(common_kernel->task_id);
     unsigned int dst=memalloc_I(common_kernel->task_id);
     if(common_kernel->task_id==LOADER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
-        //printf("Dst I %d src %d task id %d\n",dst,ext_pt,common_kernel->task_id);
+        
+        #ifdef MATCH_LOG_GAP9_VERBOSE
+        printf("Dst I %d src %d task id %d\n",dst,ext_pt,common_kernel->task_id);
+        #endif
+
         #ifdef MATCH_NE16_BUFFERED
         if(!input_dma_active){
             monitor_produce_begin(get_nnx_monitor()->input);
@@ -207,7 +219,11 @@ unsigned int ne16_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,u
     inc_nnx_db_W(common_kernel->task_id);
     unsigned int dst=memalloc_W(common_kernel->task_id);
     if(common_kernel->task_id==LOADER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
-        //printf("Dst W %d src %d task id %d\n",dst,ext_pt,common_kernel->task_id);
+        
+        #ifdef MATCH_LOG_GAP9_VERBOSE
+        printf("Dst W %d src %d task id %d\n",dst,ext_pt,common_kernel->task_id);
+        #endif
+        
         #ifdef MATCH_NE16_BUFFERED
         if(!input_dma_active){
             monitor_produce_begin(get_nnx_monitor()->input);

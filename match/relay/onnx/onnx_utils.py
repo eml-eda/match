@@ -84,6 +84,7 @@ def sanitize_onnx_plinio(onnx_model: onnx.ModelProto):
     graph_input_types=dict()
     original_out_to_new_node_version=dict()
     input_reformed_name=dict()
+    casted_version_of_node=dict()
     for inp_idx,input_t in enumerate(onnx_model.graph.input):
         input_names.append(input_t.name)
         input_names_to_idx[input_t.name]=inp_idx
@@ -104,6 +105,7 @@ def sanitize_onnx_plinio(onnx_model: onnx.ModelProto):
                     attribute.f=255
             if attribute.name=="value":
                 nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(attribute.t.data_type)
+
             # probably precisions to fix
             if "_" in attribute.name and attribute.name.split("_")[1]=="bits":
                 att = attribute.name.split("_")
@@ -126,6 +128,12 @@ def sanitize_onnx_plinio(onnx_model: onnx.ModelProto):
                         bias_bits = attribute.i
                         nodes_with_new_ops.append(idx_node)
                         nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int",bias_bits))
+        # temporary fix due to the fact that Plinio can generate non 8 bits weights, so let's force it
+        if node.op_type=="Conv" and weights_bits<0:
+            weights_bits = 8
+            atts_to_pop["weight"]=len(node.attribute)
+            nodes_out_types[idx_node]=onnx.helper.tensor_dtype_to_np_dtype(onnx_data_type("int",weights_bits))
+            node.attribute.append(onnx.helper.make_attribute(key='weight_bits',value=weights_bits))
         op_channels = 32
         inputs_types=list()
         bias_found_in_inputs=""
@@ -279,6 +287,8 @@ def sanitize_onnx_plinio(onnx_model: onnx.ModelProto):
         more_restrictive_dtype = None
         if idx_node in nodes_out_types and bias_bits<0 and cast_bits<0:
             more_restrictive_dtype = nodes_out_types[idx_node]
+        elif "pool" in node.name.lower():
+            more_restrictive_dtype = np.dtype("uint8")
         else:
             more_restrictive_dtype=get_more_restrictive_npdtype([inp["ndtype"] for inp in inputs_types])
         input_added_nodes=0
@@ -301,21 +311,27 @@ def sanitize_onnx_plinio(onnx_model: onnx.ModelProto):
                 elif node_input["type"]=="input":
                     onnx_model.graph.input[input_names_to_idx[node_input["name"]]].type.tensor_type.elem_type=onnx.helper.np_dtype_to_tensor_dtype(more_restrictive_dtype)
                 elif node_input["type"]=="node":
-                    nodes_with_new_ops.append(idx_node-1)
-                    nodes_to_append.append(
-                        (
-                            refactored_idx-1,
-                            onnx.helper.make_node(
-                                name=f"{node.name}/input_node_{input_added_nodes}/cast",
-                                op_type="Cast",
-                                inputs=[original_out_to_new_node_version[node_input["name"]]],
-                                outputs=[str(refactored_idx+input_added_nodes)],
-                                to=onnx.helper.np_dtype_to_tensor_dtype(more_restrictive_dtype),
-                            ),
+                    if node_input["name"] in casted_version_of_node and str(more_restrictive_dtype) in casted_version_of_node[node_input["name"]]:
+                        node.input[node_input["idx"]] = casted_version_of_node[node_input["name"]][str(more_restrictive_dtype)]
+                    else:    
+                        nodes_with_new_ops.append(idx_node-1)
+                        nodes_to_append.append(
+                            (
+                                refactored_idx-1,
+                                onnx.helper.make_node(
+                                    name=f"{node.name}/input_node_{input_added_nodes}/cast",
+                                    op_type="Cast",
+                                    inputs=[original_out_to_new_node_version[node_input["name"]]],
+                                    outputs=[str(refactored_idx+input_added_nodes)],
+                                    to=onnx.helper.np_dtype_to_tensor_dtype(more_restrictive_dtype),
+                                ),
+                            )
                         )
-                    )
-                    node.input[node_input["idx"]] = str(refactored_idx+input_added_nodes)
-                    input_added_nodes+=1
+                        node.input[node_input["idx"]] = str(refactored_idx+input_added_nodes)
+                        if node_input["name"] not in casted_version_of_node:
+                            casted_version_of_node[node_input["name"]]=dict()
+                        casted_version_of_node[node_input["name"]][str(more_restrictive_dtype)] = str(refactored_idx+input_added_nodes)
+                        input_added_nodes+=1
                 elif node_input["type"]=="init_constant":
                     for node_init in onnx_model.graph.initializer:
                         if node_init.name == node_input["name"]:

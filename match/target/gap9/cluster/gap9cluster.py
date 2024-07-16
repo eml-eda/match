@@ -59,7 +59,7 @@ class Gap9Cluster(ExecModule):
         elif pattern_name in dense_patterns:
             # TODO: K 8 C 1
             return [
-                ("K",8),("C",2)
+                ("K",8)
             ]
         else:
             # DEFAULT LIKE CONV2D
@@ -103,12 +103,14 @@ class Gap9Cluster(ExecModule):
         def buffers_for_l1_mem(layer_data,pattern_name):
             buff_mem=0
             # buffer for the cores of the accelerator (weights dimensions)
-            if pattern_name!='add_requant' :
+            if pattern_name not in ['add_requant','dense_out','dense_bnorm_requant','dense_bias_add_requant']:
                 buff_mem=2*layer_data.loop_dim_size['C']*layer_data.loop_dim_size['FY']*layer_data.loop_dim_size['FX']
             # buff for each core
             buff_mem*=8
             # bias
             if pattern_name!="add_requant":
+                buff_mem+=layer_data.loop_dim_size['K']*4
+            if pattern_name not in ['conv2d_bias_add_requant','conv2d_bias_add','dense_bias_add_requant','add_requant','dense_out']:
                 buff_mem+=layer_data.loop_dim_size['K']*4
             return buff_mem
         

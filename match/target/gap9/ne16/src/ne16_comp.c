@@ -29,9 +29,13 @@ void ne16_kernel_function_wrapper(match_kernel* kernel){
             //printf("Got the monitor\n");
         }
         //printf("Setting task #%d\n",get_nnx_db_O(kernel->common_kernel->task_id));
-        //printf("I [C %d IY %d IX %d] W [FY %d FX %d] O [K %d OY %d OX %d]\n",i_channels,i_height,i_width,w_y_height,w_y_width,o_channels,o_height,o_width);
-        //printf("Pad ^ %d v %d < %d > %d\n",p_top,p_bottom,p_left,p_right);
-        //printf("Add O %d W %d I %d\n",kernel->common_kernel->O_pt,kernel->common_kernel->W_pt,kernel->common_kernel->I_pt);
+        
+        #ifdef MATCH_LOG_GAP9_VERBOSE
+        printf("I [C %d IY %d IX %d] W [FY %d FX %d] O [K %d OY %d OX %d]\n",i_channels,i_height,i_width,w_y_height,w_y_width,o_channels,o_height,o_width);
+        printf("Pad ^ %d v %d < %d > %d\n",p_top,p_bottom,p_left,p_right);
+        printf("Add O %d W %d I %d\n",kernel->common_kernel->O_pt,kernel->common_kernel->W_pt,kernel->common_kernel->I_pt);
+        #endif
+        
         if(kernel->common_kernel->stride_x==1){
             if(kernel->common_kernel->task_id!=EXECUTE_TASK){
                 ne16_task_set_dims(match_ne16_get_nnx_task(get_nnx_db_O(kernel->common_kernel->task_id)), i_width, i_channels,
