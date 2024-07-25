@@ -86,7 +86,6 @@ void* diana_digital_kernel_wrapper(match_kernel* kernel){
     int i_height=kernel->common_kernel->iy_i
     +kernel->common_kernel->dim_I->overlap_IY_x+kernel->common_kernel->dim_I->overlap_IY_y
     -kernel->common_kernel->dim_I->pad_IY_x-kernel->common_kernel->dim_I->pad_IY_y;
-    int o_channels=kernel->common_kernel->k_o;
     int o_width=kernel->common_kernel->ox;
     int o_height=kernel->common_kernel->oy;
     int w_y_width=kernel->common_kernel->fx;
@@ -126,7 +125,7 @@ void* diana_digital_kernel_wrapper(match_kernel* kernel){
             digital_depthwise_conv_2d(0x0,kernel->common_kernel->I_pt,kernel->common_kernel->W_pt,0x0,kernel->common_kernel->O_pt,&diana_kernel);
             break;
         case element_wise_sum:
-            element_wise_sum(0x0,kernel->common_kernel->X_pt,0x0,kernel->common_kernel->Y_pt,kernel->common_kernel->O_pt,&diana_kernel);
+            digital_element_wise_sum(0x0,kernel->common_kernel->X_pt,0x0,kernel->common_kernel->Y_pt,kernel->common_kernel->O_pt,&diana_kernel);
             break;
         default:
             break;
@@ -195,8 +194,8 @@ void* digital_memalloc(int size,int memorylevel,int operator){
 }
 
 void* digital_memcopy_O(common_kernel* common_kernel,dimension_O* dim,unsigned int ext_pt,int ext_mem,int int_mem){
-    int size=dim->size_K[dst_memory_level]*dim->size_OY[dst_memory_level]*dim->size_OX[dst_memory_level];
-    return memalloc(size,dst_memory_level,operator_O);
+    int size=dim->size_K[int_mem]*dim->size_OY[int_mem]*dim->size_OX[int_mem];
+    return digital_memalloc(size,int_mem,operator_O);
 }
 
 void digital_memcopyresult(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
@@ -242,9 +241,9 @@ void* digital_memcopy_W(common_kernel* common_kernel,dimension_W* dim,unsigned i
     return ext_pt;
 }
 
-void* memcopy_I(common_kernel* common_kernel,dimension_I* dim,unsigned int ext_pt,int ext_mem,int int_mem){
+void* digital_memcopy_I(common_kernel* common_kernel,dimension_I* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     int size=dim->size_C[int_mem]*dim->size_IY[int_mem]*dim->size_IX[int_mem];
-    unsigned char* dst=(unsigned char*) memalloc(size,int_mem,operator_I);
+    unsigned char* dst=(unsigned char*) digital_memalloc(size,int_mem,operator_I);
     unsigned char* src=(unsigned char*) ext_pt;
     unsigned int inner_ix=dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y;
     unsigned int inner_iy=dim->size_IY[ext_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y;
@@ -367,8 +366,8 @@ void* digital_memcopy_Y(common_kernel* common_kernel,dimension_Y* dim,unsigned i
 
 
 unsigned int digital_W_pointer_offset(common_kernel* common_kernel,tile_indexes_W* tile_idxs,unsigned int memory_level){
-    return (tile_idxs->tile_K*common_kernel->dim_W->size_C[mem_level]*common_kernel->dim_W->size_FY[mem_level]*common_kernel->dim_W->size_FX[mem_level]+
-            tile_idxs->tile_C*common_kernel->dim_W->size_FY[mem_level]*common_kernel->dim_W->size_FX[mem_level]+
+    return (tile_idxs->tile_K*common_kernel->dim_W->size_C[memory_level]*common_kernel->dim_W->size_FY[memory_level]*common_kernel->dim_W->size_FX[memory_level]+
+            tile_idxs->tile_C*common_kernel->dim_W->size_FY[memory_level]*common_kernel->dim_W->size_FX[memory_level]+
             (((int)(tile_idxs->tile_K/(common_kernel->specific_pattern!=depthwise_conv_2d?16:4)))*(common_kernel->specific_pattern!=dense?64/(common_kernel->prec_W/8):256)))*common_kernel->prec_W/8;
 }
 

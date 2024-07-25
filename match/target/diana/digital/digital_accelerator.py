@@ -3,7 +3,7 @@ import functools
 from math import ceil
 import operator
 import sys
-from typing import Dict, List
+from typing import Any, Dict, List
 
 import numpy as np
 from match.target.diana.digital.cost_model import DigitalAcceleratorCostModel
@@ -218,7 +218,7 @@ class DigitalAccelerator(ExecModule):
     def memories_def(self, pattern_name, operands):
         mem = [
             # from lower level to higher level memories
-            MemoryInst(name="act_mem",k_bytes=256,operands=operands,double_buffering_support=False),
+            MemoryInst(name="act_mem",k_bytes=256,operands=[op for op in operands if op!="W"],double_buffering_support=False),
             MemoryInst(name="dram",k_bytes=512,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]
         if "W" in operands:
@@ -278,7 +278,14 @@ class DigitalAccelerator(ExecModule):
             layer_arguments (List, optional): Dict of the arguments(parameters) for the node. Defaults to [].
         """
         output_channels=layer_data.loop_dim_size['K'] if 'depthwise' not in pattern_name else layer_data.loop_dim_size['K']*4
-        constants=[transform(k,v,layer_data.loop_dim_size,pattern_name) for k,v in layer_arguments.items() if isinstance(v,tvm.relay.Constant)]
+        constants=list()
+        single_constants=dict()
+        for (layer_arg_name,layer_arg_val) in layer_arguments:
+            if isinstance(layer_arg_val, tvm.relay.Constant):
+                if len(layer_arg_val.data.shape)==0:
+                    single_constants[layer_arg_name]=str(layer_arg_val.data)
+                else:
+                    constants.append(transform(layer_arg_name,layer_arg_val,layer_data.loop_dim_size,pattern_name))
         diana_weights=[]
         for ch in range(ceil(output_channels/16)):
             for (c,keyval) in constants:
@@ -289,6 +296,260 @@ class DigitalAccelerator(ExecModule):
         diana_weights=(np.asarray(diana_weights).flatten())
         return {
             'value':c_friendly_npvalue(diana_weights),
-            'type':'char',
-            'shape':f'[{ceil(diana_weights.shape[0])}]'
+            'len':int(diana_weights.shape[0]),
+            'shape':f'[{ceil(diana_weights.shape[0])}]',
+            "single_costants":single_constants,
         }
+    
+    def generate_architecture_for_(self, dse: str = 'zigzag', optimal_spatial_mapping: Any = None, platform_memories: Any = None,layer_data:Any=None):
+        if dse=='zigzag':
+            from zigzag.classes.hardware.architecture.memory_hierarchy import MemoryHierarchy
+            from zigzag.classes.hardware.architecture.operational_unit import Multiplier
+            from zigzag.classes.hardware.architecture.operational_array import MultiplierArray
+            from zigzag.classes.hardware.architecture.memory_instance import MemoryInstance
+            from zigzag.classes.hardware.architecture.accelerator import Accelerator
+            from zigzag.classes.hardware.architecture.core import Core
+
+
+            def get_memory_hierarchy(multiplier_array,no_of_inputs):
+                """Memory hierarchy variables"""
+                """ size=#bit, bw=#bit"""
+                # Defintion of register file for inputs
+                if no_of_inputs>1:
+                    rf_1B_I_X = MemoryInstance(
+                        name="rf_1B",
+                        mem_type="rf",
+                        size=32,
+                        r_bw=32,
+                        w_bw=32,
+                        r_cost=1,
+                        w_cost=1.2,
+                        area=0,
+                        r_port=1,
+                        w_port=1,
+                        rw_port=0,
+                    )
+                    rf_1B_I_Y = MemoryInstance(
+                        name="rf_1B",
+                        mem_type="rf",
+                        size=32,
+                        r_bw=32,
+                        w_bw=32,
+                        r_cost=1,
+                        w_cost=1.2,
+                        area=0,
+                        r_port=1,
+                        w_port=1,
+                        rw_port=0,
+                    )
+                else:
+                    rf_1B_I = MemoryInstance(
+                        name="rf_1B",
+                        mem_type="rf",
+                        size=32,
+                        r_bw=32,
+                        w_bw=32,
+                        r_cost=1,
+                        w_cost=1.2,
+                        area=0,
+                        r_port=1,
+                        w_port=1,
+                        rw_port=0,
+                    )
+                    # Defintion of register file for weights
+                    rf_1B_W = MemoryInstance(
+                        name="rf_1B",
+                        mem_type="rf",
+                        size=32,
+                        r_bw=32,
+                        w_bw=32,
+                        r_cost=1,
+                        w_cost=1.2,
+                        area=0,
+                        r_port=1,
+                        w_port=1,
+                        rw_port=0,
+                    )
+                    # Defintion of first SRAM for weights
+                    l1_w = MemoryInstance(
+                        name="weight_mem",
+                        mem_type="sram",
+                        size=64 * 1024 * 8,
+                        r_bw=256 * 8, w_bw=128,
+                        r_cost=50,
+                        w_cost=55,
+                        area=0,
+                        r_port=1,
+                        w_port=1,
+                        rw_port=0,
+                    )
+                # Defintion of rRegister file for outputs
+                rf_4B = MemoryInstance(
+                    name="rf_4B",
+                    size=32,
+                    r_bw=32,
+                    w_bw=32,
+                    r_cost=3,
+                    w_cost=3.6,
+                    area=0,
+                    r_port=2,
+                    w_port=2,
+                    rw_port=0,
+                )
+
+                shared_l1 = MemoryInstance(
+                    name="act_mem",
+                    size=256* 1024 * 8,
+                    r_bw=64 * 8,
+                    w_bw=64 * 8,
+                    r_cost=33.2 * 8,
+                    w_cost=38.5 * 8,
+                    area=0,
+                    r_port=0,
+                    w_port=0,
+                    rw_port=2,
+                    latency=1,
+                    min_r_granularity=32,
+                    min_w_granularity=32,
+                )
+
+
+                l2 = MemoryInstance(
+                    name="dram",
+                    size=512 * 1024 * 8 ,  # Size of L2 memory
+                    r_bw=16 * 8,
+                    w_bw=16 * 8,
+                    r_cost=100,
+                    w_cost=110,
+                    area=0,
+                    r_port=1,
+                    w_port=1,
+                    rw_port=0,
+                    latency=1,
+                )  # rd E per bit 16
+
+                memory_hierarchy_graph = MemoryHierarchy(operational_array=multiplier_array)
+
+                """
+                fh: from high = wr_in_by_high = 
+                fl: from low = wr_in_by_low 
+                th: to high = rd_out_to_high = 
+                tl: to low = rd_out_to_low = 
+                """
+                if no_of_inputs>1:
+                    memory_hierarchy_graph.add_memory(
+                        memory_instance=rf_1B_I_Y,
+                        operands=("I2",),
+                        port_alloc=({"fh": "w_port_1", "tl": "r_port_1", "fl": None, "th": None},),
+                        served_dimensions=set(),
+                    )
+                    # Register file for input
+                    memory_hierarchy_graph.add_memory(
+                        memory_instance=rf_1B_I_X,
+                        operands=("I1",),
+                        port_alloc=({"fh": "w_port_1", "tl": "r_port_1", "fl": None, "th": None},),
+                        served_dimensions=set(),
+                    )
+                else:
+                    # Register file for weight
+                    memory_hierarchy_graph.add_memory(
+                        memory_instance=rf_1B_W,
+                        operands=("I2",),
+                        port_alloc=({"fh": "w_port_1", "tl": "r_port_1", "fl": None, "th": None},),
+                        served_dimensions=set(),
+                    )
+                    # Register file for input
+                    memory_hierarchy_graph.add_memory(
+                        memory_instance=rf_1B_I,
+                        operands=("I1",),
+                        port_alloc=({"fh": "w_port_1", "tl": "r_port_1", "fl": None, "th": None},),
+                        served_dimensions=set(),
+                    )
+                    # First SRAM for weights
+                    memory_hierarchy_graph.add_memory(
+                        memory_instance=l1_w,
+                        operands=("I2",),
+                        port_alloc=({"fh": "w_port_1", "tl": "r_port_1", "fl": None, "th": None},),
+                        served_dimensions="all",
+                    )
+                # Register file for output
+                memory_hierarchy_graph.add_memory(
+                    memory_instance=rf_4B,
+                    operands=("O",),
+                    port_alloc=(
+                        {"fh": "w_port_1", "tl": "r_port_1", "fl": "w_port_2", "th": "r_port_2"},
+                    ),
+                    served_dimensions=set(),
+                )
+                operands_act_mem=("I1","O","I2") if no_of_inputs>1 else ("I1","O")
+                port_alloc_act_mem=[
+                    {"fh": "rw_port_1", "tl": "rw_port_1", "fl": None, "th": None},
+                    {
+                        "fh": "rw_port_1",
+                        "tl": "rw_port_1",
+                        "fl": "rw_port_2",
+                        "th": "rw_port_2",
+                    },
+                ]
+                if no_of_inputs>1:
+                    port_alloc_act_mem.append({"fh": "rw_port_1", "tl": "rw_port_1", "fl": None, "th": None})
+                # First SRAM for inputs and outputs
+                memory_hierarchy_graph.add_memory(
+                    memory_instance=shared_l1,
+                    operands=operands_act_mem,
+                    port_alloc=tuple(port_alloc_act_mem),
+                    served_dimensions="all",
+                )
+
+                memory_hierarchy_graph.add_memory(
+                    memory_instance=l2,
+                    operands=("I1", "I2","O"),
+                    port_alloc=(
+                        {"fh": "w_port_1", "tl": "r_port_1", "fl": None, "th": None},
+                        {"fh": "w_port_1", "tl": "r_port_1", "fl": None, "th": None},
+                        {
+                            "fh": "w_port_1",
+                            "tl": "r_port_1",
+                            "fl": "w_port_1",
+                            "th": "r_port_1",
+                        },
+                    ),
+                    served_dimensions="all",
+                )
+
+                return memory_hierarchy_graph
+
+
+            def get_operational_array():
+                """Multiplier array variables"""
+                multiplier_input_precision = [8, 8]
+                multiplier_energy = 0.04
+                multiplier_area = 1
+                dimensions = {"D1": 16, "D2": 16}  # {'D1': ('OX', 16), 'D2': ('K', 16)}
+                multiplier = Multiplier(
+                    multiplier_input_precision, multiplier_energy, multiplier_area
+                )
+                multiplier_array = MultiplierArray(multiplier, dimensions)
+
+                return multiplier_array
+
+
+            def get_dataflows():
+                return [{"D1": ("OX", 16), "D2": ("K", 16)}]
+
+
+            def get_core(id,operands):
+                operational_array = get_operational_array()
+                #get the memory hierarchy, from the l2 to the register level
+                memory_hierarchy = get_memory_hierarchy(operational_array,len(operands))
+                dataflows = get_dataflows()
+                core = Core(id, operational_array, memory_hierarchy, dataflows)
+                return core
+
+            operands=layer_data.operands
+            cores = {get_core(1,operands)}
+            global_buffer = None
+            acc_name = 'MATCH'
+            return Accelerator(acc_name, cores)
+        else:
+            return None

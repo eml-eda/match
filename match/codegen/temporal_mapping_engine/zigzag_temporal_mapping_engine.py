@@ -122,6 +122,9 @@ class ZigZagEngine(TemporalMappingEngine):
             acc_name = 'MATCH'
             return Accelerator(acc_name, cores)
         
+        ex_module_acc=self.exec_module.generate_architecture_for(dse='zigzag',optimal_spatial_mapping=optimal_spatial_mapping,platform_memories=platform_memories,layer_data=self.layer_data)
+        if ex_module_acc is not None:
+            return ex_module_acc
         return get_accelerator(optimal_spatial_mapping=optimal_spatial_mapping,platform_memories=platform_memories)
     
     def generate_temporal_mapping(self,spatial_mapping:Dict={},platform_memories:Dict={},optimal_spatial_mapping:List=[],cost_model:Any=None): 
@@ -142,7 +145,7 @@ class ZigZagEngine(TemporalMappingEngine):
             )
             if hasattr(cme[0][0],"is_tm_valid") and not cme[0][0].is_tm_valid:
                 raise NoValidLoopOrderingFoundException(
-                    f"No valid loop ordering was found for layer {cme.layer}. Please make sure the spatial mapping is compatible with the architecture."
+                    f"No valid loop ordering was found for layer {cme[0][0].layer}. Please make sure the spatial mapping is compatible with the architecture."
                 )
         except NoValidLoopOrderingFoundException as exc:
             self.energy=-1

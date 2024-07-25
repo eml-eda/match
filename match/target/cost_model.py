@@ -69,6 +69,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
 
     def calc_innermost_loops_cost(self):
         self.innermost_loops_cost_per_it=self.def_innermost_loops_cost()
+        self.computational_cost=self.innermost_loops_cost_per_it*self.computational_iters
 
     def calc_loop_iters_per_mem_level(self):
         self.loop_iters_per_mem_level = {
@@ -80,6 +81,8 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                            for idx in range(len(self.loop_iters_per_mem_level[operand])-1)])
             for operand in self.operands
         }
+        self.sorted_multiplicities=sorted(set([self.outermost_loop_iters[operand] for operand in self.operands]))
+        self.computational_iters=self.sorted_multiplicities[-1]
     
     def calc_relevancy_map(self):
         self.relevancy_map = self.layer_data.ordered_relevant_loops
@@ -115,14 +118,15 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.transfer_costs=self.def_transfer_cost()
 
     def overall_latency_sync(self):
-        self.total_latency=self.input_overall_transfers+self.self.output_overall_transfers+self.computational_cost
+        input_overall_transfers=sum([self.transfer_costs[operand] for operand in self.operands if operand!='O'])
+        output_overall_transfers=self.transfer_costs["O"]
+        self.match_overall_latency=input_overall_transfers+output_overall_transfers+self.computational_cost
     
     def overall_latency_async(self):
-        sorted_multiplicities=sorted(set([self.outermost_loop_iters[operand] for operand in self.operands]))
         cycles=0
         prev_mult_=0
         #print(f"Cost model multiplicities {sorted_multiplicities}")
-        for idx,mult_ in enumerate(sorted_multiplicities):
+        for idx,mult_ in enumerate(self.sorted_multiplicities):
             if idx==0:
                 cycles+=max([0]+[self.transfer_costs[operand] for operand in self.operands if operand!='O' and self.outermost_loop_iters[operand]>=mult_])
                 prev_mult_=1

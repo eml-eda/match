@@ -316,7 +316,9 @@ class WorkloadParser:
             else "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]"
         )
         self.layer_data.constant_operands=["W"]
-        self.layer_data.operand_source_dimension_mapping={'I': {'IX': 'OX', 'IY': 'OY','C':'K'}}
+        self.layer_data.operand_source_dimension_mapping={'I': {'IX': 'OX', 'IY': 'OY'}}
+        if depthwise:
+            self.layer_data.operand_source_dimension_mapping['C']='K'
         self.layer_data.operand_source={"W": [], "I": []}
         self.layer_data.ordered_relevant_loops = {
             "I": [['OY','OX','C'],[("C" if not depthwise else "K"), "OY", "OX"]][1],

@@ -142,7 +142,7 @@ class ExecModule(ABC):
         ]
 
     def get_all_memories_names(self):
-        return ["l1_mem","l2_mem"]
+        return [m.name for m in self.memories_def(pattern_name="conv2d",operands=["O","I","W"])]
 
     def match_memories(self,pattern_name,operands):
         self.platform_memories=self.memories_def(pattern_name,operands)
@@ -326,3 +326,6 @@ class ExecModule(ABC):
 
     def adjust_network(self,opts):
         return []
+
+    def generate_architecture_for(self,dse:str='zigzag',optimal_spatial_mapping:Any=None,platform_memories:Any=None,layer_data:Any=None):
+        return None

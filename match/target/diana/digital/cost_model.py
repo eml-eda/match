@@ -17,7 +17,7 @@ class DigitalAcceleratorCostModel(ZigZagMatchCostModel):
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=temporal_mapping,
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
-    
+
     def def_transfer_cost(self):
         multiplicity_l2 = {
             key: prod([v[1] for v in val[len(val) - 1]])
@@ -83,17 +83,23 @@ class DigitalAcceleratorCostModel(ZigZagMatchCostModel):
             operand: get_transfer_calls_per_time_from_to_l2(operand)
             for operand in self.operands
         }
-
-        return {
-            operand: multiplicity_l2[operand]
+        
+        def input_cost(operand):
+            return multiplicity_l2[operand]\
             * (
-                self.data_loading_cc_pair_combined_per_op[operand][1]
-                + transfer_calls_per_time_from_to_l2[operand] * 70
-            ) if operand != "O" else multiplicity_l2[operand]
-            * (
-                self.data_offloading_cc_pair_combined[1]
+                self.data_loading_cc_pair_combined_per_op[operand][-1]
                 + transfer_calls_per_time_from_to_l2[operand] * 70
             )
+        
+        def output_cost():
+            return multiplicity_l2["O"]\
+            * (
+                self.data_offloading_cc_pair_combined[-1]
+                + transfer_calls_per_time_from_to_l2["O"] * 70
+            )
+
+        return {
+            operand: input_cost(operand=operand) if operand != "O" else output_cost()
             for operand in self.operands
         }
 
@@ -101,14 +107,13 @@ class DigitalAcceleratorCostModel(ZigZagMatchCostModel):
     def def_innermost_loops_cost(self):
         spatial_mapping_sizes = prod(
             [
-                dim[1]
+                dim
                 for (
                     key,
                     dim,
-                ) in self.spatial_sizes.items()
+                ) in self.spatial_sizes
             ]
         )
-
         no_pad_size = (
             self.loop_sizes["K"]
             * (
@@ -140,7 +145,7 @@ class DigitalAcceleratorCostModel(ZigZagMatchCostModel):
                 self.layer_data.padding["IY"][0] + 1
             )
         ]
-        return sum(
+        comp_cost = sum(
             [
                 ceil((no_pad_size if pad == 0 else pad_size) / spatial_mapping_sizes) * contrib[pad]
                 for pad in range(
@@ -148,6 +153,7 @@ class DigitalAcceleratorCostModel(ZigZagMatchCostModel):
                 )
             ]
         )
+        return comp_cost/self.computational_iters
     
     def def_overall_execution(self):
         return self.overall_latency_sync()

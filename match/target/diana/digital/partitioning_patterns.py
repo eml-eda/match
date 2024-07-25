@@ -29,12 +29,13 @@ from tvm.relay.build_module import bind_params_by_name
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_var, is_constant
 from match.partition.partitioning_pattern import PartitioningPattern
 
+logger = logging.getLogger("Diana")
 
 def _requant_pattern(prev_op):
     """Add requant pattern (right_shift -> clip -> cast) to prev_op"""
     right_shift = is_op("right_shift")(prev_op, is_constant())
     clip = is_op("clip")(right_shift)
-    cast = is_op("cast")(clip).has_attr({"dtype": "int8"})
+    cast = is_op("cast")(clip).has_attr({"dtype": "uint8"})
     return cast
 
 
@@ -51,7 +52,7 @@ def conv2d_pattern():
     conv2d = is_op("nn.conv2d")(
             wildcard(), wildcard()
     )
-    return _biasadd_requant_pattern(conv2d)
+    return _biasadd_requant_pattern(conv2d | is_op("cast")(conv2d))
 
 
 def fully_connected_pattern():
@@ -112,7 +113,7 @@ def _check_biasadd_requant(pattern):
         logger.warning(f"Expected nn.bias_add parameters to be of type int32, but got {bias_dtype}. Acceleration for this op is not supported.")
         return None
 
-    return bias_add.args[0]
+    return bias_add.args[0] if bias_add.args[0].op.name=="nn.conv2d" else bias_add.args[0].args[0]
 
 
 def check_conv2d(pattern, supported_weight_bits=[8, 2]):
