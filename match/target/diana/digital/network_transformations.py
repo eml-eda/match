@@ -248,7 +248,7 @@ def network_transformations(opts):
 
 def adjust_network(opts):
     pipeline=[]
-    if 'layout_transform' not in opts or opts['layout_transform'] != '0':
-        pipeline.append(SomaDoryLayoutTransform())
+    #if 'layout_transform' not in opts or opts['layout_transform'] != '0':
+    #    pipeline.append(SomaDoryLayoutTransform())
     pipeline.append(transform.InferType())
     return pipeline

@@ -118,6 +118,9 @@ void* diana_digital_kernel_wrapper(match_kernel* kernel){
         case conv_2d:
             digital_conv_2d(0x0,kernel->common_kernel->I_pt,kernel->common_kernel->W_pt,0x0,kernel->common_kernel->O_pt,&diana_kernel);
             break;
+        case conv2d:
+            digital_conv_2d(0x0,kernel->common_kernel->I_pt,kernel->common_kernel->W_pt,0x0,kernel->common_kernel->O_pt,&diana_kernel);
+            break;
         case dense:
             digital_fully_connected(0x0,kernel->common_kernel->I_pt,kernel->common_kernel->W_pt,0x0,kernel->common_kernel->O_pt,&diana_kernel);
             break;
