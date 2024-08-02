@@ -253,8 +253,6 @@ class WorkloadParser:
 
     def visit_conv_2d(self, call, attrs):
         depthwise = False
-        if attrs.groups > 1:
-            depthwise = True
         itype = call.args[0].checked_type.shape
         iprec = call.args[0].checked_type.dtype
         wtype = call.args[1].checked_type.shape
@@ -265,6 +263,8 @@ class WorkloadParser:
         o_n, o_c, o_h, o_w = self.get_io_from_layout(
             attrs.out_layout if attrs.out_layout != "" else attrs.data_layout, otype
         )
+        if attrs.groups == w_cout and w_cin==1 and w_cout>1:
+            depthwise = True
         padding = [int(a_p) for a_p in attrs.padding]
         strides = [int(v) for v in attrs.strides]
         dilations = [int(a_d) for a_d in attrs.dilation]

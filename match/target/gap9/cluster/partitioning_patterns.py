@@ -51,10 +51,10 @@ def _biasadd_requant_pattern(linear_op):
 
 def conv2d_pattern():
     """Create pattern for conv2D with optional fused relu."""
-    conv2d = is_op("nn.dense")(
+    conv2d = is_op("nn.conv2d")(
             wildcard(), wildcard()
     )
-    return _biasadd_requant_pattern(conv2d)
+    return _biasadd_requant_pattern(conv2d | is_op("cast")(conv2d))
 
 def only_conv_2d_and_bias_pattern():
     """Create pattern for conv2D"""
@@ -79,12 +79,16 @@ def element_wise_add_pattern():
     cast_a = is_op("cast")(wildcard())
     cast_b = is_op("cast")(wildcard())
     add = is_op("add")(cast_a, cast_b)
+    # pattern cast cast add clip casst cast multiply right shift cast
     clip = is_op("clip")(add)
     cast_c = is_op("cast")(clip)
     cast_d = is_op("cast")(cast_c)
     mul = is_op("multiply")(is_constant(),cast_d)
     rshift = is_op("right_shift")(mul, is_constant())
-    pt = is_op("cast")(rshift)
+    # pattern cast cast add right shif clip cast
+    rshift_clip = is_op("clip")(is_op("right_shift")(add,is_constant()))
+    # cast for both paths
+    pt = is_op("cast")(rshift | rshift_clip)
     return pt
 
 def _check_requant(pattern):
@@ -224,7 +228,7 @@ def check_fully_connected(pattern):
 def partitioning_patterns():
     return [
         PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,ordered_operation="nn.conv2d"),
-        PartitioningPattern(name="conv2d_bias_add_requant",pattern=conv2d_pattern,additional_checks=check_conv2d,ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="conv2d_bias_add_requant",pattern=conv2d_pattern,ordered_operation="nn.conv2d"),
         PartitioningPattern(name="conv2d_bias_add",pattern=only_conv_2d_and_bias_pattern,ordered_operation="nn.conv2d"),
         PartitioningPattern(name="dense_bnorm_requant",pattern=dense_bnorm_requant_pattern,ordered_operation="nn.dense"),
         PartitioningPattern(name="dense_bias_add_requant",pattern=fully_connected_pattern,additional_checks=check_fully_connected,ordered_operation="nn.dense"),

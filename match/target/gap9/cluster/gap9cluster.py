@@ -7,11 +7,12 @@ from match.target.gap9.cluster.network_transformations import network_transforma
 from match.target.gap9.cluster.network_transformations import adjust_network as gap_adjust_net
 from match.target.gap9.cluster.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
 from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
+from match.target.memory_inst import MemoryInst
 import os
 import tvm
 
 class Gap9Cluster(ExecModule):
-    def __init__(self):
+    def __init__(self,**kwargs):
         super(Gap9Cluster, self).__init__(name="cluster",
                                           specific_patterns=[
                                               "pointwise_conv2d",
@@ -23,7 +24,9 @@ class Gap9Cluster(ExecModule):
                                               "dense_out"
                                           ],
                                           src_path=os.path.dirname(__file__)+"/src",
-                                          inc_path=os.path.dirname(__file__)+"/include")
+                                          inc_path=os.path.dirname(__file__)+"/include",
+                                          **kwargs)
+        self.L1_SIZE=90 if "l1_size" not in kwargs else kwargs["l1_size"]
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "gap9cluster_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
         conv2d_patterns=[
@@ -96,7 +99,12 @@ class Gap9Cluster(ExecModule):
             return "conv2d"
 
     def memories_def(self, pattern_name, operands):
-        memories=super().memories_def(pattern_name=pattern_name,operands=operands)
+        memories = [
+            # from lower level to higher level memories
+            # TEST: set now L1 to 9 kB just to force TILING 
+            MemoryInst(name="l1_mem",k_bytes=self.L1_SIZE,operands=operands,double_buffering_support=True),
+            MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
+        ]
         if pattern_name!="add_requant":
             memories[0].double_buffering_support=True
 

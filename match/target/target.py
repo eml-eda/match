@@ -72,8 +72,8 @@ class MatchTargetPattern:
 class MatchTarget(ABC):
     """Class that represents a heterogeneous target, this implementation defines this class through the singleton pattern
     """
-    def __init__(self,exec_modules,name:str="match",optimize_param:str="latency"):
-        if self.singleton_instantiated():
+    def __init__(self,exec_modules,name:str="match",optimize_param:str="latency",**kwargs):
+        if self.singleton_instantiated(**kwargs):
             return
         self.name=name
         self.match_patterns=[]
@@ -86,8 +86,11 @@ class MatchTarget(ABC):
             self.add_exec_module(exec_module)
             self.exec_modules_dict[exec_module.name]=exec_module
 
-    def singleton_instantiated(self):
-        return hasattr(self,"match_patterns")
+    def singleton_instantiated(self,**kwargs):
+        prev_kwargs_ = dict() if not hasattr(self,"prev_kwargs") else self.prev_kwargs
+        self.prev_kwargs=kwargs
+        if prev_kwargs_==kwargs and hasattr(self,"match_patterns"):
+            return True
 
     # we want a singleton for caching purposes
     def __new__(class_, *args, **kwargs):

@@ -5,6 +5,7 @@ from match.target.gap9.ne16.network_transformations import network_transformatio
 from match.target.gap9.ne16.network_transformations import adjust_network as pad_adjust
 from match.target.gap9.ne16.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
 from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
+from match.target.memory_inst import MemoryInst
 import os
 import numpy as np
 import numpy.typing as npt
@@ -12,14 +13,16 @@ import numpy.typing as npt
 import tvm
 
 class Gap9NE16(ExecModule):
-    def __init__(self):
+    def __init__(self,**kwargs):
         super(Gap9NE16, self).__init__(name="NE16",
                                           specific_patterns=[
                                               "conv2d",
                                               "depthwise_conv2d",
                                           ],
                                           src_path=os.path.dirname(__file__)+"/src",
-                                          inc_path=os.path.dirname(__file__)+"/include")
+                                          inc_path=os.path.dirname(__file__)+"/include",
+                                          **kwargs)
+        self.L1_SIZE=90 if "l1_size" not in kwargs else kwargs["l1_size"]
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "gap9NE16_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
         return [
@@ -37,6 +40,19 @@ class Gap9NE16(ExecModule):
             # DEFAULT LIKE CONV2D
             return "conv2d"
     
+    def memories_def(self,pattern_name,operands):
+        """define the memory hierarchy of the unit by setting self.platform_memories
+
+        Args:
+            operands (List[Str]): list of operands
+        """
+        return [
+            # from lower level to higher level memories
+            # TEST: set now L1 to 9 kB just to force TILING 
+            MemoryInst(name="l1_mem",k_bytes=self.L1_SIZE,operands=operands,double_buffering_support=True),
+            MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
+        ]
+
     def partitioning_patterns(self):
         return gap9partitioning_patterns()
 

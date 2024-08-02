@@ -193,7 +193,7 @@ def transform_key_name(key: str):
 
 
 class DigitalAccelerator(ExecModule):
-    def __init__(self):
+    def __init__(self,**kwargs):
         super(DigitalAccelerator, self).__init__(name="digital",
                                           specific_patterns=[
                                               "conv_2d",
@@ -202,7 +202,8 @@ class DigitalAccelerator(ExecModule):
                                               "element_wise_sum",
                                           ],
                                           src_path=os.path.dirname(__file__)+"/src",
-                                          inc_path=os.path.dirname(__file__)+"/include")
+                                          inc_path=os.path.dirname(__file__)+"/include",
+                                          **kwargs)
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
         return [

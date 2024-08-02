@@ -73,7 +73,8 @@ class ExecModule(ABC):
     def __init__(self,name:str="default_exec_module",
                  specific_patterns=[],
                  src_path:str="",
-                 inc_path:str=""):
+                 inc_path:str="",
+                 **kwargs):
         self.name=name
         self.FULL_DIM = sys.maxsize
         self.optimal_spatial_mapping = None
