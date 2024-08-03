@@ -17,6 +17,9 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         temporal_mapping,
         access_same_data_considered_as_no_access=True,
     ):
+        #MATCH cost model params
+        self.MATCH_ITERATION_LATENCY = 173 # TODO: profile MATCH latency
+        self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY = 10 # default value
         temporal_mapping_dict=temporal_mapping.mapping_dic_stationary
         operands_=temporal_mapping.operand_list
         constrained_temporal_mapping_dict,valid=self.adjust_temporal_mapping(temporal_mapping_dict,operands_,layer)
@@ -120,13 +123,16 @@ class ZigZagMatchCostModel(CostModelEvaluation):
     def overall_latency_sync(self):
         input_overall_transfers=sum([self.transfer_costs[operand] for operand in self.operands if operand!='O'])
         output_overall_transfers=self.transfer_costs["O"]
-        self.match_overall_latency=input_overall_transfers+output_overall_transfers+self.computational_cost
+        self.match_overall_latency=self.computational_iters*\
+            (self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY+self.MATCH_ITERATION_LATENCY)+\
+                input_overall_transfers+output_overall_transfers+self.computational_cost
     
     def overall_latency_async(self):
         cycles=0
         prev_mult_=0
         #print(f"Cost model multiplicities {sorted_multiplicities}")
         for idx,mult_ in enumerate(self.sorted_multiplicities):
+            cycles+=(mult_-prev_mult_)*(self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY+self.MATCH_ITERATION_LATENCY)
             if idx==0:
                 cycles+=max([0]+[self.transfer_costs[operand] for operand in self.operands if operand!='O' and self.outermost_loop_iters[operand]>=mult_])
                 prev_mult_=1

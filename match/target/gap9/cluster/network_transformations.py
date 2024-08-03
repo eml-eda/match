@@ -330,13 +330,13 @@ class Gap9BatchFlattenTransform:
 def network_transformations(opts):
     pipeline=[]
     #pipeline.append(transform.ConvertLayout({'nn.conv2d': ['NHWC']}))
-    pipeline.append(RequantRewriterPlinioOnnx())
+    #pipeline.append(RequantRewriterPlinioOnnx())
     pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))
     return pipeline
 
 def adjust_network(opts):
     pipeline=[]
-    pipeline.append(GapLayoutTransform())
-    pipeline.append(Gap9BatchFlattenTransform())
+    #pipeline.append(GapLayoutTransform())
+    #pipeline.append(Gap9BatchFlattenTransform())
     pipeline.append(transform.InferType())
     return pipeline
