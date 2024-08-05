@@ -138,7 +138,7 @@ class TemplateDataGenerator:
                     current_dims[operand][dim_name] = size_
             else:
                 for operand in general_template_data["input_operands"]:
-                    dim_name=general_template_data["input_dim_mapping"][fl["name"]]
+                    dim_name=fl["fullname"] if fl["name"] not in general_template_data["input_dim_mapping"] else general_template_data["input_dim_mapping"][fl["name"]]
                     fl_input_translations[operand][fl["fullname"]]=dim_name
         general_template_data["fl_input_translations"]=fl_input_translations
         #print(f"For {general_template_data['func_name']} tiling sizes {tiling_sizes}\n\n")

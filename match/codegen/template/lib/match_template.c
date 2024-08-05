@@ -432,6 +432,7 @@ void __attribute__ ((noinline)) ${func_name}(
     % endfor
     void* output_pt)
 {
+    % if platform_apis.init_platform_need_kernel_data:
     ## setup static kernel params
     ${types.kernel_struct} kernel;
     common_kernel comm_kernel;
@@ -465,11 +466,16 @@ void __attribute__ ((noinline)) ${func_name}(
         % endif
         &dim_O
     );
+    % endif
     unsigned int args[${len(input_operands)+1}];
     % for ind,i_operand in enumerate(input_operands):
     args[${ind}] = (unsigned int) input_${i_operand}_pt;
     % endfor
     args[${len(input_operands)}] = (unsigned int) output_pt;
+    % if platform_apis.init_platform_need_kernel_data:
     ${platform_apis.init_platform}(${func_name}_inner, args, &comm_kernel);
+    % else:
+    ${platform_apis.init_platform}(${func_name}_inner, args, NULL);
+    % endif
     return 0;
 }

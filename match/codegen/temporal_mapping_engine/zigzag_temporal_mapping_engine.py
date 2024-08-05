@@ -19,7 +19,7 @@ from zigzag.classes.opt.temporal.loma.engine import NoValidLoopOrderingFoundExce
 class ZigZagEngine(TemporalMappingEngine):
     def __init__(self,exec_module:ExecModule=None,pattern_name:str="",layer_data:LayerData=None):
         super(ZigZagEngine, self).__init__(exec_module=exec_module,pattern_name=pattern_name,layer_data=layer_data)
-        self.lpf_limit=13
+        self.lpf_limit=15
         self.debuglayer=False
         self.zigzag_temporal_mapping=dict()
 
@@ -55,10 +55,9 @@ class ZigZagEngine(TemporalMappingEngine):
             """ size=#bit, bw=#bit"""
             memory_hierarchy_graph = MemoryHierarchy(operational_array=multiplier_array)
             for plat_mem in platform_memories:
-
                 mem_inst = MemoryInstance(
                     name = plat_mem.name,
-                    size = floor(( plat_mem.k_bytes * 1024 - plat_mem.buffer_for_layer_func(self.layer_data,self.pattern_name))* 8) ,
+                    size = floor(( plat_mem.k_bytes * 1024 - plat_mem.buffer_for_layer_func(self.layer_data,self.pattern_name))* 8),
                     r_bw=floor(plat_mem.r_bw),
                     w_bw=floor(plat_mem.w_bw),
                     r_cost=100,
@@ -133,20 +132,34 @@ class ZigZagEngine(TemporalMappingEngine):
         self.workload[1]["match_layer_data"] = self.layer_data
         self.spatial_mapping = spatial_mapping
         try:
-            self.energy, self.latency, cme = api.get_hardware_performance_zigzag(
-                workload=self.workload,
-                accelerator=self.accelerator,
-                mapping=spatial_mapping,
-                opt="latency",
-                dump_filename_pattern=f"tmp/match-layer_?.json",
-                pickle_filename=f"tmp/match-saved_list_of_cmes.pickle",
-                lpf_limit=self.lpf_limit,
-                cost_model_class= cost_model
-            )
-            if hasattr(cme[0][0],"is_tm_valid") and not cme[0][0].is_tm_valid:
-                raise NoValidLoopOrderingFoundException(
-                    f"No valid loop ordering was found for layer {cme[0][0].layer}. Please make sure the spatial mapping is compatible with the architecture."
+            current_spatial_mapping = self.spatial_mapping
+            found_valid_temporal_mapping = False
+            while not found_valid_temporal_mapping:
+                self.energy, self.latency, cme = api.get_hardware_performance_zigzag(
+                    workload=self.workload,
+                    accelerator=self.accelerator,
+                    mapping=current_spatial_mapping,
+                    opt="latency",
+                    dump_filename_pattern=f"tmp/match-layer_?.json",
+                    pickle_filename=f"tmp/match-saved_list_of_cmes.pickle",
+                    lpf_limit=self.lpf_limit,
+                    cost_model_class= cost_model
                 )
+                if hasattr(cme[0][0],"is_tm_valid"):
+                    found_valid_temporal_mapping = cme[0][0].is_tm_valid
+                if not found_valid_temporal_mapping and all([v[1]==1 for v in list(current_spatial_mapping[self.pattern_name]["spatial_mapping"].values())]):
+                    raise NoValidLoopOrderingFoundException(
+                        f"No valid loop ordering was found for layer {cme[0][0].layer}."
+                    )
+                if not found_valid_temporal_mapping:
+                    max_spatial_size = max(list(current_spatial_mapping[self.pattern_name]["spatial_mapping"].values()),key= lambda a: a[1])
+                    curr_ = current_spatial_mapping[self.pattern_name]["spatial_mapping"]
+                    for dim_ in curr_.keys():
+                        dim_spat_size = current_spatial_mapping[self.pattern_name]["spatial_mapping"][dim_]
+                        if dim_spat_size==max_spatial_size:
+                            current_spatial_mapping[self.pattern_name]["spatial_mapping"][dim_] = (max_spatial_size[0],floor(max_spatial_size[1]/2))
+                            break
+
         except NoValidLoopOrderingFoundException as exc:
             self.energy=-1
             self.latency=-1

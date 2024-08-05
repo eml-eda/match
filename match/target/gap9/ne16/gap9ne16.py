@@ -82,6 +82,7 @@ class Gap9NE16(ExecModule):
     
     def platform_apis_def(self,platform_apis: PlatformApis=PlatformApis()):
         platform_apis.init_platform="ne16_init_platform"
+        platform_apis.init_platform_need_kernel_data=True
         platform_apis.set_task_id="ne16_set_task_id"
         return platform_apis
     

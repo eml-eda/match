@@ -47,6 +47,7 @@ class PlatformApis:
     """
     def __init__(self, pattern_name="conv2d"):
         self.init_platform="match_init_platform"
+        self.init_platform_need_kernel_data=False
         self.set_task_id="match_task_id"
 
 class SyncApis:
