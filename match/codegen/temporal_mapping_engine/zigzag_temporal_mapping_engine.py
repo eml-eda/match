@@ -161,12 +161,14 @@ class ZigZagEngine(TemporalMappingEngine):
                             break
 
         except NoValidLoopOrderingFoundException as exc:
+            #breakpoint()
             self.energy=-1
             self.latency=-1
             self.cme=None
             print(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
             raise Exception(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
         except Exception as exc:
+            #breakpoint()
             self.energy=-1
             self.latency=-1
             self.cme=None

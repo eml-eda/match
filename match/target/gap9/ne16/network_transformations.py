@@ -312,7 +312,10 @@ class GapPadTransform(ExprMutator):
                 new_args = list()
                 for arg in call.args:
                     if isinstance(arg,relay.Constant):
-                        new_args.append(relay.const(np_to_tvm_arr(np.pad(arg.data.numpy(),((0,0),(0,16-(int(arg.checked_type.shape[1])%16)),(0,0),(0,0))),dtype=arg.checked_type.dtype), dtype=arg.checked_type.dtype))
+                        if len(arg.checked_type.shape)>1:
+                            new_args.append(relay.const(np_to_tvm_arr(np.pad(arg.data.numpy(),((0,0),(0,16-(int(arg.checked_type.shape[1])%16)),(0,0),(0,0))),dtype=arg.checked_type.dtype), dtype=arg.checked_type.dtype))
+                        else:
+                            new_args.append(relay.const(np_to_tvm_arr(np.pad(arg.data.numpy(),((0,16-(int(arg.checked_type.shape[0])%16)))),dtype=arg.checked_type.dtype), dtype=arg.checked_type.dtype))
                     else:
                         new_args.append(self.visit_pad_func_body(arg,params=params,is_dw=is_dw))
             else:
@@ -427,6 +430,7 @@ class GapPadTransform(ExprMutator):
 
 def adjust_network(opts):
     pipeline=[]
+    pipeline.append(transform.InferType())
     pipeline.append(GapPadTransform())
-   # pipeline.append(transform.InferType())
+    pipeline.append(transform.InferType())
     return pipeline

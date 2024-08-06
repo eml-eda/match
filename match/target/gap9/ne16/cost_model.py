@@ -296,22 +296,23 @@ class Gap9NE16CostModel(ZigZagMatchCostModel):
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
     
     def def_transfer_cost(self):
+        is_dw = self.layer_data.specific_pattern=='depthwise_conv2d'
         layer_params = (
             self.loop_sizes["OY"],
             self.loop_sizes["OX"],
-            self.loop_sizes["K"],
-            self.loop_sizes["C"]    
+            self.loop_sizes["K"] if not is_dw else self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16)),
+            self.loop_sizes["C"] + (16-(self.loop_sizes["C"]%16)) if not is_dw else self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16))
         )
         self.ne16=Ne16PerfModel_generalized(
                 name='conv',
                 ks=(self.loop_sizes["FY"],self.loop_sizes["FX"]),
-                depthwise=self.pattern_name=='depthwise_conv_2d',
+                depthwise=is_dw,
                 WEIGHTS_BITWIDTH=1,
                 layer=layer_params)
         self.ne16.set_subtile(self.size_per_mem_level["O"]["OY"][0],
                               self.size_per_mem_level["O"]["OX"][0],
-                              1,
-                              self.size_per_mem_level["W"]["C"][0])
+                              self.size_per_mem_level["O"]["K"][0] + (16-(self.size_per_mem_level["O"]["K"][0]%16)) if is_dw else self.size_per_mem_level["O"]["K"][0],
+                              self.size_per_mem_level["I"]["C"][0] + (16-(self.size_per_mem_level["I"]["C"][0]%16)) if not is_dw else self.size_per_mem_level["O"]["K"][0] + (16-(self.size_per_mem_level["O"]["K"][0]%16)))
         return {
             "O":int(self.ne16.out_store_latency),
             "W":int(self.ne16.weight_load_latency),
@@ -320,22 +321,29 @@ class Gap9NE16CostModel(ZigZagMatchCostModel):
     
     def def_innermost_loops_cost(self):
         return int(self.ne16.computation_iteration_latency+self.ne16.update_indexes_latency+self.ne16.iter_normquant_latency)
+    
     def def_overall_execution(self):
+        is_dw = self.layer_data.specific_pattern=='depthwise_conv2d'
         layer_params = (
             self.loop_sizes["OY"],
             self.loop_sizes["OX"],
-            self.loop_sizes["K"],
-            self.loop_sizes["C"]    
+            self.loop_sizes["K"] if not is_dw else self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16)),
+            self.loop_sizes["C"] + (16-(self.loop_sizes["C"]%16)) if not is_dw else self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16))
         )
         self.ne16=Ne16PerfModel_generalized(
                 name='conv',
                 ks=(self.loop_sizes["FY"],self.loop_sizes["FX"]),
-                depthwise=self.pattern_name=='depthwise_conv_2d',
-                WEIGHTS_BITWIDTH=8,
+                depthwise=is_dw,
+                WEIGHTS_BITWIDTH=1,
                 layer=layer_params)
-        self.match_overall_latency=int(self.ne16.tiled_layer_latency((self.partial_relevant_loop_sizes["IY"],self.partial_relevant_loop_sizes["IX"],self.loop_sizes["C"]),(self.loop_sizes["OY"],self.loop_sizes["OX"],self.loop_sizes["K"]),
-                                                         (self.size_per_mem_level["O"]["OY"][0],self.size_per_mem_level["O"]["OX"][0],self.size_per_mem_level["O"]["K"][0])))
-        if self.loop_sizes["C"]%16!=0:
+        self.match_overall_latency=int(self.ne16.tiled_layer_latency(
+            layer_shape_in=(self.partial_relevant_loop_sizes["IY"],self.partial_relevant_loop_sizes["IX"],self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16)) if is_dw else self.loop_sizes["C"] + (16-(self.loop_sizes["C"]%16))),
+            layer_shape_out=(self.loop_sizes["OY"],self.loop_sizes["OX"],self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16)) if is_dw else self.loop_sizes["K"]),
+            tile_shape_out=(self.size_per_mem_level["O"]["OY"][0],self.size_per_mem_level["O"]["OX"][0],self.size_per_mem_level["O"]["K"][0]+(16-(self.size_per_mem_level["O"]["K"][0]%16)) if is_dw else self.size_per_mem_level["O"]["K"][0])))
+        if self.loop_sizes["C"]%16!=0 and not is_dw:
             #add software padding cost
             self.match_overall_latency+=self.partial_relevant_loop_sizes["IY"]*self.partial_relevant_loop_sizes["IX"]*(self.loop_sizes["C"]+(16-self.loop_sizes["C"]%16))*1.5
+        elif is_dw and self.loop_sizes["K"]%16!=0:
+            #add software padding cost
+            self.match_overall_latency+=self.partial_relevant_loop_sizes["IY"]*self.partial_relevant_loop_sizes["IX"]*(self.loop_sizes["C"]+(16-self.loop_sizes["K"]%16))*1.5
         self.total_latency=self.match_overall_latency

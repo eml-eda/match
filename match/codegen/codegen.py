@@ -33,7 +33,9 @@ def codegen(mod: tvm.ir.IRModule):
     try:
         code, error_codegen = get_code(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
     except Exception as exc:
+        #breakpoint()
         raise exc
     if error_codegen:
+        #breakpoint()
         raise Exception("Couldn't generate output")
     return code

@@ -117,8 +117,9 @@ def check_conv2d(pattern):
         or not is_conv2d_attr_value_supported(conv2d.attrs, 'strides', [[1, 1], [2, 2]])
         or not is_conv2d_attr_value_supported(conv2d.attrs, 'dilation', [[1, 1]])
         or not is_conv2d_attr_value_supported(conv2d.attrs, 'groups', [1, num_output_channels])
-        or not (((num_input_channels%16)==0 and conv2d.attrs["groups"]==1)
-        or ((num_output_channels%16)==0 and conv2d.attrs["groups"]>1))):
+        #or not (((num_input_channels%16)==0 and conv2d.attrs["groups"]==1)
+        #or ((num_output_channels%16)==0 and conv2d.attrs["groups"]>1))
+        ):
 
         return False
 
