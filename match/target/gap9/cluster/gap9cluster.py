@@ -62,7 +62,7 @@ class Gap9Cluster(ExecModule):
         elif pattern_name in dense_patterns:
             # TODO: K 8 C 1
             return [
-                ("K",8)
+                ("K",1)
             ]
         else:
             # DEFAULT LIKE CONV2D
@@ -105,8 +105,8 @@ class Gap9Cluster(ExecModule):
             MemoryInst(name="l1_mem",k_bytes=self.L1_SIZE,operands=operands,double_buffering_support=True),
             MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]
-        if pattern_name!="add_requant":
-            memories[0].double_buffering_support=True
+        if pattern_name=="add_requant":
+            memories[0].double_buffering_support=False
 
         def buffers_for_l1_mem(layer_data,pattern_name):
             buff_mem=0
