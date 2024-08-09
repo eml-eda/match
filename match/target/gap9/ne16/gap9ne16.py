@@ -26,7 +26,7 @@ class Gap9NE16(ExecModule):
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "gap9NE16_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
         return [
-            ("K",32)
+            ("K",16)
         ]
     
     def specific_pattern_def(self, pattern_name: str = "conv_2d", dim_sizes: Dict[str, int] = ..., layer_attrs: Dict = ...):
@@ -114,6 +114,7 @@ class Gap9NE16(ExecModule):
         where cinMajor is the ceil(cin / CIN_SUBTILE) and cinMinor has to be padded with 0 to CIN_SUBTILE.
         """
         # let's make the weights unsigned
+        #print("Initial weigths",weight.tolist())
         weight = weight - 128
         if depthwise:
             weight = weight.transpose(1, 0, 2, 3)  # Swap cout and cin
@@ -139,10 +140,12 @@ class Gap9NE16(ExecModule):
         cinMinor = 16
         weight = weight.reshape(cout, cinMajor, cinMinor, height * width, 1)
 
+        #print("Pre unpack",weight.tolist())
         # Unpack 'bits' bits in little order, e.g. bits=4: 3 => [1, 1, 0, 0]
         # (cout, cinMajor, cinMinor, flattened spatial, Bits)
         weight = np.unpackbits(weight.astype(np.uint8), axis=-1, count=bits, bitorder="little")
 
+        #print("After unpack",weight.tolist())
         # Shuffle bits so that the final shape is:
         # (cout, cinMajor, Bits, flattened spatial, cinMinor)
         weight = weight.transpose(0, 1, 4, 3, 2)
@@ -155,7 +158,7 @@ class Gap9NE16(ExecModule):
         # Pack
         # (cout, cinMajor, Bits, flattened spatial, cinMinorBytes)
         weight = np.packbits(weight, axis=-1, bitorder="little")
-        print(weight.shape)
+        #print(weight.shape)
         return weight.flatten()
 
     def weights_and_constants(self,pattern_name,layer_data,layer_arguments:List=[]):
@@ -195,159 +198,6 @@ class Gap9NE16(ExecModule):
 
 if __name__=="__main__":
     weights = np.array(
-        [
-    [
-        [
-            [
-                -26,
-                -108,
-                -57
-            ],
-            [
-                -20,
-                -128,
-                -53
-            ],
-            [
-                46,
-                26,
-                -50
-            ]
-        ]
-    ],
-    [
-        [
-            [
-                -59,
-                -66,
-                -69
-            ],
-            [
-                12,
-                94,
-                15
-            ],
-            [
-                -40,
-                -36,
-                127
-            ]
-        ]
-    ],
-    [
-        [
-            [
-                6,
-                -39,
-                -20
-            ],
-            [
-                -27,
-                18,
-                -39
-            ],
-            [
-                6,
-                -128,
-                0
-            ]
-        ]
-    ],
-    [
-        [
-            [
-                -23,
-                -20,
-                46
-            ],
-            [
-                127,
-                -44,
-                -54
-            ],
-            [
-                25,
-                68,
-                -3
-            ]
-        ]
-    ],
-    [
-        [
-            [
-                -122,
-                127,
-                25
-            ],
-            [
-                -81,
-                -31,
-                90
-            ],
-            [
-                31,
-                12,
-                -65
-            ]
-        ]
-    ],
-    [
-        [
-            [
-                -64,
-                127,
-                -2
-            ],
-            [
-                -7,
-                65,
-                52
-            ],
-            [
-                60,
-                1,
-                -12
-            ]
-        ]
-    ],
-    [
-        [
-            [
-                -81,
-                -31,
-                62
-            ],
-            [
-                -128,
-                -64,
-                -81
-            ],
-            [
-                34,
-                58,
-                -20
-            ]
-        ]
-    ],
-    [
-        [
-            [
-                111,
-                113,
-                116
-            ],
-            [
-                -50,
-                80,
-                -72
-            ],
-            [
-                -7,
-                -56,
-                127
-            ]
-        ]
-    ]
-]
+        [[[[k*3*3+fy*3+fx for fx in range(3)] for fy in range(3)] for c in range(1)] for k in range(8)]
     )
     print(Gap9NE16.weightEncode(weight=np.pad(weights,((0,8),(0,0),(0,0),(0,0))),bits=8,depthwise=True).tolist())

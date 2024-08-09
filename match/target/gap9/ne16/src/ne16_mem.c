@@ -164,17 +164,37 @@ void ne16_copy_out_curr_computation(common_kernel* common_kernel,dimension_O* di
         dma_mutex_lock();
         output_transfers=dma_transfer_create();
         #endif
-        dma_transfer_async((DmaTransferConf) {
-            .ext = ext_pt,
-            .loc = int_pt,
-            .number_of_2d_copies = dim->size_OY[int_mem],
-            .number_of_1d_copies = dim->size_OX[int_mem],
-            .length_1d_copy = dim->size_K[int_mem],
-            .hwc_to_chw = 0,
-            .stride_2d = dim->size_K[ext_mem]*dim->size_OX[ext_mem],
-            .stride_1d = dim->size_K[ext_mem],
-            .dir = 0
-        });
+        // no tiling so do 1D transfer
+        if(dim->size_OY[ext_mem]==dim->size_OY[int_mem] && dim->size_OX[ext_mem]==dim->size_OX[int_mem]
+        && dim->size_K[ext_mem]==dim->size_K[int_mem])
+            dma_transfer_1d_async((DmaTransferConf) {
+                .ext = ext_pt,
+                .loc = int_pt,
+                .length_1d_copy = dim->size_OY[int_mem]*dim->size_OX[int_mem]*dim->size_K[int_mem]*common_kernel->prec_O/8,
+                .dir = 0
+            });
+        // inner dimensions not tiled, do 2D transfers
+        else if(dim->size_OX[ext_mem]==dim->size_OX[int_mem] && dim->size_K[ext_mem]==dim->size_K[int_mem])
+            dma_transfer_2d_async((DmaTransferConf) {
+                .ext = ext_pt,
+                .loc = int_pt,
+                .number_of_1d_copies = dim->size_OY[int_mem],
+                .length_1d_copy = dim->size_OX[int_mem]*dim->size_K[int_mem]*common_kernel->prec_O/8,
+                .stride_1d = dim->size_OX[ext_mem]*dim->size_K[ext_mem]*common_kernel->prec_O/8,
+                .dir = 0
+            });
+        // unlucky
+        else
+            dma_transfer_3d_async((DmaTransferConf) {
+                .ext = ext_pt,
+                .loc = int_pt,
+                .number_of_2d_copies = dim->size_OY[int_mem],
+                .number_of_1d_copies = dim->size_OX[int_mem],
+                .length_1d_copy = dim->size_K[int_mem]*common_kernel->prec_O/8,
+                .stride_2d = dim->size_K[ext_mem]*dim->size_OX[ext_mem]*common_kernel->prec_O/8,
+                .stride_1d = dim->size_K[ext_mem]*common_kernel->prec_O/8,
+                .dir = 0
+            });
         #ifdef MATCH_NE16_BUFFERED
         dma_mutex_unlock();
         #endif
@@ -200,17 +220,41 @@ unsigned int ne16_mem_transfer_I(common_kernel* common_kernel,dimension_I* dim,u
         }
         #endif
         unsigned int src=ext_pt;
-        dma_transfer_async((DmaTransferConf) {
-            .ext = src,
-            .loc = dst,
-            .number_of_2d_copies = (dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y),
-            .number_of_1d_copies = (dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y),
-            .length_1d_copy = dim->size_C[int_mem],
-            .hwc_to_chw = 0,
-            .stride_2d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
-            .stride_1d = dim->size_C[ext_mem],
-            .dir = 1
-        });
+
+        // not dw so input channels not tiled! then if height and width are not tiled we can do 1D transfer
+        if(dim->size_IY[ext_mem]==dim->size_IY[int_mem] && dim->size_IX[ext_mem]==dim->size_IX[int_mem]
+        && dim->size_C[ext_mem]==dim->size_C[int_mem])
+            dma_transfer_1d_async((DmaTransferConf) {
+                .ext = ext_pt,
+                .loc = dst,
+                .length_1d_copy = (dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y)*
+                (dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y)*
+                dim->size_C[int_mem],
+                .dir = 1
+            });
+        // not dw so input channels not tiled! then if width are not tiled we can do some 2D transfers
+        else if(dim->size_IX[ext_mem]==dim->size_IX[int_mem] && dim->size_C[ext_mem]==dim->size_C[int_mem])
+            dma_transfer_2d_async((DmaTransferConf) {
+                .ext = ext_pt,
+                .loc = dst,
+                .number_of_1d_copies = dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y,
+                .length_1d_copy = (dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y)*
+                dim->size_C[int_mem],
+                .stride_1d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
+                .dir = 1
+            });
+        // unlucky
+        else
+            dma_transfer_3d_async((DmaTransferConf) {
+                .ext = src,
+                .loc = dst,
+                .number_of_2d_copies = (dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y),
+                .number_of_1d_copies = (dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y),
+                .length_1d_copy = dim->size_C[int_mem],
+                .stride_2d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
+                .stride_1d = dim->size_C[ext_mem],
+                .dir = 1
+            });
     }
     return dst;
 }
@@ -233,12 +277,33 @@ unsigned int ne16_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,u
         }
         #endif
         
-        dma_transfer_1d_async((DmaTransferConf) {
-            .ext = ext_pt,
-            .loc = dst,
-            .length_1d_copy = dim->size_K[int_mem]*dim->size_C[int_mem]*dim->size_FY[int_mem]*dim->size_FX[int_mem],
-            .dir = 1
-        });
+        // output stationary so only output channels can be tiled for the weights, so if not tiled do 1D
+        if(dim->size_K[ext_mem]==dim->size_K[int_mem])
+            dma_transfer_1d_async((DmaTransferConf) {
+                .ext = ext_pt,
+                .loc = dst,
+                .length_1d_copy = dim->size_K[int_mem]*dim->size_FY[int_mem]*dim->size_FX[int_mem]*dim->size_C[int_mem],
+                .dir = 1
+            });
+        // else do some 2D transfers
+        else if(!common_kernel->specific_pattern==depthwise_conv2d)
+            dma_transfer_2d_async((DmaTransferConf) {
+                .ext = ext_pt,
+                .loc = dst,
+                .number_of_1d_copies = dim->size_K[int_mem],
+                .length_1d_copy = dim->size_C[int_mem]*dim->size_FY[int_mem]*dim->size_FX[int_mem],
+                .stride_1d = dim->size_C[ext_mem]*dim->size_FY[ext_mem]*dim->size_FX[ext_mem],
+                .dir = 1
+            });
+        else
+            dma_transfer_2d_async((DmaTransferConf) {
+                .ext = ext_pt,
+                .loc = dst,
+                .number_of_1d_copies = dim->size_K[int_mem]/16,
+                .length_1d_copy = dim->size_K[int_mem]/16*dim->size_FY[int_mem]*dim->size_FX[int_mem],
+                .stride_1d = 16*dim->size_FY[ext_mem]*dim->size_FX[ext_mem],
+                .dir = 1
+            });
     }
     return dst;
 }
