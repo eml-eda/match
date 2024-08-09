@@ -5,6 +5,8 @@ from zigzag.classes.cost_model.cost_model import CostModelEvaluation
 from zigzag.classes.mapping.temporal.temporal_mapping import TemporalMapping
 from zigzag.classes.opt.temporal.loma.engine import NoValidLoopOrderingFoundException
 
+from match.utils import save_tmap_search_res
+
 class ZigZagMatchCostModel(CostModelEvaluation):
     """MATCH implementation of the cost model that will be used by ZigZag
     """
@@ -159,3 +161,5 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.calc_match_overall_latency()
         # set overall latency
         self.latency_total2=self.match_overall_latency
+
+        #save_tmap_search_res(self.layer_data,self.temp_mapping,self.latency_total2,0)

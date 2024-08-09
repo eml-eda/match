@@ -204,6 +204,7 @@ class DigitalAccelerator(ExecModule):
                                           src_path=os.path.dirname(__file__)+"/src",
                                           inc_path=os.path.dirname(__file__)+"/include",
                                           **kwargs)
+        self.L1_SIZE=256 if "l1_size" not in kwargs else kwargs["l1_size"]
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
         return [
@@ -219,7 +220,7 @@ class DigitalAccelerator(ExecModule):
     def memories_def(self, pattern_name, operands):
         mem = [
             # from lower level to higher level memories
-            MemoryInst(name="act_mem",k_bytes=256,operands=[op for op in operands if op!="W"],double_buffering_support=False),
+            MemoryInst(name="act_mem",k_bytes=self.L1_SIZE,operands=[op for op in operands if op!="W"],double_buffering_support=False),
             MemoryInst(name="dram",k_bytes=512,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]
         if "W" in operands:
@@ -400,7 +401,7 @@ class DigitalAccelerator(ExecModule):
 
                 shared_l1 = MemoryInstance(
                     name="act_mem",
-                    size=256* 1024 * 8,
+                    size=self.L1_SIZE* 1024 * 8,
                     r_bw=64 * 8,
                     w_bw=64 * 8,
                     r_cost=33.2 * 8,

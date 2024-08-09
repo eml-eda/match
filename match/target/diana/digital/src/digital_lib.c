@@ -78,36 +78,34 @@ void* diana_digital_kernel_wrapper(match_kernel* kernel){
     start_g_perf_counter();
     #endif
     Layer_parameters diana_kernel;
-    int i_channels=kernel->common_kernel->c_i>kernel->common_kernel->c_w?kernel->common_kernel->c_w:kernel->common_kernel->c_i;
-    int o_channels=kernel->common_kernel->k_o;
-    int i_width=kernel->common_kernel->ix_i
-    +kernel->common_kernel->dim_I->overlap_IX_x+kernel->common_kernel->dim_I->overlap_IX_y
-    -kernel->common_kernel->dim_I->pad_IX_x-kernel->common_kernel->dim_I->pad_IX_y;
-    int i_height=kernel->common_kernel->iy_i
-    +kernel->common_kernel->dim_I->overlap_IY_x+kernel->common_kernel->dim_I->overlap_IY_y
-    -kernel->common_kernel->dim_I->pad_IY_x-kernel->common_kernel->dim_I->pad_IY_y;
-    int o_width=kernel->common_kernel->ox;
-    int o_height=kernel->common_kernel->oy;
-    int w_y_width=kernel->common_kernel->fx;
-    int w_y_height=kernel->common_kernel->fy;
-    int act=kernel->common_kernel->activation_function;
-    int batch_norm=kernel->common_kernel->batchnorm_add!=0x0;
+    
     int p_top=kernel->common_kernel->pad_IY_x;
     int p_bottom=kernel->common_kernel->pad_IY_y;
     int p_left=kernel->common_kernel->pad_IX_x;
     int p_right=kernel->common_kernel->pad_IX_y;
-    diana_kernel.c=kernel->common_kernel->specific_pattern!=depthwise_conv_2d? i_channels:o_channels;
-    diana_kernel.k=o_channels;
-    diana_kernel.cx=i_width;
-    diana_kernel.cy=i_height;
-    diana_kernel.fx=w_y_width;
-    diana_kernel.fy=w_y_height;
-    diana_kernel.ox=o_width;
-    diana_kernel.oy=o_height;
-    diana_kernel.activation_function=act;
+
+    diana_kernel.c=kernel->common_kernel->specific_pattern!=depthwise_conv_2d?
+    (kernel->common_kernel->c_i>kernel->common_kernel->c_w?
+    kernel->common_kernel->c_w:kernel->common_kernel->c_i):kernel->common_kernel->k_o;
+    
+    diana_kernel.k=kernel->common_kernel->k_o;
+
+    diana_kernel.cx=kernel->common_kernel->ix_i
+    +kernel->common_kernel->dim_I->overlap_IX_x+kernel->common_kernel->dim_I->overlap_IX_y
+    -kernel->common_kernel->dim_I->pad_IX_x-kernel->common_kernel->dim_I->pad_IX_y;
+
+    diana_kernel.cy=kernel->common_kernel->iy_i
+    +kernel->common_kernel->dim_I->overlap_IY_x+kernel->common_kernel->dim_I->overlap_IY_y
+    -kernel->common_kernel->dim_I->pad_IY_x-kernel->common_kernel->dim_I->pad_IY_y;
+
+    diana_kernel.fx=kernel->common_kernel->fx;
+    diana_kernel.fy=kernel->common_kernel->fy;
+    diana_kernel.ox=kernel->common_kernel->ox;
+    diana_kernel.oy=kernel->common_kernel->oy;
+    diana_kernel.activation_function=kernel->common_kernel->activation_function;
     diana_kernel.output_shift=kernel->common_kernel->right_shift;
     diana_kernel.dilation=1;
-    diana_kernel.stride=kernel->common_kernel->stride_x;
+    diana_kernel.stride=kernel->common_kernel->stride_x-1;
     diana_kernel.ox_unroll=0;
     diana_kernel.padding=(p_right>p_left? p_right : p_left)+(p_top<<8)+(p_bottom<<12);//+(p_left<<4);
     #ifdef MATCH_PROFILE_KERN_CALL
@@ -143,52 +141,19 @@ void* diana_digital_kernel_wrapper(match_kernel* kernel){
 
 void* digital_memalloc(int size,int memorylevel,int operator){
     void* dst=memory;
-    switch(memorylevel){
-        case dram:
-            if(last_dram+size>=dram_SIZE) last_dram=0;
-            dst+=dram_OFF+last_dram;
-            last_dram+=size;
+    switch (operator)
+    {
+        case operator_O:
+            dst+=act_mem_OFF+act_O;
             break;
-        case act_mem:
-            switch (operator)
-            {
-                case operator_O:
-                    if(act_O<0){
-                        dst+=act_mem_OFF+last_act;
-                        act_O=last_act;
-                        last_act+=size;
-                    }
-                    else dst+=act_mem_OFF+act_O;
-                    break;
-                case operator_I:
-                    if(act_I<0){
-                        dst+=act_mem_OFF+last_act;
-                        act_I=last_act;
-                        last_act+=size;
-                    }
-                    else dst+=act_mem_OFF+act_I;
-                    break;
-                case operator_X:
-                    if(act_X<0){
-                        dst+=act_mem_OFF+last_act;
-                        act_X=last_act;
-                        last_act+=size;
-                    }
-                    else dst+=act_mem_OFF+act_X;
-                    break;
-                case operator_Y:
-                    if(act_Y<0){
-                        dst+=act_mem_OFF+last_act;
-                        act_Y=last_act;
-                        last_act+=size;
-                    }
-                    else dst+=act_mem_OFF+act_Y;
-                    break;
-                default:
-                    break;
-            }
-        case weight_mem:
-            dst+= weight_mem_OFF;
+        case operator_I:
+            dst+=act_mem_OFF+act_I;
+            break;
+        case operator_X:
+            dst+=act_mem_OFF+act_X;
+            break;
+        case operator_Y:
+            dst+=act_mem_OFF+act_Y;
             break;
         default:
             break;
@@ -379,6 +344,9 @@ void digital_set_channel(common_kernel* common_kernel,int* first_op_sizes,unsign
                                 int* third_op_sizes,unsigned char third_op_db,dimension_O* dim_O,
                                 int* paddings,int* strides){
     dory_dma_channel = dory_dma_allocate();
+    act_I = act_X = 0;
+    act_Y = first_op_sizes[1];
+    act_O = first_op_sizes[1] + (common_kernel->specific_pattern==element_wise_sum?second_op_sizes[1]:0);
 }
 
 void digital_free_channel(){

@@ -1,10 +1,10 @@
 #ifndef _DIGITAL_LIB_H
 #define _DIGITAL_LIB_H
 #define dram_SIZE 512*1024
-#define act_mem_SIZE 24*1024
+#define act_mem_SIZE 256*1024
 #define weight_mem_SIZE 64*1024
 #define TOTAL_MEM_SIZE (dram_SIZE+act_mem_SIZE+weight_mem_SIZE)
-#define weight_mem_OFF (act_mem_SIZE)
+#define weight_mem_OFF 0
 #define act_mem_OFF 0
 #define dram_OFF 0
 

@@ -19,7 +19,7 @@ from zigzag.classes.opt.temporal.loma.engine import NoValidLoopOrderingFoundExce
 class ZigZagEngine(TemporalMappingEngine):
     def __init__(self,exec_module:ExecModule=None,pattern_name:str="",layer_data:LayerData=None):
         super(ZigZagEngine, self).__init__(exec_module=exec_module,pattern_name=pattern_name,layer_data=layer_data)
-        self.lpf_limit=15
+        self.lpf_limit=13
         self.debuglayer=False
         self.zigzag_temporal_mapping=dict()
 

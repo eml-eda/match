@@ -136,7 +136,7 @@ class MatchTarget(ABC):
             pt_res.set_latency(latency)
             pt_res.set_energy(energy)
             self.add_pt_res_to_cache(pt_res)
-        save_codegen_schedule(node,temporal_mapping,spatial_mapping)
+        save_codegen_schedule(node,temporal_mapping,spatial_mapping,latency,energy)
         return temporal_mapping,layer_data,match_pt.exec_module,latency,energy
 
     def add_pt_res_to_cache(self,pt_res):

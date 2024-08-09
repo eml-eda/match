@@ -162,18 +162,14 @@ class TemplateDataGenerator:
                 rel_dim: {
                     general_template_data["default_mem"][operand]: general_template_data["layer_attrs"]["loop_sizes"][
                         rel_dim
-                        if "nn.conv2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["nn.conv2d_depthwise"]
-                        or operand not in general_template_data["input_operands"]
+                        if ("nn.conv2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["nn.conv2d_depthwise"] and rel_dim in ["K","C"]) or operand not in general_template_data["input_operands"]
                         else general_template_data["input_dim_mapping"][rel_dim]
                     ],
                     **{
                         general_template_data["sw_for_loops_dict"][fl_mem_t_fn][f"mem_{operand}"]: int(
                             general_template_data["layer_attrs"]["loop_sizes"][
                                 rel_dim
-                                if ("nn.conv2d" in self.layer_data.pattern_operations and
-                                     self.layer_data.layer_attrs["nn.conv2d_depthwise"]
-                                     and rel_dim in ["K","C"])
-                                or operand not in general_template_data["input_operands"]
+                                if ("nn.conv2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["nn.conv2d_depthwise"] and rel_dim in ["K","C"]) or operand not in general_template_data["input_operands"]
                                 else general_template_data["input_dim_mapping"][rel_dim]
                             ]
                             / np.prod(

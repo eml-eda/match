@@ -123,7 +123,7 @@ static void match_initial_setup(
     % for operand in operands:
     % for rel_dim in ordered_relevant_loops[operand]:
     tile_idxs_${operand}->tile_${rel_dim if operand not in input_operands else input_dim_mapping[rel_dim]}=0;
-    dim_${operand}->common_dim.dim_${rel_dim if operand not in input_operands else input_dim_mapping[rel_dim]}_size=${layer_attrs['loop_sizes'][rel_dim]};
+    dim_${operand}->common_dim.dim_${rel_dim if operand not in input_operands else input_dim_mapping[rel_dim]}_size=${layer_attrs['loop_sizes'][rel_dim if operand not in input_operands else input_dim_mapping[rel_dim]]};
     % for mem_name,size_at_mem in size_loops_mem[operand][rel_dim].items():
     dim_${operand}->common_dim.size_${rel_dim if operand not in input_operands else input_dim_mapping[rel_dim]}[${mem_name}]=${size_at_mem};
     % endfor

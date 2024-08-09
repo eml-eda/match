@@ -123,9 +123,8 @@ def relay_gap9_conv2d(input_tensor: relay.Var, layer_name: str,
                            padding=padding,
                            groups=groups,
                            kernel_size=(w_value.shape[2],w_value.shape[3]),
-                           #out_dtype='int32'
+                           out_dtype="int32" if b_value is not None else b_value.dtype
                            )
-    x = relay.op.cast(x, 'int32')
     if batchnorm:
         input_shape=simple_basic_type_checker(input_tensor,w_value.shape)
         #input_shape = [int(x) for x in input_tensor.type_annotation.shape]
@@ -280,23 +279,47 @@ def tvmc_wrapper(model: TVMCModel, target: str = "gap9, c",
     #assert ((target == "gap9, c") or (target == "c"))
     # Add -device=arm_cpu as default device for TVM C codegen
     # This will use the arm_cpu relay strategy as opposed to the x86 one.
-    target += " -device=arm_cpu"
+    target += " -device=armcpu"
     # This has to be set by default to use the C runtime
-    pass_context_configs = ['tir.disable_vectorize=1']
+    """Configuration 'relay.debug.enable_dump' is not defined in TVM.
+    These are the existing configurations: tir.ReduceBranchingThroughOvercompute, tir.experimental_dma_bypass_cache,
+    tir.reset_start_id, relay.collage.tvm_max_depth, tir.LoopPartition, tir.usmp.custom_algorithm, tir.instr_siblings,
+    relay.FuseOps.max_depth, tir.debug_keep_trivial_loop, tir.InjectDoubleBuffer, tir.detect_global_barrier, testing.immutable_module,
+    ir.enable_si_builder, tir.use_async_copy, relay.fallback_device_type, te.keep_schedule_record, tir.usmp.algorithm, tir.noalias,
+    tir.disable_storage_rewrite, relay.collage.byoc_fusion_style, tir.Simplify, relay.frontend.fill_span, tir.usmp.use_workspace_io,
+    tir.lwp_disable_func_prof, tir.RemoveNoOp, relay.backend.use_meta_schedule_dispatch, tir.disable_assert, tir.enable_debug,
+    tir.add_lower_pass, tir.contrib.ethos-u.copy_compute_reordering_max_copy_movements, relay.backend.tir_converter,
+    relay.backend.use_auto_scheduler, tir.contrib.ethos-u.copy_compute_reordering_reorder_by_cycles,
+    relay.ToMixedPrecision.keep_orig_output_dtype, tir.instrument_bound_checkers, tir.enable_equiv_terms_in_cse_tir, tir.HoistIfThenElse,
+    tir.lwp_min_height, tir.instrument_lwp, relay.remove_standalone_reshapes.enable, tir.disable_cse_tir, tir.lwp_max_depth,
+    relay.FuseOps.link_params, tir.UnrollLoop, relay.backend.use_meta_schedule, tir.vtcm_capacity, relay.collage.byoc_max_depth,
+    tir.is_entry_func, tir.ptx_ldg32, tir.HoistExpression, tir.usmp.enable, tir.disable_vectorize"""
+    pass_context_configs = []
+    pass_context_configs.append("tir.disable_vectorize=1")
+    pass_context_configs.append("tir.usmp.enable=1")
+    pass_context_configs.append("tir.usmp.algorithm=hill_climb")
+    pass_context_configs.append("tir.disable_storage_rewrite=1")
+    #pass_context_configs.append("tir.usmp.use_workspace_io=1")
+    #pass_context_configs.append("tir.InjectDoubleBuffer=1")
+    #pass_context_configs.append("relay.backend.disable_memory_plan=1")
     if not fuse_layers:
         pass_context_configs.append('relay.FuseOps.max_depth=1')
     compile_model(tvmc_model=model,
                   target=target,
+                  opt_level=3,
                   executor=Executor("aot",
                                     {
                                         "interface-api": "c",
-                                        "unpacked-api": 1
-                                    }
+                                        "unpacked-api": True,
+                                        #"workspace-byte-alignment": 4,
+                                    },
                                     ),
                   runtime=Runtime("crt"),
                   output_format="mlf",
                   package_path=package_path,
                   pass_context_configs=pass_context_configs,
+                  #desired_layout="NHWC",
+                  #desired_layout_ops=["nn.conv2d"]
                   )
 
 
