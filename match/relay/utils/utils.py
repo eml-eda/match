@@ -281,7 +281,7 @@ def tvmc_wrapper(model: TVMCModel, target: str = "gap9, c",
     # This will use the arm_cpu relay strategy as opposed to the x86 one.
     target += " -device=armcpu"
     # This has to be set by default to use the C runtime
-    """Configuration 'relay.debug.enable_dump' is not defined in TVM.
+    """
     These are the existing configurations: tir.ReduceBranchingThroughOvercompute, tir.experimental_dma_bypass_cache,
     tir.reset_start_id, relay.collage.tvm_max_depth, tir.LoopPartition, tir.usmp.custom_algorithm, tir.instr_siblings,
     relay.FuseOps.max_depth, tir.debug_keep_trivial_loop, tir.InjectDoubleBuffer, tir.detect_global_barrier, testing.immutable_module,
@@ -293,12 +293,16 @@ def tvmc_wrapper(model: TVMCModel, target: str = "gap9, c",
     relay.ToMixedPrecision.keep_orig_output_dtype, tir.instrument_bound_checkers, tir.enable_equiv_terms_in_cse_tir, tir.HoistIfThenElse,
     tir.lwp_min_height, tir.instrument_lwp, relay.remove_standalone_reshapes.enable, tir.disable_cse_tir, tir.lwp_max_depth,
     relay.FuseOps.link_params, tir.UnrollLoop, relay.backend.use_meta_schedule, tir.vtcm_capacity, relay.collage.byoc_max_depth,
-    tir.is_entry_func, tir.ptx_ldg32, tir.HoistExpression, tir.usmp.enable, tir.disable_vectorize"""
+    tir.is_entry_func, tir.ptx_ldg32, tir.HoistExpression, tir.usmp.enable, tir.disable_vectorize
+    """
     pass_context_configs = []
+    # vectorize doesnt' work good with C
     pass_context_configs.append("tir.disable_vectorize=1")
+    # enable static memory plan
     pass_context_configs.append("tir.usmp.enable=1")
+    # algorithm to use for static memory plan
     pass_context_configs.append("tir.usmp.algorithm=hill_climb")
-    pass_context_configs.append("tir.disable_storage_rewrite=1")
+    #pass_context_configs.append("tir.disable_storage_rewrite=1")
     #pass_context_configs.append("tir.usmp.use_workspace_io=1")
     #pass_context_configs.append("tir.InjectDoubleBuffer=1")
     #pass_context_configs.append("relay.backend.disable_memory_plan=1")
