@@ -24,7 +24,14 @@ def conv2d_bnorm_requant_pattern():
     conv2d = is_op("nn.conv2d")(
             wildcard(), wildcard()
     )
-    bnorm = batchnorm_pattern(is_op("cast")(conv2d)) | batchnorm_pattern(conv2d) | is_op("nn.bias_add")(is_op("cast")(conv2d), is_constant()) | is_op("nn.bias_add")(conv2d, is_constant())
+    bnorm = batchnorm_pattern(is_op("cast")(conv2d)) | batchnorm_pattern(conv2d)
+    return _requant_pattern(bnorm)
+
+def conv2d_biasadd_requant_pattern():
+    conv2d = is_op("nn.conv2d")(
+            wildcard(), wildcard()
+    )
+    bnorm = is_op("nn.bias_add")(is_op("cast")(conv2d), is_constant()) | is_op("nn.bias_add")(conv2d, is_constant())
     return _requant_pattern(bnorm)
 
 
@@ -128,6 +135,9 @@ def check_conv2d(pattern):
 def partitioning_patterns():
     return [
         PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,
+                            additional_checks=check_conv2d,
+                            ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="conv2d_bias_add_requant",pattern=conv2d_biasadd_requant_pattern,
                             additional_checks=check_conv2d,
                             ordered_operation="nn.conv2d"),
     ]

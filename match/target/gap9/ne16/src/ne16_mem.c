@@ -112,8 +112,6 @@ void __attribute__ ((noinline)) ne16_init_platform(void (inner_function)(unsigne
 
     ne16_common_kernel=common_kernel;
     ne16_callback=inner_function;
-    //void* cl_ne16_args[4];
-    //cl_ne16_args[0]=args[0];cl_ne16_args[1]=args[1];cl_ne16_args[2]=inner_function;cl_ne16_args[3]=common_kernel;
     
     pi_cluster_send_task_to_cl(&cluster_dev, pi_cluster_task(&cluster_task,ne16_init_platform_,args));
     
@@ -127,14 +125,23 @@ void ne16_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsign
                                 int* second_op_sizes,unsigned char second_op_db,dimension_W* dim_W,
                                 int* third_op_sizes,unsigned char third_op_db,dimension_O* dim_O,
                                 int* paddings,int* strides){
+    #ifdef MATCH_NE16_BUFFERED
     l1_I_off[0]=0;l1_I_off[1]=first_op_sizes[1]*first_op_db;
     l1_W_off[0]=(1+first_op_db)*first_op_sizes[1];l1_W_off[1]=l1_W_off[0]+second_op_sizes[1]*second_op_db;
     l1_bias_off=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1]+(1+third_op_db)*third_op_sizes[1];
 
     l1_O_off[0]=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1];l1_O_off[1]=l1_O_off[0]+third_op_sizes[1]*third_op_db;
-    
+    #else
+    l1_I_off[0]=0;l1_I_off[1]=0;
+    l1_W_off[0]=first_op_sizes[1];l1_W_off[1]=l1_W_off[0];
+    l1_bias_off=irst_op_sizes[1]+second_op_sizes[1]+third_op_sizes[1];
+
+    l1_O_off[0]=first_op_sizes[1]+second_op_sizes[1];l1_O_off[1]=l1_O_off[0];
+    #endif
+
+
     #ifdef MATCH_LOG_GAP9_VERBOSE
-    printf("L1 off I [ %d %d ] W [ %d %d ] O [ %d %d ] Bias %d\n",l1_I_off[0],l1_I_off[1],l1_W_off[0],l1_W_off[1],l1_O_off[0],l1_O_off[1],l1_bias_off);
+    printf("L1 at %d off I [ %d %d ] W [ %d %d ] O [ %d %d ] Bias %d\n",cluster_get_l1_memory_addr(),l1_I_off[0],l1_I_off[1],l1_W_off[0],l1_W_off[1],l1_O_off[0],l1_O_off[1],l1_bias_off);
     #endif
     
     #ifndef MATCH_NE16_BUFFERED
@@ -143,6 +150,9 @@ void ne16_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsign
 }
 
 void ne16_shutdown_mem(common_kernel* common_kernel){
+    #ifndef MATCH_NE16_BUFFERED
+    dma_transfer_free(transfers);
+    #endif
     return;
 }
 
@@ -219,7 +229,6 @@ unsigned int ne16_mem_transfer_I(common_kernel* common_kernel,dimension_I* dim,u
             input_dma_active++;
         }
         #endif
-        unsigned int src=ext_pt;
 
         // not dw so input channels not tiled! then if height and width are not tiled we can do 1D transfer
         if(dim->size_IY[ext_mem]==dim->size_IY[int_mem] && dim->size_IX[ext_mem]==dim->size_IX[int_mem]
@@ -246,7 +255,7 @@ unsigned int ne16_mem_transfer_I(common_kernel* common_kernel,dimension_I* dim,u
         // unlucky
         else
             dma_transfer_3d_async((DmaTransferConf) {
-                .ext = src,
+                .ext = ext_pt,
                 .loc = dst,
                 .number_of_2d_copies = (dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y),
                 .number_of_1d_copies = (dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y),
@@ -278,7 +287,8 @@ unsigned int ne16_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,u
         #endif
         
         // output stationary so only output channels can be tiled for the weights, so if not tiled do 1D
-        if(dim->size_K[ext_mem]==dim->size_K[int_mem])
+        // if DW we can also do a 1D transfer
+        if(dim->size_K[ext_mem]==dim->size_K[int_mem] || common_kernel->specific_pattern==depthwise_conv2d)
             dma_transfer_1d_async((DmaTransferConf) {
                 .ext = ext_pt,
                 .loc = dst,
@@ -286,7 +296,7 @@ unsigned int ne16_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,u
                 .dir = 1
             });
         // else do some 2D transfers
-        else if(!common_kernel->specific_pattern==depthwise_conv2d)
+        else
             dma_transfer_2d_async((DmaTransferConf) {
                 .ext = ext_pt,
                 .loc = dst,
@@ -295,32 +305,20 @@ unsigned int ne16_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,u
                 .stride_1d = dim->size_C[ext_mem]*dim->size_FY[ext_mem]*dim->size_FX[ext_mem],
                 .dir = 1
             });
-        else
-            dma_transfer_2d_async((DmaTransferConf) {
-                .ext = ext_pt,
-                .loc = dst,
-                .number_of_1d_copies = dim->size_K[int_mem]/16,
-                .length_1d_copy = dim->size_K[int_mem]/16*dim->size_FY[int_mem]*dim->size_FX[int_mem],
-                .stride_1d = 16*dim->size_FY[ext_mem]*dim->size_FX[ext_mem],
-                .dir = 1
-            });
     }
     return dst;
 }
 
 void ne16_wait_input_transfers(common_kernel* common_kernel){
-    //printf("Wait input transfers task id %d\n",common_kernel->task_id);
     if(common_kernel->task_id==LOADER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
         #ifdef MATCH_NE16_BUFFERED
-        //printf("Start waiting input transfers\n");
         dma_mutex_lock();
         dma_transfer_wait(input_transfers);
         input_dma_active=0;
-        //dma_transfer_free(input_transfers);
         dma_mutex_unlock();
-        //printf("Finished waiting input transfers\n");
         #else
         dma_transfer_wait(transfers);
+        transfers = dma_transfer_create();
         #endif
     }
 }
@@ -328,15 +326,13 @@ void ne16_wait_input_transfers(common_kernel* common_kernel){
 void ne16_wait_output_transfers(common_kernel* common_kernel){
     if(common_kernel->task_id==STORER_TASK || common_kernel->task_id==SINGLE_CORE_TASK){
         #ifdef MATCH_NE16_BUFFERED
-        //printf("Wait output transfers\n");
         dma_mutex_lock();
         dma_transfer_wait(output_transfers);
-        //dma_transfer_free(output_transfers);
         dma_mutex_unlock();
         monitor_consume_end(get_nnx_monitor()->output);
-        //printf("Waited output transfers\n");
         #else
         dma_transfer_wait(transfers);
+        transfers = dma_transfer_create();
         #endif
     }
 }
@@ -348,14 +344,10 @@ void ne16_wait_curr_computation(common_kernel* common_kernel){
         execute_wait(match_ne16_get_nnx_task(get_nnx_db_O(common_kernel->task_id)));
         monitor_consume_end(get_nnx_monitor()->input);
     }
-    else if(common_kernel->task_id==EXECUTE_TASK){
+    else if(common_kernel->task_id==EXECUTE_TASK)
         monitor_produce_end(get_nnx_monitor()->output);
-    }
-    else if(common_kernel->task_id==SINGLE_CORE_TASK){
-        //printf("Wait comp...\n");
+    else if(common_kernel->task_id==SINGLE_CORE_TASK)
         execute_wait(match_ne16_get_nnx_task(get_nnx_db_O(common_kernel->task_id)));
-        //printf("Comp finished\n");
-    }
 }
 
 void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,tile_indexes_W* abs_tile_idx,
@@ -389,7 +381,6 @@ void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,tile_i
         #ifdef MATCH_NE16_BUFFERED
         dma_mutex_unlock();
         #endif
-        //printf("Finished constant loading\n");
     }
 }
 

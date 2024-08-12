@@ -101,7 +101,7 @@ class TemplateDataGenerator:
             [
                 mfl["fullname"]
                 for mfl in self.temporal_mapping
-                if mfl["index"] > 0 and (mfl["fullname"] in general_template_data["sw_for_loops_dict"])
+                if mfl["fullname"] in general_template_data["sw_for_loops_dict"]
             ]
         )
         # we don't need "virtual" tiles of size 1 I think

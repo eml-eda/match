@@ -21,9 +21,9 @@ static nnx_monitor_t nnx_monitor;
 
 static ne16_dev_t* nnx_dev;
 static ne16_task_t nnx_tasks[DB_BUFFER_SIZE];
-static unsigned int nnx_db_O[NE16_TASKS]={0,0,0};
-static unsigned int nnx_db_I[NE16_TASKS]={0,0,0};
-static unsigned int nnx_db_W[NE16_TASKS]={0,0,0};
+static unsigned int nnx_db_O[NE16_TASKS+1]={0,0,0,0};
+static unsigned int nnx_db_I[NE16_TASKS+1]={0,0,0,0};
+static unsigned int nnx_db_W[NE16_TASKS+1]={0,0,0,0};
 
 static unsigned int nnx_input_loaded=0;
 

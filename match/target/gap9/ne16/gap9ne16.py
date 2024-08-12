@@ -30,11 +30,7 @@ class Gap9NE16(ExecModule):
         ]
     
     def specific_pattern_def(self, pattern_name: str = "conv_2d", dim_sizes: Dict[str, int] = ..., layer_attrs: Dict = ...):
-        if pattern_name=="conv2d_bnorm_requant" and (dim_sizes['FY']*dim_sizes['FX'])==1:
-            return "conv2d"
-        elif pattern_name=="conv2d_bnorm_requant" and (dim_sizes['FY']*dim_sizes['FX'])==8:
-            return "conv2d"
-        elif layer_attrs["nn.conv2d_depthwise"]:
+        if layer_attrs["nn.conv2d_depthwise"]:
             return "depthwise_conv2d"
         else:
             # DEFAULT LIKE CONV2D
@@ -46,10 +42,15 @@ class Gap9NE16(ExecModule):
         Args:
             operands (List[Str]): list of operands
         """
+        def buffers_for_l1_mem(layer_data,pattern_name):
+            buff = layer_data.loop_dim_size['K']*4*2
+            #if pattern_name=="conv2d_bnorm_requant":
+            #    buff*=2
+            return buff
         return [
             # from lower level to higher level memories
             # TEST: set now L1 to 9 kB just to force TILING 
-            MemoryInst(name="l1_mem",k_bytes=self.L1_SIZE,operands=operands,double_buffering_support=True),
+            MemoryInst(name="l1_mem",k_bytes=self.L1_SIZE,operands=operands,double_buffering_support=True,buffer_for_layer_func=buffers_for_l1_mem),
             MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]
 
@@ -181,6 +182,8 @@ class Gap9NE16(ExecModule):
                 else:
                     if "nn.conv2d" in layer_arg_name:
                         constbytes=self.weightEncode(layer_arg_val.data.numpy(),8,"nn.conv2d_depthwise" in layer_data.layer_attrs and layer_data.layer_attrs["nn.conv2d_depthwise"])
+                        if pattern_name=="conv2d_bias_add_requant":
+                            constbytes = np.concatenate((constbytes,bytaze(np.array([1 for _ in range(layer_data.loop_dim_size["K"])],dtype=np.int32))))
                     else:
                         constbytes=bytaze(layer_arg_val.data.numpy())
                     arguments=np.concatenate((arguments,constbytes))
