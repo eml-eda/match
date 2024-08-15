@@ -117,9 +117,8 @@ void copy_out_computation_(common_kernel* common_kernel,dimension_O* dim,unsigne
     dim->size_OY[int_mem],dim->size_OY[ext_mem],dim->size_OX[int_mem],dim->size_OX[ext_mem]);
     #endif
 
-    // no tiling so do 1D transfer
-    if(dim->size_OY[ext_mem]==dim->size_OY[int_mem] && dim->size_OX[ext_mem]==dim->size_OX[int_mem]
-    && dim->size_K[ext_mem]==dim->size_K[int_mem])
+    // no tiling on width and out channels so do 1D transfer
+    if(dim->size_OX[ext_mem]==dim->size_OX[int_mem] && dim->size_K[ext_mem]==dim->size_K[int_mem])
         dma_transfer_1d_async((DmaTransferConf) {
             .ext = ext_pt,
             .loc = int_pt,
@@ -127,7 +126,7 @@ void copy_out_computation_(common_kernel* common_kernel,dimension_O* dim,unsigne
             .dir = 0
         });
     // inner dimensions not tiled, do 2D transfers
-    else if(dim->size_OX[ext_mem]==dim->size_OX[int_mem] && dim->size_K[ext_mem]==dim->size_K[int_mem])
+    else if(dim->size_K[ext_mem]==dim->size_K[int_mem])
         dma_transfer_2d_async((DmaTransferConf) {
             .ext = ext_pt,
             .loc = int_pt,
@@ -184,8 +183,8 @@ unsigned int cluster_mem_transfer_I(common_kernel* common_kernel,dimension_I* di
             .stride_1d = dim->size_C[ext_mem],
             .dir = 1
         });
-    // not dw so input channels not tiled! then if height and width are not tiled we can do 1D transfer
-    else if(dim->size_IY[ext_mem]==dim->size_IY[int_mem] && dim->size_IX[ext_mem]==dim->size_IX[int_mem])
+    // not dw so input channels not tiled! then if width are not tiled we can do 1D transfer
+    else if(dim->size_IX[ext_mem]==dim->size_IX[int_mem])
         dma_transfer_1d_async((DmaTransferConf) {
             .ext = ext_pt,
             .loc = dst,
@@ -194,8 +193,8 @@ unsigned int cluster_mem_transfer_I(common_kernel* common_kernel,dimension_I* di
             dim->size_C[int_mem],
             .dir = 1
         });
-    // not dw so input channels not tiled! then if width are not tiled we can do some 2D transfers
-    else if(dim->size_IX[ext_mem]==dim->size_IX[int_mem])
+    // not dw so input channels not tiled! then 2D transfers
+    else
         dma_transfer_2d_async((DmaTransferConf) {
             .ext = ext_pt,
             .loc = dst,
@@ -205,34 +204,23 @@ unsigned int cluster_mem_transfer_I(common_kernel* common_kernel,dimension_I* di
             .stride_1d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
             .dir = 1
         });
-    // unlucky
-    else
-        dma_transfer_3d_async((DmaTransferConf) {
-            .ext = src,
-            .loc = dst,
-            .number_of_2d_copies = (dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y),
-            .number_of_1d_copies = (dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y),
-            .length_1d_copy = dim->size_C[int_mem],
-            .stride_2d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
-            .stride_1d = dim->size_C[ext_mem],
-            .dir = 1
-        });
+
     return dst;
 }
 
 unsigned int cluster_mem_transfer_X(common_kernel* common_kernel,dimension_X* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     unsigned int dst=memalloc_X();
     unsigned int src=ext_pt;
-    // input channels CANNOT not tiled! then if height and width are not tiled we can do 1D transfer
-    if(dim->size_IY[ext_mem]==dim->size_IY[int_mem] && dim->size_IX[ext_mem]==dim->size_IX[int_mem])
+    // input dimensions not tiled we can do 1D transfer
+    if(dim->size_IX[ext_mem]==dim->size_IX[int_mem] && dim->size_C[ext_mem]==dim->size_C[int_mem])
         dma_transfer_1d_async((DmaTransferConf) {
             .ext = ext_pt,
             .loc = dst,
             .length_1d_copy = dim->size_IY[int_mem]*dim->size_IX[int_mem]*dim->size_C[int_mem],
             .dir = 1
         });
-    // input channels CANNOT not tiled! then if width are not tiled we can do some 2D transfers
-    else if(dim->size_IX[ext_mem]==dim->size_IX[int_mem])
+    // we can do some 2D transfers
+    else if(dim->size_C[ext_mem]==dim->size_C[int_mem])
         dma_transfer_2d_async((DmaTransferConf) {
             .ext = ext_pt,
             .loc = dst,
@@ -259,16 +247,16 @@ unsigned int cluster_mem_transfer_X(common_kernel* common_kernel,dimension_X* di
 unsigned int cluster_mem_transfer_Y(common_kernel* common_kernel,dimension_Y* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     unsigned int dst=memalloc_Y();
     unsigned int src=ext_pt;
-    // input channels CANNOT not tiled! then if height and width are not tiled we can do 1D transfer
-    if(dim->size_IY[ext_mem]==dim->size_IY[int_mem] && dim->size_IX[ext_mem]==dim->size_IX[int_mem])
+    // input dimensions not tiled we can do 1D transfer
+    if(dim->size_IX[ext_mem]==dim->size_IX[int_mem] && dim->size_C[ext_mem]==dim->size_C[int_mem])
         dma_transfer_1d_async((DmaTransferConf) {
             .ext = ext_pt,
             .loc = dst,
             .length_1d_copy = dim->size_IY[int_mem]*dim->size_IX[int_mem]*dim->size_C[int_mem],
             .dir = 1
         });
-    // input channels CANNOT not tiled! then if width are not tiled we can do some 2D transfers
-    else if(dim->size_IX[ext_mem]==dim->size_IX[int_mem])
+    // we can do some 2D transfers
+    else if(dim->size_C[ext_mem]==dim->size_C[int_mem])
         dma_transfer_2d_async((DmaTransferConf) {
             .ext = ext_pt,
             .loc = dst,
@@ -300,24 +288,14 @@ unsigned int cluster_mem_transfer_W(common_kernel* common_kernel,dimension_W* di
     dim->size_FY[int_mem],dim->size_FX[int_mem],ext_pt,dst-l1_memory,int_mem);
     #endif
 
-    // output stationary so only output channels can be tiled for the weights, so if not tiled do 1D
-    if(dim->size_K[ext_mem]==dim->size_K[int_mem])
-        dma_transfer_1d_async((DmaTransferConf) {
-            .ext = ext_pt,
-            .loc = dst,
-            .length_1d_copy = dim->size_K[int_mem]*dim->size_FY[int_mem]*dim->size_FX[int_mem]*dim->size_C[int_mem],
-            .dir = 1
-        });
-    // else do some 2D transfers
-    else
-        dma_transfer_2d_async((DmaTransferConf) {
-            .ext = ext_pt,
-            .loc = dst,
-            .number_of_1d_copies = dim->size_K[int_mem],
-            .length_1d_copy = dim->size_C[int_mem]*dim->size_FY[int_mem]*dim->size_FX[int_mem],
-            .stride_1d = dim->size_C[ext_mem]*dim->size_FY[ext_mem]*dim->size_FX[ext_mem],
-            .dir = 1
-        });
+    // output stationary so only output channels can be tiled for the weights, so we
+    // can always do 1D transfers
+    dma_transfer_1d_async((DmaTransferConf) {
+        .ext = ext_pt,
+        .loc = dst,
+        .length_1d_copy = dim->size_K[int_mem]*dim->size_FY[int_mem]*dim->size_FX[int_mem]*dim->size_C[int_mem],
+        .dir = 1
+    });
 
     return dst;
 }

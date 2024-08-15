@@ -86,88 +86,192 @@ class Gap9ClusterCostModel(ZigZagMatchCostModel):
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
     
     def def_transfer_cost(self):
-        def get_stride_2_op(operand):
-            if operand in ['I','X','Y']:
-                return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']*self.partial_relevant_loop_sizes['IX']
-            elif operand=='W':
-                return self.loop_sizes['C']*self.loop_sizes['FY']*self.loop_sizes['FX']
-            elif operand=='O':
-                return self.loop_sizes['K']*self.loop_sizes['OX']
-        def get_stride_1_op(operand):
-            if operand in ['I','X','Y']:
-                return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']
-            elif operand=='W':
-                return self.loop_sizes['C']
-            elif operand=='O':
-                return self.loop_sizes['K']
-        def get_num_2d_copies_op(operand):
-            if operand in ['I','X','Y']:
-                return self.size_per_mem_level[operand]["OY"][0]
-            elif operand=='W':
-                return self.size_per_mem_level["W"]["K"][0] if self.pattern_name!='depthwise_conv_2d' else 1
-            elif operand=='O':
-                return self.size_per_mem_level["O"]["OY"][0]
-        def get_num_1d_copies_op(operand):
-            if operand in ['I','X','Y']:
-                return self.size_per_mem_level[operand]["OX"][0]
-            elif operand=='W':
-                return self.loop_sizes['FY']*self.loop_sizes['FX']*self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else 1
-            elif operand=='O':
-                return self.size_per_mem_level["O"]["OX"][0]
-        def get_len_1d_copy_op(operand):
-            if operand in ['I','X','Y']:
-                return self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
-            elif operand=='W':
-                return self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else (self.size_per_mem_level["W"]["K"][0])*self.loop_sizes['FY']*self.loop_sizes['FX']
-            elif operand=='O':
-                return self.size_per_mem_level["O"]["K"][0]
-        
-        dmaconfstruct={
-            operand:{
-                'hwc_to_cwh':operand=='I' and self.pattern_name=='depthwise_conv_2d',
-                'stride_2d':get_stride_2_op(operand),
-                'stride_1d':get_stride_1_op(operand),
-                'num_2d_copies':get_num_2d_copies_op(operand),
-                'num_1d_copies':get_num_1d_copies_op(operand),
-                'len_1d_copy':get_len_1d_copy_op(operand),
-            } for operand in self.operands
-        }
-        def calc_overhead(operand):
-            if dmaconfstruct[operand]['hwc_to_cwh']:
-                return (27*dmaconfstruct[operand]['len_1d_copy'])+1000
-            elif dmaconfstruct[operand]['num_2d_copies']==1 and dmaconfstruct[operand]['num_1d_copies']==1:
-                return 100+300
-            else:
-                return (27*dmaconfstruct[operand]['num_2d_copies'])+300
+        USE_SIMPLER_MODEL = False
+        if USE_SIMPLER_MODEL:
+            def get_stride_2_op(operand):
+                if operand in ['I','X','Y']:
+                    return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']*self.partial_relevant_loop_sizes['IX']
+                elif operand=='W':
+                    return self.loop_sizes['C']*self.loop_sizes['FY']*self.loop_sizes['FX']
+                elif operand=='O':
+                    return self.loop_sizes['K']*self.loop_sizes['OX']
+            def get_stride_1_op(operand):
+                if operand in ['I','X','Y']:
+                    return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']
+                elif operand=='W':
+                    return self.loop_sizes['C']
+                elif operand=='O':
+                    return self.loop_sizes['K']
+            def get_num_2d_copies_op(operand):
+                if operand in ['I','X','Y']:
+                    return self.size_per_mem_level[operand]["OY"][0]
+                elif operand=='W':
+                    return self.size_per_mem_level["W"]["K"][0] if self.pattern_name!='depthwise_conv_2d' else 1
+                elif operand=='O':
+                    return self.size_per_mem_level["O"]["OY"][0]
+            def get_num_1d_copies_op(operand):
+                if operand in ['I','X','Y']:
+                    return self.size_per_mem_level[operand]["OX"][0]
+                elif operand=='W':
+                    return self.loop_sizes['FY']*self.loop_sizes['FX']*self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else 1
+                elif operand=='O':
+                    return self.size_per_mem_level["O"]["OX"][0]
+            def get_len_1d_copy_op(operand):
+                if operand in ['I','X','Y']:
+                    return self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
+                elif operand=='W':
+                    return self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else (self.size_per_mem_level["W"]["K"][0])*self.loop_sizes['FY']*self.loop_sizes['FX']
+                elif operand=='O':
+                    return self.size_per_mem_level["O"]["K"][0]
             
-        overhead_per_op={operand:calc_overhead(operand) for operand in self.operands}
+            dmaconfstruct={
+                operand:{
+                    'hwc_to_cwh':operand=='I' and self.pattern_name=='depthwise_conv_2d',
+                    'stride_2d':get_stride_2_op(operand),
+                    'stride_1d':get_stride_1_op(operand),
+                    'num_2d_copies':get_num_2d_copies_op(operand),
+                    'num_1d_copies':get_num_1d_copies_op(operand),
+                    'len_1d_copy':get_len_1d_copy_op(operand),
+                } for operand in self.operands
+            }
+            def calc_overhead(operand):
+                if dmaconfstruct[operand]['hwc_to_cwh']:
+                    return (27*dmaconfstruct[operand]['len_1d_copy'])+1000
+                elif dmaconfstruct[operand]['num_2d_copies']==1 and dmaconfstruct[operand]['num_1d_copies']==1:
+                    return 100+300
+                else:
+                    return (27*dmaconfstruct[operand]['num_2d_copies'])+300
+                
+            overhead_per_op={operand:calc_overhead(operand) for operand in self.operands}
 
-        def calc_total_transfer_cost_per_op(operand):
-            if operand=='O':
-                return self.output_transfer_costs[0]+overhead_per_op['O']
-            else:
-                return (self.input_transfer_costs[operand][0]*(2 if dmaconfstruct[operand]['hwc_to_cwh'] else 1))+overhead_per_op[operand]
+            def calc_total_transfer_cost_per_op(operand):
+                if operand=='O':
+                    return self.output_transfer_costs[0]+overhead_per_op['O']
+                else:
+                    return (self.input_transfer_costs[operand][0]*(2 if dmaconfstruct[operand]['hwc_to_cwh'] else 1))+overhead_per_op[operand]
+            
+            self.dmaconfstruct=dmaconfstruct
+            self.overhead_per_op=overhead_per_op
+            return {operand:calc_total_transfer_cost_per_op(operand) for operand in self.operands}
+        else:
+            def calc_transfer_costs(operand):
+                BYTES_PER_CYCLE = 8
+                API_OVERHEAD = 550
+                MATCH_SETUP_OVERHEAD = 920 - API_OVERHEAD
+                OVERHEAD_2D_TRANSFER = 1
+                OVERHEAD_3D_TRANSFER = 10
+                
+                TRANS_CYCLES = 0
+                if operand in self.layer_data.input_operands:
+                    IN_HEIGHT_L1 = self.size_per_mem_level[operand]["OY"][0]
+                    IN_HEIGHT_L2 = self.size_per_mem_level[operand]["OY"][1]
+
+                    IN_WIDTH_L1 = self.size_per_mem_level[operand]["OX"][0]
+                    IN_WIDTH_L2 = self.size_per_mem_level[operand]["OX"][1]
+
+                    IN_CHANNELS_L1 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
+                    IN_CHANNELS_L2 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][1]
+
+                    # HWC TO CHW
+                    if self.layer_data.specific_pattern in ['depthwise_conv2d','depthwise_conv2d_less_4']:
+                        BYTES_PER_CYCLE = 1
+                        OVERHEAD_BETWEEN_TRANSFERS = 12
+                        NUM_TRANSFERS = IN_CHANNELS_L1
+                        COST_PER_SINGLE_TRANSFER =  IN_HEIGHT_L1 * IN_WIDTH_L1 / BYTES_PER_CYCLE
+                        
+                        TRANS_CYCLES = NUM_TRANSFERS * (OVERHEAD_BETWEEN_TRANSFERS + COST_PER_SINGLE_TRANSFER)
+                    # 1D transfers
+                    elif IN_WIDTH_L1 == IN_WIDTH_L2 and IN_CHANNELS_L1 == IN_CHANNELS_L2:
+                        TRANS_CYCLES = IN_HEIGHT_L1 * IN_WIDTH_L1 * IN_CHANNELS_L1 / BYTES_PER_CYCLE
+                    # 2D transfer
+                    elif IN_CHANNELS_L1 == IN_CHANNELS_L2:
+                        TRANS_CYCLES = (IN_HEIGHT_L1 * IN_WIDTH_L1 * IN_CHANNELS_L1 / BYTES_PER_CYCLE) + IN_HEIGHT_L1 * OVERHEAD_2D_TRANSFER
+                    # 3D transfer
+                    else:
+                        TRANS_CYCLES = (((IN_WIDTH_L1 * IN_CHANNELS_L1 / BYTES_PER_CYCLE) + IN_WIDTH_L1 * OVERHEAD_2D_TRANSFER) * IN_HEIGHT_L1) * IN_HEIGHT_L1 * OVERHEAD_3D_TRANSFER
+                elif operand=="W":
+                    FILTER_HEIGHT = self.loop_sizes["FY"]
+                    FILTER_WIDTH = self.loop_sizes["FX"]
+
+                    WEIGHTS_CH_IN = self.loop_sizes["C"]
+                    WEIGHTS_CH_OUT = self.size_per_mem_level["W"]["K"][0]
+                    # 1D transfer
+                    TRANS_CYCLES = WEIGHTS_CH_OUT * WEIGHTS_CH_IN * FILTER_HEIGHT * FILTER_WIDTH / BYTES_PER_CYCLE
+                # output
+                else:
+                    OUT_HEIGHT_L1 = self.size_per_mem_level[operand]["OY"][0]
+                    OUT_HEIGHT_L2 = self.size_per_mem_level[operand]["OY"][1]
+
+                    OUT_WIDTH_L1 = self.size_per_mem_level[operand]["OX"][0]
+                    OUT_WIDTH_L2 = self.size_per_mem_level[operand]["OX"][1]
+
+                    OUT_CHANNELS_L1 = self.size_per_mem_level[operand]['K'][0]
+                    OUT_CHANNELS_L2 = self.size_per_mem_level[operand]['K'][1]
+                    # 1D transfers
+                    if OUT_WIDTH_L1 == OUT_WIDTH_L2 and OUT_CHANNELS_L1 == OUT_CHANNELS_L2:
+                        TRANS_CYCLES = OUT_HEIGHT_L1 * OUT_WIDTH_L1 * OUT_CHANNELS_L1 / BYTES_PER_CYCLE
+                    # 2D transfer
+                    elif OUT_CHANNELS_L1 == OUT_CHANNELS_L2:
+                        TRANS_CYCLES = (OUT_HEIGHT_L1 * OUT_WIDTH_L1 * OUT_CHANNELS_L1 / BYTES_PER_CYCLE) + OUT_HEIGHT_L1 * OVERHEAD_2D_TRANSFER
+                    # 3D transfer
+                    else:
+                        TRANS_CYCLES = (((OUT_WIDTH_L1 * OUT_CHANNELS_L1 / BYTES_PER_CYCLE) + OUT_WIDTH_L1 * OVERHEAD_2D_TRANSFER) * OUT_HEIGHT_L1) * OUT_HEIGHT_L1 * OVERHEAD_3D_TRANSFER
+                # add API and MATCH overhead
+                return MATCH_SETUP_OVERHEAD + API_OVERHEAD + TRANS_CYCLES
+
+            return {operand:calc_transfer_costs(operand) for operand in self.operands}
         
-        self.dmaconfstruct=dmaconfstruct
-        self.overhead_per_op=overhead_per_op
-        return {operand:calc_total_transfer_cost_per_op(operand) for operand in self.operands}
-    
     def def_innermost_loops_cost(self):
         def _floor(ch, N):
             return floor((ch + N - 1) / N)
         latency=0
-        ch_in = self.dmaconfstruct[self.input_operands[0]]['len_1d_copy']
-        ch_out = self.dmaconfstruct['O']['len_1d_copy']
+        ch_in = self.loop_sizes["C"]
+        ch_out = self.size_per_mem_level["O"]["K"][0]
         kernel_size_x = self.loop_sizes['FX']
         kernel_size_y = self.loop_sizes['FY']
-        output_shape=[1,self.dmaconfstruct['O']['len_1d_copy'],self.dmaconfstruct['O']['num_2d_copies'],self.dmaconfstruct['O']['num_1d_copies']]
+        output_shape=[1,ch_out,self.size_per_mem_level["O"]["OY"][0],self.size_per_mem_level["O"]["OX"][0]]
         strides=self.layer_data.strides
         padding=self.layer_data.padding
         if self.layer_data.specific_pattern in ["conv2d","pointwise_conv2d"]:
-            iterations = _floor(int(output_shape[2]*strides[0]), 8)* _floor(int(output_shape[3]*strides[1]), 2) * _floor(int(ch_out), 4)
-            im2col = kernel_size_x * kernel_size_y * ch_in * 2
+            IS_POINTWISE = self.layer_data.specific_pattern=="pointwise_conv2d"
+            # define scalar costs
+            COST_SCALAR_MAC = 14
+            COST_SCALAR_LOAD = 3
+            # iterations in ho_parallel that lead to matmul 8
+            NUM_CORES = 8
+            INPUT_PATCHES_PER_IM2COL = 2
+            iterations = _floor(output_shape[2], NUM_CORES) * _floor(output_shape[3], INPUT_PATCHES_PER_IM2COL)
+            # im2col is num patches by patch size
+            im2col = kernel_size_x * kernel_size_y * ch_in * INPUT_PATCHES_PER_IM2COL
+            # parallelized by 4 over the im2col, 6 loads 8 macs
             matmul = (5 + _floor(kernel_size_x * kernel_size_y * ch_in, 4) * (6 + 8) + 10)
-            latency += iterations * (im2col + matmul)
+            # im2col parallelized by 4
+            leftover_im2col = (kernel_size_x * kernel_size_y * ch_in) % 4
+            # for leftover use scalar ops
+            leftover_matmul = (5 + leftover_im2col * ((6*COST_SCALAR_LOAD) + (8*COST_SCALAR_MAC)) + 10)
+            # ch out parallelized by 4
+            leftover_out_ch_channels = ch_out % 4
+            # for ch out leftover only 3 loads and 2 macs
+            leftover_out_ch_matmul = (5 + _floor(kernel_size_x * kernel_size_y * ch_in, 4) * (3 + 2) + 10)
+            # for additional leftover use scalar ops
+            leftover_out_ch_matmul_im2col = (5 + leftover_im2col * ((3*COST_SCALAR_LOAD) + (2*COST_SCALAR_MAC)) + 10)
+            # leftover of ho_parallel
+            leftover_width_hoparallel = output_shape[3] % 2
+            # 2 loads and 1 mac
+            leftover_width_matmul = (5 + _floor(kernel_size_x * kernel_size_y * ch_in, 4) * (2 + 1) + 10)
+            # leftover of width + im2col in hoparallel, use scalar
+            leftover_width_matmul_im2col = (5 + leftover_im2col * ((2*COST_SCALAR_LOAD) + (1*COST_SCALAR_MAC)) + 10)
+            # NORMAL CONV PUT
+            if not IS_POINTWISE:
+                # put all together
+                latency = iterations * im2col + \
+                    iterations * ((_floor(int(ch_out), 4) * (matmul+leftover_matmul)) + (leftover_out_ch_channels * (leftover_out_ch_matmul+leftover_out_ch_matmul_im2col))) +\
+                    leftover_width_hoparallel * (ch_out * (leftover_width_matmul + leftover_width_matmul_im2col) )
+            else:
+                # put all together
+                latency = iterations * ((_floor(int(ch_out), 4) * (matmul+leftover_matmul)) + (leftover_out_ch_channels * (leftover_out_ch_matmul+leftover_out_ch_matmul_im2col))) +\
+                    iterations * leftover_width_hoparallel * (ch_out * (leftover_width_matmul + leftover_width_matmul_im2col) )
+
         elif self.layer_data.specific_pattern in ['depthwise_conv2d','depthwise_conv2d_less_4']:
             # more accurate model of depthwise generic
             input_tile_dim = (ch_out, int(output_shape[2]*strides[0]), int(output_shape[3]*strides[1]))    # (input_height, input_width, input_channels)

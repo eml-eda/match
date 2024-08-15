@@ -42,7 +42,7 @@ class Gap9NE16(ExecModule):
         Args:
             operands (List[Str]): list of operands
         """
-        def buffers_for_l1_mem(layer_data,pattern_name):
+        def buffers_for_l1_mem(layer_data,pattern_name,specific_pattern):
             buff = layer_data.loop_dim_size['K']*4*2
             #if pattern_name=="conv2d_bnorm_requant":
             #    buff*=2
@@ -50,7 +50,7 @@ class Gap9NE16(ExecModule):
         return [
             # from lower level to higher level memories
             # TEST: set now L1 to 9 kB just to force TILING 
-            MemoryInst(name="l1_mem",k_bytes=self.L1_SIZE,operands=operands,double_buffering_support=True,buffer_for_layer_func=buffers_for_l1_mem),
+            MemoryInst(name="l1_mem",k_bytes=self.L1_SIZE,operands=operands,double_buffering_support="MATCH_NE16_BUFFERED" in self.module_options and bool(self.module_options["MATCH_NE16_BUFFERED"]),buffer_for_layer_func=buffers_for_l1_mem),
             MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]
 

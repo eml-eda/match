@@ -229,7 +229,7 @@ def partitioning_patterns():
     return [
         PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,ordered_operation="nn.conv2d"),
         PartitioningPattern(name="conv2d_bias_add_requant",pattern=conv2d_pattern,ordered_operation="nn.conv2d"),
-        PartitioningPattern(name="conv2d_bias_add",pattern=only_conv_2d_and_bias_pattern,ordered_operation="nn.conv2d"),
+        #PartitioningPattern(name="conv2d_bias_add",pattern=only_conv_2d_and_bias_pattern,ordered_operation="nn.conv2d"),
         PartitioningPattern(name="dense_bnorm_requant",pattern=dense_bnorm_requant_pattern,ordered_operation="nn.dense"),
         PartitioningPattern(name="dense_bias_add_requant",pattern=fully_connected_pattern,additional_checks=check_fully_connected,ordered_operation="nn.dense"),
         PartitioningPattern(name="add_requant",pattern=element_wise_add_pattern,ordered_operation="add"),

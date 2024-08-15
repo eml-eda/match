@@ -57,7 +57,7 @@ class ZigZagEngine(TemporalMappingEngine):
             for plat_mem in platform_memories:
                 mem_inst = MemoryInstance(
                     name = plat_mem.name,
-                    size = floor(( plat_mem.k_bytes * 1024 - plat_mem.buffer_for_layer_func(self.layer_data,self.pattern_name))* 8),
+                    size = floor(( plat_mem.k_bytes * 1024 - plat_mem.buffer_for_layer_func(self.layer_data,self.pattern_name,self.layer_data.specific_pattern))* 8),
                     r_bw=floor(plat_mem.r_bw),
                     w_bw=floor(plat_mem.w_bw),
                     r_cost=100,
@@ -145,6 +145,7 @@ class ZigZagEngine(TemporalMappingEngine):
                     lpf_limit=self.lpf_limit,
                     cost_model_class= cost_model
                 )
+                breakpoint()
                 if hasattr(cme[0][0],"is_tm_valid"):
                     found_valid_temporal_mapping = cme[0][0].is_tm_valid
                 if not found_valid_temporal_mapping and all([v[1]==1 for v in list(current_spatial_mapping[self.pattern_name]["spatial_mapping"].values())]):
@@ -161,14 +162,14 @@ class ZigZagEngine(TemporalMappingEngine):
                             break
 
         except NoValidLoopOrderingFoundException as exc:
-            #breakpoint()
+            breakpoint()
             self.energy=-1
             self.latency=-1
             self.cme=None
             print(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
             raise Exception(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
         except Exception as exc:
-            #breakpoint()
+            breakpoint()
             self.energy=-1
             self.latency=-1
             self.cme=None

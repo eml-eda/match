@@ -303,7 +303,7 @@ class GapPadTransform(ExprMutator):
                                           padding=call.attrs.padding,
                                           dilation=call.attrs.dilation,
                                           groups=int(new_args[0].type_annotation.shape[1]) if is_dw else call.attrs.groups,
-                                          #out_dtype='int32',
+                                          out_dtype='int32',
                                           kernel_size=new_args[1].type_annotation.shape[-2:])
             #return relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
         else:

@@ -20,8 +20,8 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         access_same_data_considered_as_no_access=True,
     ):
         #MATCH cost model params
-        self.MATCH_ITERATION_LATENCY = 173 # TODO: profile MATCH latency
-        self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY = 10 # default value
+        self.MATCH_ITERATION_LATENCY = 300 # TODO: profile MATCH latency
+        self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY = 200 # default value
         temporal_mapping_dict=temporal_mapping.mapping_dic_stationary
         operands_=temporal_mapping.operand_list
         constrained_temporal_mapping_dict,valid=self.adjust_temporal_mapping(temporal_mapping_dict,operands_,layer)
@@ -98,7 +98,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                 reldim: [prod(
                     [val[1] for m_lev in range(memory_level+1) for val in self.temp_mapping[operand][m_lev] if val[0] == reldim] +
                     [val[1] for val in self.spatial_sizes if val[0]==reldim] + [
-                        1 if operand not in self.input_operands else self.layer_data.strides[0 if reldim=="OY" else 1]
+                        self.layer_data.strides[0 if reldim=="OY" else 1] if operand in self.input_operands and reldim in ["OY","OX"] else 1
                     ]
                 ) for memory_level in range(len(self.temp_mapping[operand]))]
                 for reldim in self.relevancy_map[operand]
@@ -123,18 +123,19 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.transfer_costs=self.def_transfer_cost()
 
     def overall_latency_sync(self):
-        input_overall_transfers=sum([self.transfer_costs[operand] for operand in self.operands if operand!='O'])
-        output_overall_transfers=self.transfer_costs["O"]
-        self.match_overall_latency=self.computational_iters*\
-            (self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY+self.MATCH_ITERATION_LATENCY)+\
-                input_overall_transfers+output_overall_transfers+self.computational_cost
+        input_overall_transfers = sum([self.transfer_costs[operand] * self.outermost_loop_iters[operand] for operand in self.operands if operand!='O'])
+        output_overall_transfers = self.transfer_costs["O"] * self.computational_iters
+
+        self.match_overall_latency=self.computational_iters * (self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY + self.MATCH_ITERATION_LATENCY)
+        self.match_overall_latency+=input_overall_transfers + output_overall_transfers
+        self.match_overall_latency+=self.computational_cost
     
     def overall_latency_async(self):
         cycles=0
         prev_mult_=0
         #print(f"Cost model multiplicities {sorted_multiplicities}")
         for idx,mult_ in enumerate(self.sorted_multiplicities):
-            cycles+=(mult_-prev_mult_)*(self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY+self.MATCH_ITERATION_LATENCY)
+            cycles+=(mult_-prev_mult_)*(self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY + self.MATCH_ITERATION_LATENCY)
             if idx==0:
                 cycles+=max([0]+[self.transfer_costs[operand] for operand in self.operands if operand!='O' and self.outermost_loop_iters[operand]>=mult_])
                 prev_mult_=1

@@ -125,7 +125,7 @@ class WorkloadParser:
         out_features = wtype[0]
         otype = call.checked_type.shape
         padding = [0, 0, 0, 0]
-        strides = [1, 1]
+        self.layer_data.strides = [1, 1]
         dilations = [1, 1]
         groups = None
         if itype[1] != wtype[1]:
@@ -140,8 +140,8 @@ class WorkloadParser:
             "FX": 1,
         }
         self.layer_data.dimension_relations = [
-            f"ix={int(strides[1])}*ox+{int(dilations[1])}*fx",
-            f"iy={int(strides[0])}*oy+{int(dilations[0])}*fy",
+            f"ix={int(self.layer_data.strides[1])}*ox+{int(dilations[1])}*fx",
+            f"iy={int(self.layer_data.strides[0])}*oy+{int(dilations[0])}*fy",
         ]
         self.layer_data.operand_precision = {
             "O": self.get_bits("int8"),
@@ -160,11 +160,11 @@ class WorkloadParser:
             operand_precision_zigzag,
             self.layer_data.operand_precision,
         ) = self.exec_module.adjust_dimensions_and_precision(
-            loop_dim_size=self.layer_data.loop_dim_size, pr_loop_dim_size=self.layer_data.pr_loop_dim_size, operand_precision=self.layer_data.operand_precision, strides=strides, pattern_name=self.pattern_name
+            loop_dim_size=self.layer_data.loop_dim_size, pr_loop_dim_size=self.layer_data.pr_loop_dim_size, operand_precision=self.layer_data.operand_precision, strides=self.layer_data.strides, pattern_name=self.pattern_name
         )
         attrs = {
             "padding": padding,
-            "strides": {"IX": int(strides[1]), "IY": int(strides[0])},
+            "strides": {"IX": int(self.layer_data.strides[1]), "IY": int(self.layer_data.strides[0])},
             "dilation": dilations,
             "groups": groups,
             "loop_sizes": {**self.layer_data.loop_dim_size, **self.layer_data.pr_loop_dim_size},
@@ -197,8 +197,8 @@ class WorkloadParser:
         w_cout, w_cin, w_ksh, w_ksw = self.get_io_from_layout("NCHW", wtype)
         o_n, o_c, o_h, o_w = self.get_io_from_layout("NCHW", otype)
         padding = [0, 0, 0, 0]
-        strides = [1, 1]
-        dilations = [1, 1]
+        self.layer_data.strides = [1, 1]
+        self.layer_data.dilations = [1, 1]
         groups = None
         if itype[0] != otype[0]:
             raise NotImplementedError(
@@ -220,7 +220,7 @@ class WorkloadParser:
             operand_precision_zigzag,
             self.layer_data.operand_precision,
         ) = self.exec_module.adjust_dimensions_and_precision(
-            loop_dim_size=self.layer_data.loop_dim_size, pr_loop_dim_size=self.layer_data.pr_loop_dim_size, operand_precision=self.layer_data.operand_precision, strides=strides, pattern_name=self.pattern_name
+            loop_dim_size=self.layer_data.loop_dim_size, pr_loop_dim_size=self.layer_data.pr_loop_dim_size, operand_precision=self.layer_data.operand_precision, strides=self.layer_data.strides, pattern_name=self.pattern_name
         )
         self.layer_data.equation = "O[b][k][oy][ox]+=X[b][k][oy][ox]*Y[b][k][oy][ox]"
         self.layer_data.ordered_relevant_loops = {
@@ -243,7 +243,7 @@ class WorkloadParser:
         del loop_dim_size_attrs["C"]
         attrs = {
             "padding": padding,
-            "strides": {"IX": int(strides[1]), "IY": int(strides[0])},
+            "strides": {"IX": int(self.layer_data.strides[1]), "IY": int(self.layer_data.strides[0])},
             "dilation": [1, 1],
             "groups": 1,
             "loop_sizes": {**loop_dim_size_attrs, **self.layer_data.pr_loop_dim_size},
@@ -266,16 +266,16 @@ class WorkloadParser:
         if attrs.groups == w_cout and w_cin==1 and w_cout>1:
             depthwise = True
         padding = [int(a_p) for a_p in attrs.padding]
-        strides = [int(v) for v in attrs.strides]
-        dilations = [int(a_d) for a_d in attrs.dilation]
+        self.layer_data.strides = [int(v) for v in attrs.strides]
+        self.layer_data.dilations = [int(a_d) for a_d in attrs.dilation]
         groups = attrs.groups
         if itype[0] != otype[0]:
             raise NotImplementedError(
                 f"Input batch size is {i_n}, while output batch size is {o_n}"
             )
         self.layer_data.dimension_relations = [
-            f"ix={int(strides[1])}*ox+{int(dilations[1])}*fx",
-            f"iy={int(strides[0])}*oy+{int(dilations[0])}*fy",
+            f"ix={int(self.layer_data.strides[1])}*ox+{int(self.layer_data.dilations[1])}*fx",
+            f"iy={int(self.layer_data.strides[0])}*oy+{int(self.layer_data.dilations[0])}*fy",
         ]
         kernel_size = list()
         if "kernel_size" in dict(attrs) and attrs["kernel_size"]!=None:
@@ -308,7 +308,7 @@ class WorkloadParser:
             operand_precision_zigzag,
             self.layer_data.operand_precision,
         ) = self.exec_module.adjust_dimensions_and_precision(
-            loop_dim_size=self.layer_data.loop_dim_size, pr_loop_dim_size=self.layer_data.pr_loop_dim_size, operand_precision=self.layer_data.operand_precision, strides=strides, pattern_name=self.pattern_name
+            loop_dim_size=self.layer_data.loop_dim_size, pr_loop_dim_size=self.layer_data.pr_loop_dim_size, operand_precision=self.layer_data.operand_precision, strides=self.layer_data.strides, pattern_name=self.pattern_name
         )
         self.layer_data.equation = (
             "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"
@@ -331,8 +331,8 @@ class WorkloadParser:
         self.layer_data.padded_dims = ["OX", "OY"]
         attrs = {
             "padding": padding,
-            "strides": {"IX": int(strides[1]), "IY": int(strides[0])},
-            "dilation": dilations,
+            "strides": {"IX": int(self.layer_data.strides[1]), "IY": int(self.layer_data.strides[0])},
+            "dilation": self.layer_data.dilations,
             "groups": groups,
             "loop_sizes": {**self.layer_data.loop_dim_size, **self.layer_data.pr_loop_dim_size},
             "nn.conv2d_prec": self.layer_data.operand_precision,

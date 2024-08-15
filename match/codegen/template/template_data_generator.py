@@ -260,7 +260,8 @@ class TemplateDataGenerator:
                 np.array(
                     [np.prod(
                         [general_template_data["size_loops_mem"][operand][dim][op_mem] + 
-                        (np.sum(general_template_data["overlaps"][general_template_data["input_dim_mapping"][dim]]) if operand in general_template_data["input_operands"] and dim in general_template_data["padded_dims"] else 0)
+                        (np.sum(general_template_data["overlaps"][general_template_data["input_dim_mapping"][dim]])\
+                         if operand in general_template_data["input_operands"] and dim in general_template_data["padded_dims"] and general_template_data["size_loops_mem"][operand][dim][op_mem]!=general_template_data["layer_attrs"]["loop_sizes"][general_template_data["input_dim_mapping"][dim]] else 0)
                          for dim in general_template_data["size_loops_mem"][operand].keys()]
                     )
                 for op_mem in self.template_data['ordered_operand_memories'][operand]

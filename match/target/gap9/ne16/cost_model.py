@@ -296,54 +296,136 @@ class Gap9NE16CostModel(ZigZagMatchCostModel):
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
     
     def def_transfer_cost(self):
+        USE_PLINIO_TRANSFER_MODEL = False
+        if USE_PLINIO_TRANSFER_MODEL:
+            is_dw = self.layer_data.specific_pattern=='depthwise_conv2d'
+            layer_params = (
+                self.loop_sizes["OY"],
+                self.loop_sizes["OX"],
+                self.loop_sizes["K"] if not is_dw else self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16)),
+                self.loop_sizes["C"] + (16-(self.loop_sizes["C"]%16)) if not is_dw else self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16))
+            )
+            self.ne16=Ne16PerfModel_generalized(
+                    name='conv',
+                    ks=(self.loop_sizes["FY"],self.loop_sizes["FX"]),
+                    depthwise=is_dw,
+                    WEIGHTS_BITWIDTH=8,
+                    layer=layer_params)
+            self.ne16.set_subtile(self.size_per_mem_level["O"]["OY"][0],
+                                self.size_per_mem_level["O"]["OX"][0],
+                                self.size_per_mem_level["O"]["K"][0] + (16-(self.size_per_mem_level["O"]["K"][0]%16)) if is_dw else self.size_per_mem_level["O"]["K"][0],
+                                self.size_per_mem_level["I"]["C"][0] + (16-(self.size_per_mem_level["I"]["C"][0]%16)) if not is_dw else self.size_per_mem_level["O"]["K"][0] + (16-(self.size_per_mem_level["O"]["K"][0]%16)))
+            return {
+                "O":int(self.ne16.out_store_latency),
+                "W":int(self.ne16.weight_load_latency),
+                "I":int(self.ne16.input_load_latency)
+            }
+        else:
+            def calc_transfer_costs(operand):
+                BYTES_PER_CYCLE = 8
+                API_OVERHEAD = 550
+                MATCH_SETUP_OVERHEAD = 920 - API_OVERHEAD
+                OVERHEAD_2D_TRANSFER = 1
+                OVERHEAD_3D_TRANSFER = 10
+                
+                TRANS_CYCLES = 0
+                if operand in self.layer_data.input_operands:
+                    IN_HEIGHT_L1 = self.size_per_mem_level[operand]["OY"][0]
+                    IN_HEIGHT_L2 = self.size_per_mem_level[operand]["OY"][1]
+
+                    IN_WIDTH_L1 = self.size_per_mem_level[operand]["OX"][0]
+                    IN_WIDTH_L2 = self.size_per_mem_level[operand]["OX"][1]
+
+                    IN_CHANNELS_L1 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
+                    IN_CHANNELS_L2 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][1]
+
+                    # 1D transfer
+                    if IN_WIDTH_L1 == IN_WIDTH_L2 and IN_CHANNELS_L1 == IN_CHANNELS_L2:
+                        TRANS_CYCLES = IN_HEIGHT_L1 * IN_WIDTH_L1 * IN_CHANNELS_L1 / BYTES_PER_CYCLE
+                    # 2D transfer
+                    elif IN_CHANNELS_L1 == IN_CHANNELS_L2:
+                        TRANS_CYCLES = (IN_HEIGHT_L1 * IN_WIDTH_L1 * IN_CHANNELS_L1 / BYTES_PER_CYCLE) + IN_HEIGHT_L1 * OVERHEAD_2D_TRANSFER
+                    # 3D transfer
+                    else:
+                        TRANS_CYCLES = (((IN_WIDTH_L1 * IN_CHANNELS_L1 / BYTES_PER_CYCLE) + IN_WIDTH_L1 * OVERHEAD_2D_TRANSFER) * IN_HEIGHT_L1) * IN_HEIGHT_L1 * OVERHEAD_3D_TRANSFER
+                elif operand=="W":
+                    FILTER_HEIGHT = self.loop_sizes["FY"]
+                    FILTER_WIDTH = self.loop_sizes["FX"]
+
+                    WEIGHTS_CH_IN = self.loop_sizes["C"]
+                    WEIGHTS_CH_OUT = self.size_per_mem_level["W"]["K"][0]
+                    # 1D transfer
+                    TRANS_CYCLES = WEIGHTS_CH_OUT * WEIGHTS_CH_IN * FILTER_HEIGHT * FILTER_WIDTH / BYTES_PER_CYCLE
+                # output
+                else:
+                    OUT_HEIGHT_L1 = self.size_per_mem_level[operand]["OY"][0]
+                    OUT_HEIGHT_L2 = self.size_per_mem_level[operand]["OY"][1]
+
+                    OUT_WIDTH_L1 = self.size_per_mem_level[operand]["OX"][0]
+                    OUT_WIDTH_L2 = self.size_per_mem_level[operand]["OX"][1]
+
+                    OUT_CHANNELS_L1 = self.size_per_mem_level[operand]['K'][0]
+                    OUT_CHANNELS_L2 = self.size_per_mem_level[operand]['K'][1]
+                    # 1D transfers
+                    if OUT_WIDTH_L1 == OUT_WIDTH_L2 and OUT_CHANNELS_L1 == OUT_CHANNELS_L2:
+                        TRANS_CYCLES = OUT_HEIGHT_L1 * OUT_WIDTH_L1 * OUT_CHANNELS_L1 / BYTES_PER_CYCLE
+                    # 2D transfer
+                    elif OUT_CHANNELS_L1 == OUT_CHANNELS_L2:
+                        TRANS_CYCLES = (OUT_HEIGHT_L1 * OUT_WIDTH_L1 * OUT_CHANNELS_L1 / BYTES_PER_CYCLE) + OUT_HEIGHT_L1 * OVERHEAD_2D_TRANSFER
+                    # 3D transfer
+                    else:
+                        TRANS_CYCLES = (((OUT_WIDTH_L1 * OUT_CHANNELS_L1 / BYTES_PER_CYCLE) + OUT_WIDTH_L1 * OVERHEAD_2D_TRANSFER) * OUT_HEIGHT_L1) * OUT_HEIGHT_L1 * OVERHEAD_3D_TRANSFER
+                # add API and MATCH overhead
+                return MATCH_SETUP_OVERHEAD + API_OVERHEAD + TRANS_CYCLES
+
+            return {operand:calc_transfer_costs(operand) for operand in self.operands}
+    
+    def def_innermost_loops_cost(self):
         is_dw = self.layer_data.specific_pattern=='depthwise_conv2d'
-        layer_params = (
+        self.padding_of_k = 0 if self.loop_sizes["K"]%16==0 else 16-(self.loop_sizes["K"]%16)
+        self.padding_of_k_l1 = 0 if self.size_per_mem_level["O"]["K"][0]%16==0 else 16-(self.size_per_mem_level["O"]["K"][0]%16)
+        self.padding_of_c = 0 if self.loop_sizes["C"]%16==0 else 16-(self.loop_sizes["C"]%16)
+        self.ne16_layer_params = (
             self.loop_sizes["OY"],
             self.loop_sizes["OX"],
-            self.loop_sizes["K"] if not is_dw else self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16)),
-            self.loop_sizes["C"] + (16-(self.loop_sizes["C"]%16)) if not is_dw else self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16))
+            self.loop_sizes["K"] if not is_dw else self.loop_sizes["K"] + self.padding_of_k,
+            self.loop_sizes["C"] + self.padding_of_c if not is_dw else self.loop_sizes["K"] + self.padding_of_k
         )
         self.ne16=Ne16PerfModel_generalized(
                 name='conv',
                 ks=(self.loop_sizes["FY"],self.loop_sizes["FX"]),
                 depthwise=is_dw,
-                WEIGHTS_BITWIDTH=1,
-                layer=layer_params)
+                WEIGHTS_BITWIDTH=8,
+                layer=self.ne16_layer_params)
+        #account for strides as well
+        STRIDES_OVERHEAD = 1
+
+        #STRIDES_OVERHEAD = (sum(self.layer_data.strides)/2)
+        self.tiled_layer_latency = int(self.ne16.tiled_layer_latency(
+            layer_shape_in=(self.partial_relevant_loop_sizes["IY"],self.partial_relevant_loop_sizes["IX"],self.loop_sizes["K"] + self.padding_of_k if is_dw else self.loop_sizes["C"] + self.padding_of_c),
+            layer_shape_out=(self.loop_sizes["OY"],self.loop_sizes["OX"],self.loop_sizes["K"] + self.padding_of_k if is_dw else self.loop_sizes["K"]),
+            tile_shape_out=(self.size_per_mem_level["O"]["OY"][0],self.size_per_mem_level["O"]["OX"][0],self.size_per_mem_level["O"]["K"][0]+self.padding_of_k_l1 if is_dw else self.size_per_mem_level["O"]["K"][0])))
+        
         self.ne16.set_subtile(self.size_per_mem_level["O"]["OY"][0],
                               self.size_per_mem_level["O"]["OX"][0],
-                              self.size_per_mem_level["O"]["K"][0] + (16-(self.size_per_mem_level["O"]["K"][0]%16)) if is_dw else self.size_per_mem_level["O"]["K"][0],
-                              self.size_per_mem_level["I"]["C"][0] + (16-(self.size_per_mem_level["I"]["C"][0]%16)) if not is_dw else self.size_per_mem_level["O"]["K"][0] + (16-(self.size_per_mem_level["O"]["K"][0]%16)))
-        return {
-            "O":int(self.ne16.out_store_latency),
-            "W":int(self.ne16.weight_load_latency),
-            "I":int(self.ne16.input_load_latency)
-        }
-    
-    def def_innermost_loops_cost(self):
-        return int(self.ne16.computation_iteration_latency+self.ne16.update_indexes_latency+self.ne16.iter_normquant_latency)
+                              self.size_per_mem_level["O"]["K"][0] + self.padding_of_k_l1 if is_dw else self.size_per_mem_level["O"]["K"][0],
+                              self.loop_sizes["C"] if not is_dw else self.size_per_mem_level["O"]["K"][0] + self.padding_of_k_l1)
+        self.tiled_layer_latency_old = int(self.ne16.computation_iteration_latency+self.ne16.update_indexes_latency+self.ne16.iter_normquant_latency)
+        return STRIDES_OVERHEAD * self.tiled_layer_latency / self.computational_iters
     
     def def_overall_execution(self):
         is_dw = self.layer_data.specific_pattern=='depthwise_conv2d'
-        layer_params = (
-            self.loop_sizes["OY"],
-            self.loop_sizes["OX"],
-            self.loop_sizes["K"] if not is_dw else self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16)),
-            self.loop_sizes["C"] + (16-(self.loop_sizes["C"]%16)) if not is_dw else self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16))
-        )
-        self.ne16=Ne16PerfModel_generalized(
-                name='conv',
-                ks=(self.loop_sizes["FY"],self.loop_sizes["FX"]),
-                depthwise=is_dw,
-                WEIGHTS_BITWIDTH=1,
-                layer=layer_params)
-        self.match_overall_latency=int(self.ne16.tiled_layer_latency(
-            layer_shape_in=(self.partial_relevant_loop_sizes["IY"],self.partial_relevant_loop_sizes["IX"],self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16)) if is_dw else self.loop_sizes["C"] + (16-(self.loop_sizes["C"]%16))),
-            layer_shape_out=(self.loop_sizes["OY"],self.loop_sizes["OX"],self.loop_sizes["K"] + (16-(self.loop_sizes["K"]%16)) if is_dw else self.loop_sizes["K"]),
-            tile_shape_out=(self.size_per_mem_level["O"]["OY"][0],self.size_per_mem_level["O"]["OX"][0],self.size_per_mem_level["O"]["K"][0]+(16-(self.size_per_mem_level["O"]["K"][0]%16)) if is_dw else self.size_per_mem_level["O"]["K"][0])))
-        if self.loop_sizes["C"]%16!=0 and not is_dw:
+
+        self.overall_latency_sync()   
+        
+        SOFTWARE_DIM_TO_PAD = "K" if is_dw else "C"
+        self.SOFTWARE_PAD_COST = 0
+        self.SOFTWARE_SLICING_COST = 0
+        
+        if self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16!=0:
             #add software padding cost
-            self.match_overall_latency+=self.partial_relevant_loop_sizes["IY"]*self.partial_relevant_loop_sizes["IX"]*(self.loop_sizes["C"]+(16-self.loop_sizes["C"]%16))*1.5
-        elif is_dw and self.loop_sizes["K"]%16!=0:
-            #add software padding cost
-            self.match_overall_latency+=self.partial_relevant_loop_sizes["IY"]*self.partial_relevant_loop_sizes["IX"]*(self.loop_sizes["C"]+(16-self.loop_sizes["K"]%16))*1.5
-        self.total_latency=self.match_overall_latency
+            self.SOFTWARE_PAD_COST = self.partial_relevant_loop_sizes["IY"] * self.partial_relevant_loop_sizes["IX"] * (self.loop_sizes[SOFTWARE_DIM_TO_PAD]+(16-self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16))*1.5
+        if is_dw:
+            self.SOFTWARE_SLICING_COST = self.partial_relevant_loop_sizes["OY"] * self.partial_relevant_loop_sizes["OX"] * (self.loop_sizes[SOFTWARE_DIM_TO_PAD]+(16-self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16))*1.5
+        # add software costs
+        self.match_overall_latency += self.SOFTWARE_PAD_COST + self.SOFTWARE_SLICING_COST
