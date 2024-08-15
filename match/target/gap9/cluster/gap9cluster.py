@@ -45,11 +45,11 @@ class Gap9Cluster(ExecModule):
             ]
         elif pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])<4 and layer_attrs["nn.conv2d_depthwise"]:
             return [
-                ("K",8),("OX",4),("OY",self.FULL_DIM)
+                ("K",self.FULL_DIM),("OX",self.FULL_DIM),("OY",self.FULL_DIM)
             ]
         elif pattern_name in conv2d_patterns and layer_attrs["nn.conv2d_depthwise"]:
             return [
-                ("K",8),("OX",4),("OY",self.FULL_DIM)
+                ("K",self.FULL_DIM),("OX",self.FULL_DIM),("OY",self.FULL_DIM)
             ]
         elif pattern_name in conv2d_patterns:
             return [
@@ -109,7 +109,6 @@ class Gap9Cluster(ExecModule):
             memories[0].double_buffering_support=False
 
         def buffers_for_l1_mem(layer_data,pattern_name,specific_pattern):
-            breakpoint()
             buff_mem=0
             # buffer for the cores of the accelerator (weights dimensions)
             if (pattern_name not in ['add_requant','dense_out','dense_bnorm_requant','dense_bias_add_requant']) and (specific_pattern not in ['pointwise_conv2d']):

@@ -135,19 +135,22 @@ class ZigZagEngine(TemporalMappingEngine):
             current_spatial_mapping = self.spatial_mapping
             found_valid_temporal_mapping = False
             while not found_valid_temporal_mapping:
-                self.energy, self.latency, cme = api.get_hardware_performance_zigzag(
-                    workload=self.workload,
-                    accelerator=self.accelerator,
-                    mapping=current_spatial_mapping,
-                    opt="latency",
-                    dump_filename_pattern=f"tmp/match-layer_?.json",
-                    pickle_filename=f"tmp/match-saved_list_of_cmes.pickle",
-                    lpf_limit=self.lpf_limit,
-                    cost_model_class= cost_model
-                )
-                breakpoint()
-                if hasattr(cme[0][0],"is_tm_valid"):
-                    found_valid_temporal_mapping = cme[0][0].is_tm_valid
+                try:
+                    print("Looking for temporal mapping with following spatial mapping",current_spatial_mapping)
+                    self.energy, self.latency, cme = api.get_hardware_performance_zigzag(
+                        workload=self.workload,
+                        accelerator=self.accelerator,
+                        mapping=current_spatial_mapping,
+                        opt="latency",
+                        dump_filename_pattern=f"tmp/match-layer_?.json",
+                        pickle_filename=f"tmp/match-saved_list_of_cmes.pickle",
+                        lpf_limit=self.lpf_limit,
+                        cost_model_class= cost_model
+                    )
+                    if hasattr(cme[0][0],"is_tm_valid"):
+                        found_valid_temporal_mapping = cme[0][0].is_tm_valid
+                except NoValidLoopOrderingFoundException as exc:
+                    found_valid_temporal_mapping = False
                 if not found_valid_temporal_mapping and all([v[1]==1 for v in list(current_spatial_mapping[self.pattern_name]["spatial_mapping"].values())]):
                     raise NoValidLoopOrderingFoundException(
                         f"No valid loop ordering was found for layer {cme[0][0].layer}."
@@ -161,15 +164,8 @@ class ZigZagEngine(TemporalMappingEngine):
                             current_spatial_mapping[self.pattern_name]["spatial_mapping"][dim_] = (max_spatial_size[0],floor(max_spatial_size[1]/2))
                             break
 
-        except NoValidLoopOrderingFoundException as exc:
-            breakpoint()
-            self.energy=-1
-            self.latency=-1
-            self.cme=None
-            print(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
-            raise Exception(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
         except Exception as exc:
-            breakpoint()
+            #breakpoint()
             self.energy=-1
             self.latency=-1
             self.cme=None
