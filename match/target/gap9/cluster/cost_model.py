@@ -215,7 +215,7 @@ class Gap9ClusterCostModel(ZigZagMatchCostModel):
                         TRANS_CYCLES = (OUT_HEIGHT_L1 * OUT_WIDTH_L1 * OUT_CHANNELS_L1 / BYTES_PER_CYCLE) + OUT_HEIGHT_L1 * OVERHEAD_2D_TRANSFER
                     # 3D transfer
                     else:
-                        TRANS_CYCLES = (((OUT_WIDTH_L1 * OUT_CHANNELS_L1 / BYTES_PER_CYCLE) + OUT_WIDTH_L1 * OVERHEAD_2D_TRANSFER) * OUT_HEIGHT_L1) * OUT_HEIGHT_L1 * OVERHEAD_3D_TRANSFER
+                        TRANS_CYCLES = (((OUT_WIDTH_L1 * OUT_CHANNELS_L1 / BYTES_PER_CYCLE) + OUT_WIDTH_L1 * OVERHEAD_2D_TRANSFER) * OUT_HEIGHT_L1) + OUT_HEIGHT_L1 * OVERHEAD_3D_TRANSFER
                 # add API and MATCH overhead
                 return MATCH_SETUP_OVERHEAD + API_OVERHEAD + TRANS_CYCLES
 
@@ -273,15 +273,18 @@ class Gap9ClusterCostModel(ZigZagMatchCostModel):
                     iterations * leftover_width_hoparallel * (ch_out * (leftover_width_matmul + leftover_width_matmul_im2col) )
 
         elif self.layer_data.specific_pattern in ['depthwise_conv2d','depthwise_conv2d_less_4']:
-            # more accurate model of depthwise generic
-            input_tile_dim = (ch_out, int(output_shape[2]*strides[0]), int(output_shape[3]*strides[1]))    # (input_height, input_width, input_channels)
-            filter_dim = (ch_out, kernel_size_y, kernel_size_x)          # (filter_channels, filter_height, filter_width)
-            output_tile_dim = (ch_out, output_shape[2], output_shape[3])   # (output_channels, output_height, output_width)
-            padding = (padding["IY"][0], padding["IY"][1], padding["IX"][0], padding["IX"][1])           # (padding_top, padding_bottom, padding_left, padding_right)
-            stride = (strides[0], strides[1])                  # (stride_height, stride_width)
-            latency = depthwise_generic_latency(input_tile_dim, filter_dim, output_tile_dim, padding, stride)
-            # easier model
-            #latency = 4 * _floor(ch_out, 8)  * _floor(output_shape[3]*strides[1],4) * kernel_size_x * kernel_size_y * int(output_shape[2]*strides[0])
+            # define scalar costs
+            COST_SCALAR_MAC = 2
+            COST_SCALAR_LOAD = 2
+            COST_QUANT = 9
+            # iterations in ho_parallel that lead to matmul 8
+            NUM_CORES = 8
+            iterations = _floor(output_shape[1], NUM_CORES) * output_shape[3]
+            # parallelized by 4 over the im2col, 6 loads 8 macs
+            vec_matmul = (5 + _floor(kernel_size_x * kernel_size_y, 4) * (2*3 + 1) + 10)
+            scalar_matmul = (5 + ((kernel_size_x * kernel_size_y) % 4) * ((2*COST_SCALAR_LOAD) + (1*COST_SCALAR_MAC)) + 10)
+            im2col = self.size_per_mem_level["I"]["OY"][0] * kernel_size_y
+            latency = iterations * (im2col + output_shape[2] * (scalar_matmul + vec_matmul + COST_QUANT))
         elif self.layer_data.specific_pattern=='dense':
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)
         else:

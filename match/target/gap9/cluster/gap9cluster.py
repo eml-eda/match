@@ -45,11 +45,11 @@ class Gap9Cluster(ExecModule):
             ]
         elif pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])<4 and layer_attrs["nn.conv2d_depthwise"]:
             return [
-                ("K",self.FULL_DIM),("OX",self.FULL_DIM),("OY",self.FULL_DIM)
+                ("K",8),("OX",8),("OY",self.FULL_DIM)
             ]
         elif pattern_name in conv2d_patterns and layer_attrs["nn.conv2d_depthwise"]:
             return [
-                ("K",self.FULL_DIM),("OX",self.FULL_DIM),("OY",self.FULL_DIM)
+                ("K",8),("OX",8),("OY",self.FULL_DIM),
             ]
         elif pattern_name in conv2d_patterns:
             return [
@@ -111,10 +111,16 @@ class Gap9Cluster(ExecModule):
         def buffers_for_l1_mem(layer_data,pattern_name,specific_pattern):
             buff_mem=0
             # buffer for the cores of the accelerator (weights dimensions)
-            if (pattern_name not in ['add_requant','dense_out','dense_bnorm_requant','dense_bias_add_requant']) and (specific_pattern not in ['pointwise_conv2d']):
+            NUM_CORES = 8
+            NO_IM2COL_PTS_LIST = ['add_requant','dense_out','dense_bnorm_requant','dense_bias_add_requant']
+            NO_IM2COL_SPEC_PTS_LIST = ['pointwise_conv2d']
+            IS_DW = "depthwise_conv2d" in specific_pattern
+            if IS_DW:
+                buff_mem = layer_data.loop_dim_size["FY"] * (layer_data.pr_loop_dim_size["IY"] + sum(layer_data.padding["IY"])) + layer_data.loop_dim_size["FY"]
+            elif (pattern_name not in NO_IM2COL_PTS_LIST) and (specific_pattern not in NO_IM2COL_SPEC_PTS_LIST):
                 buff_mem=2*layer_data.loop_dim_size['C']*layer_data.loop_dim_size['FY']*layer_data.loop_dim_size['FX']
             # buff for each core
-            buff_mem*=8
+            buff_mem*=NUM_CORES
             # bias
             if pattern_name!="add_requant":
                 buff_mem+=layer_data.loop_dim_size['K']*4

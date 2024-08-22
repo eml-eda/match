@@ -425,7 +425,7 @@ class Gap9NE16CostModel(ZigZagMatchCostModel):
         if self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16!=0:
             #add software padding cost
             self.SOFTWARE_PAD_COST = self.partial_relevant_loop_sizes["IY"] * self.partial_relevant_loop_sizes["IX"] * (self.loop_sizes[SOFTWARE_DIM_TO_PAD]+(16-self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16))*1.5
-        if is_dw:
-            self.SOFTWARE_SLICING_COST = self.partial_relevant_loop_sizes["OY"] * self.partial_relevant_loop_sizes["OX"] * (self.loop_sizes[SOFTWARE_DIM_TO_PAD]+(16-self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16))*1.5
+            if is_dw:
+                self.SOFTWARE_SLICING_COST = self.loop_sizes["OY"] * self.loop_sizes["OX"] * (self.loop_sizes[SOFTWARE_DIM_TO_PAD]+(16-self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16))*1.5
         # add software costs
         self.match_overall_latency += self.SOFTWARE_PAD_COST + self.SOFTWARE_SLICING_COST

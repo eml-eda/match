@@ -263,23 +263,22 @@ def create_random_array(shape: Tuple[int, ...], dtype: str) -> tvm.nd.array:
     return numpy_to_array(np_array, dtype)
 
 
-def tvmc_wrapper(model: TVMCModel, target: str = "gap9, c",
+def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
                  fuse_layers: bool = True, 
                  package_path: pathlib.Path = pathlib.Path("model.tar")):
     '''
     Utility wrapper for TVMC that sets supported
     :param model: TVMC model that you wish to compile
-    :param target: Can be "gap9, c" if you want to offload all possible
+    :param target: Can be "match, c" if you want to offload all possible
         computations to accelerator, and can be "c" for golden model checking.
     :param fuse_layers: sets relay.FuseOps.max_depth parameter to 1
         if set to False. This tells relay to not fuse operations.
         This can be useful when debuggin the TVM-generated c code kernels.
     '''
     # Check arguments
-    #assert ((target == "gap9, c") or (target == "c"))
     # Add -device=arm_cpu as default device for TVM C codegen
     # This will use the arm_cpu relay strategy as opposed to the x86 one.
-    target += " -device=armcpu"
+    #target += " -device=arm_cpu"
     # This has to be set by default to use the C runtime
     """
     These are the existing configurations: tir.ReduceBranchingThroughOvercompute, tir.experimental_dma_bypass_cache,
@@ -327,14 +326,14 @@ def tvmc_wrapper(model: TVMCModel, target: str = "gap9, c",
                   )
 
 
-def tvmc_compile_and_unpack(model: TVMCModel, target: str = "gap9, c",
+def tvmc_compile_and_unpack(model: TVMCModel, target: str = "match, c",
                             fuse_layers: bool = True,
                             build_path: str = "./build"):
     '''
     Utility function that calls tvmc_wrapper and extracts output mlf
     (= TVM model library format) file.
     :param model: TVMC model that you wish to compile
-    :param target: Can be "gap9, c" if you want to offload all possible
+    :param target: Can be "match, c" if you want to offload all possible
         computations to accelerator, and can be "c" for golden model checking.
     :param fuse_layers: sets relay.FuseOps.max_depth parameter to 1
         if set to False. This tells relay to not fuse operations.

@@ -173,6 +173,7 @@ class ZigZagEngine(TemporalMappingEngine):
             raise Exception(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
         self.cme = cme[0][0]
         self.zigzag_temporal_mapping = self.cme.temporal_mapping.mapping_dic_stationary
+        #breakpoint()
         if self.debuglayer:
             print(f"\n\nOur result Latency was Comp {self.cme.latency_total0} total {self.cme.latency_total2}\n\n")
             print(f"Total network energy = {self.energy} pJ")

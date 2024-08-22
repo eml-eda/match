@@ -287,6 +287,7 @@ class GapPadTransform(ExprMutator):
     TODO: make this smart to avoid unnecessary transformations
     """
 
+    MAP_OLD_TO_PADDED = dict()
     def transform_function(self, func, mod, ctx):
         return self.visit(func)
 
@@ -296,6 +297,7 @@ class GapPadTransform(ExprMutator):
         if isinstance(call, relay.Constant):
             return self.visit(call)
         elif call.op.name=="nn.conv2d":
+            #breakpoint()
             new_fn = self.visit(call.op)
             new_args = params
             return relay.op.nn.conv2d(new_args[0], new_args[1],
@@ -308,6 +310,7 @@ class GapPadTransform(ExprMutator):
             #return relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
         else:
             new_fn = self.visit(call.op)
+            #breakpoint()
             if is_dw and call.op.name!="right_shift":
                 new_args = list()
                 for arg in call.args:
@@ -327,7 +330,6 @@ class GapPadTransform(ExprMutator):
         """
         new_params = []
         binds = {}
-
         for idx,param in enumerate(fn.params):
             # Get the parameter's type annotation.
             var_type = param.type_annotation
@@ -344,7 +346,6 @@ class GapPadTransform(ExprMutator):
         new_body = self.visit_pad_func_body(fn.body,new_params,is_dw)
         # Rewrite the body to use new parameters.
         new_body = relay.bind(new_body, binds)
-
         # Construct the updated function and return.
         return relay.Function(
             new_params,
@@ -357,10 +358,19 @@ class GapPadTransform(ExprMutator):
     
     def visit_pad_call_args(self,arg,old_arg,is_dw,idx):
         # Generate new variable.
+        #breakpoint()
         if idx==0:
             if int(old_arg.checked_type.shape[1])%16==0:
                 return arg
             else:
+                #if isinstance(old_arg,relay.Call) and old_arg.op.name == 'annotation.compiler_begin' and isinstance(old_arg.args[0],relay.Var):
+                #    param = old_arg.args[0]
+                #    var_type = old_arg.args[0].type_annotation
+                #    if is_dw:
+                #        self.NEW_VAR_ARGS.append(relay.var(param.name_hint, shape=var_type.shape if len(var_type.shape)!=4 or var_type.shape[0]%16==0 else [var_type.shape[0]+16-(var_type.shape[0]%16),var_type.shape[1],var_type.shape[2],var_type.shape[3]], dtype=var_type.dtype))
+                #    else:
+                #        self.NEW_VAR_ARGS.append(relay.var(param.name_hint, shape=var_type.shape if len(var_type.shape)!=4 or var_type.shape[1]%16==0 else [var_type.shape[0],var_type.shape[1]+16-(var_type.shape[1]%16),var_type.shape[2],var_type.shape[3]], dtype=var_type.dtype))
+                #else:    
                 new_arg=relay.reshape(relay.nn.pad(relay.reshape(arg.args[0],(old_arg.checked_type.shape[0],old_arg.checked_type.shape[2],old_arg.checked_type.shape[3],old_arg.checked_type.shape[1])),((0,0),(0,0),(0,0),(0,16-(int(old_arg.checked_type.shape[1])%16)))),(old_arg.checked_type.shape[0],old_arg.checked_type.shape[1]+16-(int(old_arg.checked_type.shape[1])%16),old_arg.checked_type.shape[2],old_arg.checked_type.shape[3]))
                 new_fn = self.visit(arg.op)
                 return relay.Call(new_fn,[new_arg] , arg.attrs)
@@ -382,6 +392,10 @@ class GapPadTransform(ExprMutator):
 
 
     def visit_pad_call(self,call,old_call):
+        #breakpoint()
+        if old_call in self.MAP_OLD_TO_PADDED:
+            return self.MAP_OLD_TO_PADDED[old_call]
+        #breakpoint()
         is_dw = self.is_dw(call.op.body)
         #if is_dw:
         #    return call,(None,None,None)
@@ -395,7 +409,8 @@ class GapPadTransform(ExprMutator):
             original_out_shape=[int(x) for x in old_call.checked_type.shape]
             padded_shape=[original_out_shape[0],original_out_shape[2],original_out_shape[3],original_out_shape[1]+(16-(original_out_shape[1]%16))]
             strided_shape=[original_out_shape[0],original_out_shape[2],original_out_shape[3],original_out_shape[1]]
-        return final_call,(original_out_shape,padded_shape,strided_shape)
+        self.MAP_OLD_TO_PADDED[old_call]=(final_call,(original_out_shape,padded_shape,strided_shape))
+        return self.MAP_OLD_TO_PADDED[old_call]
 
 
     def visit_call(self, call):
@@ -424,13 +439,13 @@ class GapPadTransform(ExprMutator):
     
 
 
-
-
-
-
 def adjust_network(opts):
     pipeline=[]
     pipeline.append(transform.InferType())
     pipeline.append(GapPadTransform())
     pipeline.append(transform.InferType())
+    # TODO: add a transformation that after the padding one deletes useless padding on the inputs, if not
+    # used elsewhere not padded and then changes directly the input, getting then the same thing as statically padding
+    #pipeline.append(GapRemovePadOnInputs())
+    #pipeline.append(transform.InferType())
     return pipeline
