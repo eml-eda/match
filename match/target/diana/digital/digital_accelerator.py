@@ -199,7 +199,7 @@ class DigitalAccelerator(ExecModule):
                                               "conv_2d",
                                               "dense",
                                               "depthwise_conv_2d",
-                                              "element_wise_sum",
+                                              "elem_add",
                                           ],
                                           src_path=os.path.dirname(__file__)+"/src",
                                           inc_path=os.path.dirname(__file__)+"/include",
@@ -220,12 +220,12 @@ class DigitalAccelerator(ExecModule):
     def memories_def(self, pattern_name, operands):
         mem = [
             # from lower level to higher level memories
-            MemoryInst(name="act_mem",k_bytes=self.L1_SIZE,operands=[op for op in operands if op!="W"],double_buffering_support=False),
-            MemoryInst(name="dram",k_bytes=512,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
+            MemoryInst(name="act_mem",k_bytes=self.L1_SIZE,operands=[op for op in operands if op!="W"],r_bw=64*8,w_bw=64*8,r_ports=0,w_ports=0,rw_ports=2,double_buffering_support=False),
+            MemoryInst(name="dram",k_bytes=512,operands=operands,r_ports=1,w_ports=1,rw_ports=0,r_bw=16*8,w_bw=16*8),
         ]
         if "W" in operands:
             mem = [
-                MemoryInst(name="weight_mem",k_bytes=64,operands=["W"],double_buffering_support=False),
+                MemoryInst(name="weight_mem",k_bytes=64,operands=["W"],double_buffering_support=False,r_bw=256 * 8, w_bw=128,r_ports=1,w_ports=1,rw_ports=0),
             ] + mem
         return mem
     

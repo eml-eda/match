@@ -245,5 +245,5 @@ def partitioning_patterns():
     return [
         PartitioningPattern(name="conv2d", pattern=conv2d_pattern, additional_checks=partial(check_conv2d, supported_weight_bits=supported_weight_bits_conv2d),ordered_operation="nn.conv2d"),
         PartitioningPattern(name="dense", pattern=fully_connected_pattern, additional_checks=check_fully_connected,ordered_operation="dense"),
-        PartitioningPattern(name="add", pattern=element_wise_add_pattern, additional_checks=partial(check_element_wise_add, supported_weight_bits=supported_weight_bits_conv2d),ordered_operation="add"),
+        PartitioningPattern(name="elem_add", pattern=element_wise_add_pattern, additional_checks=partial(check_element_wise_add, supported_weight_bits=supported_weight_bits_conv2d),ordered_operation="add"),
     ]

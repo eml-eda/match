@@ -18,6 +18,30 @@ class DigitalAcceleratorCostModel(ZigZagMatchCostModel):
             temporal_mapping=temporal_mapping,
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
 
+    def adjust_temporal_mapping(self,temporal_mapping_dict,operand_list,layer):
+        """Fix the temporal mapping of a schedule to match the requirements of the platform, the default implementation will
+        move loops of the output to permit the computation to happen as soon as the output has been allocated
+
+        Args:
+            temporal_mapping_dict (Dict[List[List[Tuple]]]): dictionary containing per each operator the list of memories with the loops assigned
+            operand_list (List[Str]): operands used for the specific pattern
+
+        Returns:
+            Dict[List[List[Tuple]]]: the new temporal mapping satisfying each constraint
+        """
+        min_innermost_loops=min([len(temporal_mapping_dict[operand][0]) for operand in operand_list])
+        temporal_mapping_dict["O"][1]=temporal_mapping_dict["O"][0][min_innermost_loops:]+temporal_mapping_dict["O"][1]
+        temporal_mapping_dict["O"][0]=temporal_mapping_dict["O"][0][:min_innermost_loops]
+        # FIX DENSE OUT CHS TO BE 16
+        if layer.layer_attrs["match_layer_data"].specific_pattern=="dense":
+            temporal_mapping_dict["O"][1]=temporal_mapping_dict["O"][0][1:]+temporal_mapping_dict["O"][1]
+            temporal_mapping_dict["O"][0]=temporal_mapping_dict["O"][0][:1]
+            #temporal_mapping_dict["I"][1]=temporal_mapping_dict["I"][0][1:]+temporal_mapping_dict["I"][1]
+            #temporal_mapping_dict["I"][0]=temporal_mapping_dict["I"][0][:1]
+            #temporal_mapping_dict["W"][1]=temporal_mapping_dict["W"][0][1:]+temporal_mapping_dict["W"][1]
+            #temporal_mapping_dict["W"][0]=temporal_mapping_dict["W"][0][:1]
+        return temporal_mapping_dict,self.is_temporal_mapping_valid(temporal_mapping_dict,layer.layer_attrs["unordered_loops"])
+
     def def_transfer_cost(self):
         multiplicity_l2 = {
             key: prod([v[1] for v in val[len(val) - 1]])
@@ -97,7 +121,7 @@ class DigitalAcceleratorCostModel(ZigZagMatchCostModel):
                 self.data_offloading_cc_pair_combined[-1]
                 + transfer_calls_per_time_from_to_l2["O"] * 70
             )
-
+        #breakpoint()
         return {
             operand: input_cost(operand=operand) if operand != "O" else output_cost()
             for operand in self.operands

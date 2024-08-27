@@ -8,3 +8,6 @@ class Gap9(MatchTarget):
             Gap9Cluster(**kwargs),
             Gap9NE16(**kwargs)
         ],**kwargs,name="gap9")
+        # like with DIANA this configuration should be faster
+        self.static_mem_plan=False
+        self.cpu_type="arm_cpu"

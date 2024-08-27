@@ -84,22 +84,26 @@ void* diana_digital_kernel_wrapper(match_kernel* kernel){
     int p_left=kernel->common_kernel->pad_IX_x;
     int p_right=kernel->common_kernel->pad_IX_y;
 
-    diana_kernel.c=kernel->common_kernel->specific_pattern!=depthwise_conv_2d?
+    diana_kernel.c=kernel->common_kernel->specific_pattern==elem_add?
+    (kernel->common_kernel->c_x>kernel->common_kernel->c_y?
+    kernel->common_kernel->c_y:kernel->common_kernel->c_x):(kernel->common_kernel->specific_pattern!=depthwise_conv_2d?
     (kernel->common_kernel->c_i>kernel->common_kernel->c_w?
-    kernel->common_kernel->c_w:kernel->common_kernel->c_i):kernel->common_kernel->k_o;
+    kernel->common_kernel->c_w:kernel->common_kernel->c_i):kernel->common_kernel->k_o);
     
     diana_kernel.k=kernel->common_kernel->k_o;
 
-    diana_kernel.cx=kernel->common_kernel->ix_i
+    diana_kernel.cx=kernel->common_kernel->specific_pattern==elem_add?
+    kernel->common_kernel->ox:(kernel->common_kernel->ix_i
     +kernel->common_kernel->dim_I->overlap_IX_x+kernel->common_kernel->dim_I->overlap_IX_y
-    -kernel->common_kernel->dim_I->pad_IX_x-kernel->common_kernel->dim_I->pad_IX_y;
+    -kernel->common_kernel->dim_I->pad_IX_x-kernel->common_kernel->dim_I->pad_IX_y);
 
-    diana_kernel.cy=kernel->common_kernel->iy_i
+    diana_kernel.cy=kernel->common_kernel->specific_pattern==elem_add?
+    kernel->common_kernel->oy:(kernel->common_kernel->iy_i
     +kernel->common_kernel->dim_I->overlap_IY_x+kernel->common_kernel->dim_I->overlap_IY_y
-    -kernel->common_kernel->dim_I->pad_IY_x-kernel->common_kernel->dim_I->pad_IY_y;
+    -kernel->common_kernel->dim_I->pad_IY_x-kernel->common_kernel->dim_I->pad_IY_y);
 
-    diana_kernel.fx=kernel->common_kernel->fx;
-    diana_kernel.fy=kernel->common_kernel->fy;
+    diana_kernel.fx=kernel->common_kernel->specific_pattern==elem_add?1:kernel->common_kernel->fx;
+    diana_kernel.fy=kernel->common_kernel->specific_pattern==elem_add?1:kernel->common_kernel->fy;
     diana_kernel.ox=kernel->common_kernel->ox;
     diana_kernel.oy=kernel->common_kernel->oy;
     diana_kernel.activation_function=kernel->common_kernel->activation_function;
@@ -125,7 +129,7 @@ void* diana_digital_kernel_wrapper(match_kernel* kernel){
         case depthwise_conv_2d:
             digital_depthwise_conv_2d(0x0,kernel->common_kernel->I_pt,kernel->common_kernel->W_pt,0x0,kernel->common_kernel->O_pt,&diana_kernel);
             break;
-        case element_wise_sum:
+        case elem_add:
             digital_element_wise_sum(0x0,kernel->common_kernel->X_pt,0x0,kernel->common_kernel->Y_pt,kernel->common_kernel->O_pt,&diana_kernel);
             break;
         default:
@@ -214,7 +218,7 @@ void* digital_memcopy_I(common_kernel* common_kernel,dimension_I* dim,unsigned i
     unsigned char* dst=(unsigned char*) digital_memalloc(size,int_mem,operator_I);
     unsigned char* src=(unsigned char*) ext_pt;
     unsigned int inner_ix=dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y;
-    unsigned int inner_iy=dim->size_IY[ext_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y;
+    unsigned int inner_iy=dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y;
     if(dim->size_IY[int_mem]==dim->size_IY[ext_mem] && dim->size_IX[int_mem]==dim->size_IX[ext_mem])
     {
         unsigned int dstdig=dst;
@@ -254,8 +258,8 @@ void* digital_memcopy_X(common_kernel* common_kernel,dimension_X* dim,unsigned i
     int size=dim->size_C[int_mem]*dim->size_IY[int_mem]*dim->size_IX[int_mem];
     unsigned char* dst=(unsigned char*) digital_memalloc(size,int_mem,operator_X);
     unsigned char* src=(unsigned char*) ext_pt;
-    unsigned int inner_ix=dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y;
-    unsigned int inner_iy=dim->size_IY[ext_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y;
+    unsigned int inner_ix=dim->size_IX[int_mem];
+    unsigned int inner_iy=dim->size_IY[int_mem];
     if(dim->size_IY[int_mem]==dim->size_IY[ext_mem] && dim->size_IX[int_mem]==dim->size_IX[ext_mem])
     {
         unsigned int dstdig=dst;
@@ -295,8 +299,8 @@ void* digital_memcopy_Y(common_kernel* common_kernel,dimension_Y* dim,unsigned i
     int size=dim->size_C[int_mem]*dim->size_IY[int_mem]*dim->size_IX[int_mem];
     unsigned char* dst=(unsigned char*) digital_memalloc(size,int_mem,operator_Y);
     unsigned char* src=(unsigned char*) ext_pt;
-    unsigned int inner_ix=dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y;
-    unsigned int inner_iy=dim->size_IY[ext_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y;
+    unsigned int inner_ix=dim->size_IX[int_mem];
+    unsigned int inner_iy=dim->size_IY[int_mem];
     if(dim->size_IY[int_mem]==dim->size_IY[ext_mem] && dim->size_IX[int_mem]==dim->size_IX[ext_mem])
     {
         unsigned int dstdig=dst;
@@ -346,7 +350,7 @@ void digital_set_channel(common_kernel* common_kernel,int* first_op_sizes,unsign
     dory_dma_channel = dory_dma_allocate();
     act_I = act_X = 0;
     act_Y = first_op_sizes[1];
-    act_O = first_op_sizes[1] + (common_kernel->specific_pattern==element_wise_sum?second_op_sizes[1]:0);
+    act_O = first_op_sizes[1] + (common_kernel->specific_pattern==elem_add?second_op_sizes[1]:0);
 }
 
 void digital_free_channel(){

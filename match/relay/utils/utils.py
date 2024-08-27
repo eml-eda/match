@@ -264,6 +264,9 @@ def create_random_array(shape: Tuple[int, ...], dtype: str) -> tvm.nd.array:
 
 
 def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
+                 cpu_type = "riscv_cpu",
+                 static_mem_plan=True,
+                 static_mem_plan_algorithm="hill_climb",
                  fuse_layers: bool = True, 
                  package_path: pathlib.Path = pathlib.Path("model.tar")):
     '''
@@ -278,7 +281,7 @@ def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
     # Check arguments
     # Add -device=arm_cpu as default device for TVM C codegen
     # This will use the arm_cpu relay strategy as opposed to the x86 one.
-    #target += " -device=arm_cpu"
+    target += f" -device={cpu_type}"
     # This has to be set by default to use the C runtime
     """
     These are the existing configurations: tir.ReduceBranchingThroughOvercompute, tir.experimental_dma_bypass_cache,
@@ -298,9 +301,10 @@ def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
     # vectorize doesnt' work good with C
     pass_context_configs.append("tir.disable_vectorize=1")
     # enable static memory plan
-    pass_context_configs.append("tir.usmp.enable=1")
+    pass_context_configs.append(f"tir.usmp.enable={int(static_mem_plan)}")
     # algorithm to use for static memory plan
-    pass_context_configs.append("tir.usmp.algorithm=hill_climb")
+    #if static_mem_plan:
+    pass_context_configs.append(f"tir.usmp.algorithm={static_mem_plan_algorithm}")
     #pass_context_configs.append("tir.disable_storage_rewrite=1")
     #pass_context_configs.append("tir.usmp.use_workspace_io=1")
     #pass_context_configs.append("tir.InjectDoubleBuffer=1")
@@ -313,7 +317,7 @@ def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
                   executor=Executor("aot",
                                     {
                                         "interface-api": "c",
-                                        "unpacked-api": True,
+                                        "unpacked-api": 1,
                                         #"workspace-byte-alignment": 4,
                                     },
                                     ),
@@ -328,7 +332,10 @@ def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
 
 def tvmc_compile_and_unpack(model: TVMCModel, target: str = "match, c",
                             fuse_layers: bool = True,
-                            build_path: str = "./build"):
+                            build_path: str = "./build",
+                            cpu_type: str = "riscv_cpu",
+                            static_mem_plan: bool = True,
+                            static_mem_plan_algorithm: str = "hill_climb"):
     '''
     Utility function that calls tvmc_wrapper and extracts output mlf
     (= TVM model library format) file.
@@ -342,7 +349,8 @@ def tvmc_compile_and_unpack(model: TVMCModel, target: str = "match, c",
     '''
     # Compile new model
     mlf_path = os.path.join(build_path, "model.tar")
-    tvmc_wrapper(model, target, fuse_layers, mlf_path)
+    tvmc_wrapper(model=model, target=target, fuse_layers=fuse_layers, package_path=mlf_path,
+                 cpu_type=cpu_type,static_mem_plan=static_mem_plan,static_mem_plan_algorithm=static_mem_plan_algorithm)
     # extract mlf file
     mlf = tarfile.TarFile(mlf_path)
     mlf.extractall(build_path)

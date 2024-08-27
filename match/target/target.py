@@ -76,6 +76,13 @@ class MatchTarget(ABC):
         if self.singleton_instantiated(**kwargs):
             return
         self.name=name
+        # can choose between riscv_cpu, arm_cpu, micro, and more, look at tvm/python/tvm/target/target.py
+        self.cpu_type="riscv_cpu"
+        # enable USMP or not?
+        self.static_mem_plan=True
+        # which algorithm to use in case we use USMP, can be greedy etc.
+        # hill_climb looks the best overall but you can play with it
+        self.static_mem_plan_algorithm="hill_climb"
         self.match_patterns=[]
         self.exec_modules=[]
         self.exec_modules_dict=dict()

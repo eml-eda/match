@@ -426,7 +426,7 @@ void __attribute__ ((noinline)) ${func_name}_inner(void* args)
     % endif
 }
 
-void __attribute__ ((noinline)) ${func_name}(
+int __attribute__ ((noinline)) ${func_name}(
     % for i_operand in input_operands:
     void* input_${i_operand}_pt,
     % endfor
