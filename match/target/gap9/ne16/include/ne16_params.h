@@ -6,7 +6,13 @@
 #include <ne16_pulp_bsp.h>
 #include <ne16_monitor.h>
 
+// size of the buffer
+#ifdef MATCH_NE16_BUFFERED
 #define DB_BUFFER_SIZE 2
+#else
+#define DB_BUFFER_SIZE 1
+#endif
+
 #define NE16_TASKS 3
 #define LOADER_TASK (0)
 #define EXECUTE_TASK (1)

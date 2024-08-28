@@ -1,9 +1,15 @@
 #include <ne16_mem.h>
 #include <gap9_cluster.h>
 // memory pts
+#ifdef MATCH_NE16_BUFFERED
 static unsigned int l1_O_off[DB_BUFFER_SIZE]={0,0};
 static unsigned int l1_I_off[DB_BUFFER_SIZE]={0,0};
 static unsigned int l1_W_off[DB_BUFFER_SIZE]={0,0};
+#else
+static unsigned int l1_O_off=0;
+static unsigned int l1_I_off=0;
+static unsigned int l1_W_off=0;
+#endif
 
 static unsigned int lock_loader_task=0;
 static unsigned int l1_bias_off=0x0;
@@ -13,13 +19,25 @@ static void* ne16_callback;
 static common_kernel* ne16_common_kernel;
 
 static unsigned int memalloc_O(unsigned int task_id){
+    #ifdef MATCH_NE16_BUFFERED
     return cluster_get_l1_memory_addr()+l1_O_off[get_nnx_db_O(task_id)];
+    #else
+    return cluster_get_l1_memory_addr()+l1_O_off;
+    #endif
 }
 static unsigned int memalloc_I(unsigned int task_id){
+    #ifdef MATCH_NE16_BUFFERED
     return cluster_get_l1_memory_addr()+l1_I_off[get_nnx_db_I(task_id)];
+    #else
+    return cluster_get_l1_memory_addr()+l1_I_off;
+    #endif
 }
 static unsigned int memalloc_W(unsigned int task_id){
+    #ifdef MATCH_NE16_BUFFERED
     return cluster_get_l1_memory_addr()+l1_W_off[get_nnx_db_W(task_id)];
+    #else
+    return cluster_get_l1_memory_addr()+l1_W_off;
+    #endif
 }
 
 void ne16_set_task_id(common_kernel* kernel){
@@ -132,16 +150,20 @@ void ne16_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsign
 
     l1_O_off[0]=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1];l1_O_off[1]=l1_O_off[0]+third_op_sizes[1]*third_op_db;
     #else
-    l1_I_off[0]=0;l1_I_off[1]=0;
-    l1_W_off[0]=first_op_sizes[1];l1_W_off[1]=l1_W_off[0];
+    l1_I_off=0;;
+    l1_W_off=first_op_sizes[1];
     l1_bias_off=first_op_sizes[1]+second_op_sizes[1]+third_op_sizes[1];
 
-    l1_O_off[0]=first_op_sizes[1]+second_op_sizes[1];l1_O_off[1]=l1_O_off[0];
+    l1_O_off=first_op_sizes[1]+second_op_sizes[1];
     #endif
 
 
     #ifdef MATCH_LOG_GAP9_VERBOSE
+    #ifdef MATCH_NE16_BUFFERED
     printf("L1 at %d off I [ %d %d ] W [ %d %d ] O [ %d %d ] Bias %d\n",cluster_get_l1_memory_addr(),l1_I_off[0],l1_I_off[1],l1_W_off[0],l1_W_off[1],l1_O_off[0],l1_O_off[1],l1_bias_off);
+    #else
+    printf("L1 at %d off I [ %d ] W [ %d ] O [ %d ] Bias %d\n",cluster_get_l1_memory_addr(),l1_I_off,l1_W_off,l1_O_off,l1_bias_off);
+    #endif
     #endif
     
     #ifndef MATCH_NE16_BUFFERED
@@ -325,6 +347,7 @@ void ne16_wait_output_transfers(common_kernel* common_kernel){
 }
 
 void ne16_wait_curr_computation(common_kernel* common_kernel){
+    #ifdef MATCH_NE16_BUFFERED
     if(common_kernel->task_id==STORER_TASK){
         monitor_consume_begin(get_nnx_monitor()->output);
 
@@ -333,8 +356,9 @@ void ne16_wait_curr_computation(common_kernel* common_kernel){
     }
     else if(common_kernel->task_id==EXECUTE_TASK)
         monitor_produce_end(get_nnx_monitor()->output);
-    else if(common_kernel->task_id==SINGLE_CORE_TASK)
-        execute_wait(match_ne16_get_nnx_task(get_nnx_db_O(common_kernel->task_id)));
+    #else
+    execute_wait(match_ne16_get_nnx_task(0));
+    #endif
 }
 
 void ne16_pattern_constant_loading(match_kernel* kernel,unsigned int iter,tile_indexes_W* abs_tile_idx,
