@@ -5,6 +5,7 @@ from match.target.gap9.ne16.network_transformations import network_transformatio
 from match.target.gap9.ne16.network_transformations import adjust_network as pad_adjust
 from match.target.gap9.ne16.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
 from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
+from match.target.memory_inst import MemoryInst
 import os
 import numpy as np
 import numpy.typing as npt
@@ -12,31 +13,47 @@ import numpy.typing as npt
 import tvm
 
 class Gap9NE16(ExecModule):
-    def __init__(self):
+    def __init__(self,**kwargs):
         super(Gap9NE16, self).__init__(name="NE16",
                                           specific_patterns=[
                                               "conv2d",
                                               "depthwise_conv2d",
                                           ],
                                           src_path=os.path.dirname(__file__)+"/src",
-                                          inc_path=os.path.dirname(__file__)+"/include")
+                                          inc_path=os.path.dirname(__file__)+"/include",
+                                          **kwargs)
+        self.L1_SIZE=90 if "l1_size" not in kwargs else kwargs["l1_size"]
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "gap9NE16_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
         return [
-            ("K",32)
+            ("K",16)
         ]
     
     def specific_pattern_def(self, pattern_name: str = "conv_2d", dim_sizes: Dict[str, int] = ..., layer_attrs: Dict = ...):
-        if pattern_name=="conv2d_bnorm_requant" and (dim_sizes['FY']*dim_sizes['FX'])==1:
-            return "conv2d"
-        elif pattern_name=="conv2d_bnorm_requant" and (dim_sizes['FY']*dim_sizes['FX'])==8:
-            return "conv2d"
-        elif layer_attrs["nn.conv2d_depthwise"]:
+        if layer_attrs["nn.conv2d_depthwise"]:
             return "depthwise_conv2d"
         else:
             # DEFAULT LIKE CONV2D
             return "conv2d"
     
+    def memories_def(self,pattern_name,operands):
+        """define the memory hierarchy of the unit by setting self.platform_memories
+
+        Args:
+            operands (List[Str]): list of operands
+        """
+        def buffers_for_l1_mem(layer_data,pattern_name,specific_pattern):
+            buff = layer_data.loop_dim_size['K']*4*2
+            #if pattern_name=="conv2d_bnorm_requant":
+            #    buff*=2
+            return buff
+        return [
+            # from lower level to higher level memories
+            # TEST: set now L1 to 9 kB just to force TILING 
+            MemoryInst(name="l1_mem",k_bytes=self.L1_SIZE,operands=operands,double_buffering_support="MATCH_NE16_BUFFERED" in self.module_options and bool(self.module_options["MATCH_NE16_BUFFERED"]),buffer_for_layer_func=buffers_for_l1_mem),
+            MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
+        ]
+
     def partitioning_patterns(self):
         return gap9partitioning_patterns()
 
@@ -66,6 +83,7 @@ class Gap9NE16(ExecModule):
     
     def platform_apis_def(self,platform_apis: PlatformApis=PlatformApis()):
         platform_apis.init_platform="ne16_init_platform"
+        platform_apis.init_platform_need_kernel_data=True
         platform_apis.set_task_id="ne16_set_task_id"
         return platform_apis
     
@@ -96,11 +114,14 @@ class Gap9NE16(ExecModule):
         The output shape is: (cout, cinMajor, Bits, height x width, cinMinorBytes),
         where cinMajor is the ceil(cin / CIN_SUBTILE) and cinMinor has to be padded with 0 to CIN_SUBTILE.
         """
+        # let's make the weights unsigned
+        #print("Initial weigths",weight.tolist())
+        weight = weight - 128
         if depthwise:
             weight = weight.transpose(1, 0, 2, 3)  # Swap cout and cin
 
         cout, cin, height, width = weight.shape
-
+        #print(weight.shape)
         # Pad cin to be divisible with CIN_SUBTILE
         if cin % 16 != 0:
             cinPad = 16 - cin % 16
@@ -112,16 +133,20 @@ class Gap9NE16(ExecModule):
             )
             cin = cin + cinPad
 
+        #print(weight)
+
         # Reshape into (cout, cinMajor, cinMinor, flattened spatial, 1)
         # The 1 at the end is required by the unpacking
         cinMajor = cin // 16
         cinMinor = 16
         weight = weight.reshape(cout, cinMajor, cinMinor, height * width, 1)
 
+        #print("Pre unpack",weight.tolist())
         # Unpack 'bits' bits in little order, e.g. bits=4: 3 => [1, 1, 0, 0]
         # (cout, cinMajor, cinMinor, flattened spatial, Bits)
         weight = np.unpackbits(weight.astype(np.uint8), axis=-1, count=bits, bitorder="little")
 
+        #print("After unpack",weight.tolist())
         # Shuffle bits so that the final shape is:
         # (cout, cinMajor, Bits, flattened spatial, cinMinor)
         weight = weight.transpose(0, 1, 4, 3, 2)
@@ -134,7 +159,7 @@ class Gap9NE16(ExecModule):
         # Pack
         # (cout, cinMajor, Bits, flattened spatial, cinMinorBytes)
         weight = np.packbits(weight, axis=-1, bitorder="little")
-
+        #print(weight.shape)
         return weight.flatten()
 
     def weights_and_constants(self,pattern_name,layer_data,layer_arguments:List=[]):
@@ -157,6 +182,8 @@ class Gap9NE16(ExecModule):
                 else:
                     if "nn.conv2d" in layer_arg_name:
                         constbytes=self.weightEncode(layer_arg_val.data.numpy(),8,"nn.conv2d_depthwise" in layer_data.layer_attrs and layer_data.layer_attrs["nn.conv2d_depthwise"])
+                        if pattern_name=="conv2d_bias_add_requant":
+                            constbytes = np.concatenate((constbytes,bytaze(np.array([1 for _ in range(layer_data.loop_dim_size["K"])],dtype=np.int32))))
                     else:
                         constbytes=bytaze(layer_arg_val.data.numpy())
                     arguments=np.concatenate((arguments,constbytes))
@@ -169,3 +196,11 @@ class Gap9NE16(ExecModule):
     
     def adjust_network(self, opts):
         return pad_adjust(opts=opts)
+
+
+
+if __name__=="__main__":
+    weights = np.array(
+        [[[[k*3*3+fy*3+fx for fx in range(3)] for fy in range(3)] for c in range(1)] for k in range(8)]
+    )
+    print(Gap9NE16.weightEncode(weight=np.pad(weights,((0,8),(0,0),(0,0),(0,0))),bits=8,depthwise=True).tolist())

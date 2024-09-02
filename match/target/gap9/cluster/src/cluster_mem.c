@@ -38,22 +38,23 @@ static unsigned int memalloc_W(){
 }
 
 void cluster_init_platform(void (inner_function)(unsigned int* args_inner_function),unsigned int* args,common_kernel* common_kernel){
+    #ifdef MATCH_GAP9_PROFILE_LAYERS
     stop_g_perf_counter();
     start_g_perf_counter();
-    //printf("Cluster init platform!\n");
-    //start_g_perf_counter();
+    #endif
+
     pi_cluster_task(&cluster_task,inner_function,args);
     pi_cluster_send_task_to_cl(&cluster_dev, &cluster_task);
-    //stop_g_perf_counter();
-    //printf("Finished cluster init_platform\n");
+
+    #ifdef MATCH_GAP9_PROFILE_LAYERS
     int32_t cycles=stop_g_perf_counter();
     printf(",%d",cycles);
     start_g_perf_counter();
-    return;
+    #endif
 }
 
 void cluster_init_l1_memory(){
-    l1_memory=pi_cl_l1_malloc(NULL, 12*1024*8);
+    l1_memory=pi_cl_l1_malloc(NULL, 90*1024);
 }
 
 void cluster_startup_memory(common_kernel* common_kernel,int* first_op_sizes,unsigned char first_op_db,dimension_I* dim_I,
@@ -61,157 +62,247 @@ void cluster_startup_memory(common_kernel* common_kernel,int* first_op_sizes,uns
                                 int* third_op_sizes,unsigned char third_op_db,dimension_O* dim_O,
                                 int* paddings,int* strides){
     if(common_kernel->specific_pattern!=elemwise_add){
-        l1_I_off[0]=0;l1_I_off[1]=first_op_sizes[1]*first_op_db;
-        l1_W_off[0]=(1+first_op_db)*first_op_sizes[1];l1_W_off[1]=l1_W_off[0]+second_op_sizes[1]*second_op_db;
-        l1_bias_off=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1]+(1+third_op_db)*third_op_sizes[1];
+        l1_I_off[0]=0;l1_I_off[1]=first_op_sizes[1]*first_op_db*common_kernel->prec_I/8;
+        l1_W_off[0]=(1+first_op_db)*first_op_sizes[1]*common_kernel->prec_I/8;l1_W_off[1]=l1_W_off[0]+second_op_sizes[1]*second_op_db*common_kernel->prec_I/8;
+        l1_bias_off=(1+first_op_db)*first_op_sizes[1]*common_kernel->prec_I/8+(1+second_op_db)*second_op_sizes[1]*common_kernel->prec_W/8+(1+third_op_db)*third_op_sizes[1]*common_kernel->prec_O/8;
     }
     else{
         l1_X_off[0]=0;l1_X_off[1]=first_op_sizes[1]*first_op_db;
         l1_Y_off[0]=(1+first_op_db)*first_op_sizes[1];l1_Y_off[1]=l1_Y_off[0]+second_op_sizes[1]*second_op_db;
         l1_bias_off=0x0;
     }
-    l1_O_off[0]=(1+first_op_db)*first_op_sizes[1]+(1+second_op_db)*second_op_sizes[1];l1_O_off[1]=l1_O_off[0]+third_op_sizes[1]*third_op_db;
+    l1_O_off[0]=(1+first_op_db)*first_op_sizes[1]*common_kernel->prec_I/8+(1+second_op_db)*second_op_sizes[1]*common_kernel->prec_W/8;l1_O_off[1]=l1_O_off[0]+third_op_sizes[1]*third_op_db*common_kernel->prec_O/8;
     cluster_init_l1_memory();
-    l1_im2col_off=l1_O_off[0]+third_op_sizes[1]*(third_op_db+1);
+    l1_im2col_off=l1_O_off[0]+third_op_sizes[1]*(third_op_db+1)*common_kernel->prec_O/8;
     if(common_kernel->specific_pattern!=elemwise_add)    l1_im2col_off+=dim_O->size_K[l2_mem]*4;
     if(common_kernel->pattern_name==dense_bnorm_requant || common_kernel->pattern_name==conv2d_bnorm_requant)   l1_im2col_off+=dim_O->size_K[l2_mem]*4;
     int im2coldim=1*(dim_W->size_FX[l2_mem]*dim_W->size_FY[l2_mem]*(dim_I->size_IY[l1_mem]+paddings[0]+paddings[2])+dim_W->size_FX[l2_mem]*dim_W->size_FY[l2_mem]);
     l1_pwt_off=l1_im2col_off+im2coldim;
-    //printf("L1 memory at %d offsets: I {%d,%d} W {%d,%d} O {%d,%d} bias %d im2col %d\n",l1_memory,l1_I_off[0],l1_I_off[1],l1_W_off[0],l1_W_off[1],
-    //l1_O_off[0],l1_O_off[1],l1_bias_off,l1_im2col_off);
+    
+    #ifdef MATCH_LOG_GAP9_VERBOSE
+    printf("L1 memory at %d offsets: I {%d,%d} W {%d,%d} O {%d,%d} bias %d im2col %d\n",l1_memory,l1_I_off[0],l1_I_off[1],l1_W_off[0],l1_W_off[1],
+    l1_O_off[0],l1_O_off[1],l1_bias_off,l1_im2col_off);
+    #endif
+
     pi_team_config_offload(NUM_CORES);
     transfer = dma_transfer_create();
 }
 
+void cluster_free_mem(){
+    pi_cl_l1_free(NULL, l1_memory, 90*1024);
+}
+
 void cluster_shutdown_mem(common_kernel* common_kernel){
-    pi_cl_l1_free(NULL, l1_memory, 12*1024*8);
+    dma_transfer_free(transfer);
+    cluster_free_mem();
 }
 
 
 unsigned int cluster_mem_transfer_O(common_kernel* common_kernel,dimension_O* dim,unsigned int ext_pt,int ext_mem,int int_mem){
-    //printf("Mem transfer O: K %d OY %d OX %d from %d to %d int mem idx %d\n",dim->size_K[int_mem],dim->size_OY[int_mem],
-    //dim->size_OX[int_mem],ext_pt,0,int_mem);
+    
+    #ifdef MATCH_LOG_GAP9_VERBOSE
+    printf("Mem transfer O: K %d OY %d OX %d from %d to %d int mem idx %d\n",dim->size_K[int_mem],dim->size_OY[int_mem],
+    dim->size_OX[int_mem],ext_pt,0,int_mem);
+    #endif
+    
     return memalloc_O();
 }
 
-void copy_out_computation_(dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
+void copy_out_computation_(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
-    transfer = dma_transfer_create();
-    //printf("Copy out int %d\n",int_pt-l1_memory);
-    //printf("Dim O K [int %d,ext %d] OY [int %d,ext %d] OX [int %d,ext %d]\n",dim->size_K[int_mem],dim->size_K[ext_mem],
-    //dim->size_OY[int_mem],dim->size_OY[ext_mem],dim->size_OX[int_mem],dim->size_OX[ext_mem]);
-    dma_transfer_async((DmaTransferConf) {
+
+    #ifdef MATCH_LOG_GAP9_VERBOSE
+    printf("Copy out int %d\n",int_pt-l1_memory);
+    printf("Dim O K [int %d,ext %d] OY [int %d,ext %d] OX [int %d,ext %d]\n",dim->size_K[int_mem],dim->size_K[ext_mem],
+    dim->size_OY[int_mem],dim->size_OY[ext_mem],dim->size_OX[int_mem],dim->size_OX[ext_mem]);
+    #endif
+
+    // no tiling on width and out channels so do 1D transfer
+    if(dim->size_OX[ext_mem]==dim->size_OX[int_mem] && dim->size_K[ext_mem]==dim->size_K[int_mem])
+        dma_transfer_1d_async((DmaTransferConf) {
+            .ext = ext_pt,
+            .loc = int_pt,
+            .length_1d_copy = dim->size_OY[int_mem]*dim->size_OX[int_mem]*dim->size_K[int_mem]*common_kernel->prec_O/8,
+            .dir = 0
+        });
+    // inner dimensions not tiled, do 2D transfers
+    else if(dim->size_K[ext_mem]==dim->size_K[int_mem])
+        dma_transfer_2d_async((DmaTransferConf) {
+            .ext = ext_pt,
+            .loc = int_pt,
+            .number_of_1d_copies = dim->size_OY[int_mem],
+            .length_1d_copy = dim->size_OX[int_mem]*dim->size_K[int_mem]*common_kernel->prec_O/8,
+            .stride_1d = dim->size_OX[ext_mem]*dim->size_K[ext_mem]*common_kernel->prec_O/8,
+            .dir = 0
+        });
+    // unlucky
+    else
+        dma_transfer_3d_async((DmaTransferConf) {
             .ext = ext_pt,
             .loc = int_pt,
             .number_of_2d_copies = dim->size_OY[int_mem],
             .number_of_1d_copies = dim->size_OX[int_mem],
-            .length_1d_copy = dim->size_K[int_mem],
-            .hwc_to_chw = 0,
-            .stride_2d = dim->size_K[ext_mem]*dim->size_OX[ext_mem],
-            .stride_1d = dim->size_K[ext_mem],
+            .length_1d_copy = dim->size_K[int_mem]*common_kernel->prec_O/8,
+            .stride_2d = dim->size_K[ext_mem]*dim->size_OX[ext_mem]*common_kernel->prec_O/8,
+            .stride_1d = dim->size_K[ext_mem]*common_kernel->prec_O/8,
             .dir = 0
-    });
+        });
     return;
 }
 
 void cluster_copy_out_curr_computation(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
-    if(common_kernel->specific_pattern==elemwise_add)    copy_out_computation_(dim,int_pt,ext_pt,int_mem,ext_mem);
+    if(common_kernel->specific_pattern==elemwise_add)    copy_out_computation_(common_kernel,dim,int_pt,ext_pt,int_mem,ext_mem);
     return;
 }
 
 void cluster_copy_out_prev_computation(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
                                     int int_mem,int ext_mem){
-    if(common_kernel->specific_pattern!=elemwise_add)    copy_out_computation_(dim,int_pt,ext_pt,int_mem,ext_mem);
+    if(common_kernel->specific_pattern!=elemwise_add)    copy_out_computation_(common_kernel,dim,int_pt,ext_pt,int_mem,ext_mem);
     return;
 }
 
 unsigned int cluster_mem_transfer_I(common_kernel* common_kernel,dimension_I* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     unsigned int dst=memalloc_I();
-    //printf("Mem transfer I: C %d IY %d IX %d from %d to %d int mem idx %d\n",dim->size_C[int_mem],dim->size_IY[int_mem],
-    //dim->size_IX[int_mem],ext_pt,dst-l1_memory,int_mem);
+
+    #ifdef MATCH_LOG_GAP9_VERBOSE
+    printf("Mem transfer I: C %d IY %d IX %d from %d to %d int mem idx %d\n",dim->size_C[int_mem],dim->size_IY[int_mem],
+    dim->size_IX[int_mem],ext_pt,dst-l1_memory,int_mem);
+    #endif
+
     unsigned int src=ext_pt;
-    dma_transfer_async((DmaTransferConf) {
-        .ext = src,
-        .loc = dst,
-        .number_of_2d_copies = (dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y),
-        .number_of_1d_copies = (dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y),
-        .length_1d_copy = dim->size_C[int_mem],
-        .hwc_to_chw = (common_kernel->specific_pattern==depthwise_conv2d || common_kernel->specific_pattern==depthwise_conv2d_less_4),
-        .stride_2d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
-        .stride_1d = dim->size_C[ext_mem],
-        .dir = 1
-    });
+    // dw
+    if(common_kernel->specific_pattern==depthwise_conv2d || common_kernel->specific_pattern==depthwise_conv2d_less_4)
+        dma_transfer_hwc_to_chw((DmaTransferConf) {
+            .ext = src,
+            .loc = dst,
+            .number_of_2d_copies = (dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y),
+            .number_of_1d_copies = (dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y),
+            .length_1d_copy = dim->size_C[int_mem],
+            .stride_2d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
+            .stride_1d = dim->size_C[ext_mem],
+            .dir = 1
+        });
+    // not dw so input channels not tiled! then if width are not tiled we can do 1D transfer
+    else if(dim->size_IX[ext_mem]==dim->size_IX[int_mem])
+        dma_transfer_1d_async((DmaTransferConf) {
+            .ext = ext_pt,
+            .loc = dst,
+            .length_1d_copy = (dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y)*
+            (dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y)*
+            dim->size_C[int_mem],
+            .dir = 1
+        });
+    // not dw so input channels not tiled! then 2D transfers
+    else
+        dma_transfer_2d_async((DmaTransferConf) {
+            .ext = ext_pt,
+            .loc = dst,
+            .number_of_1d_copies = dim->size_IY[int_mem]+ dim->overlap_IY_x + dim->overlap_IY_y - dim->pad_IY_x - dim->pad_IY_y,
+            .length_1d_copy = (dim->size_IX[int_mem]+ dim->overlap_IX_x + dim->overlap_IX_y - dim->pad_IX_x - dim->pad_IX_y)*
+            dim->size_C[int_mem],
+            .stride_1d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
+            .dir = 1
+        });
+
     return dst;
 }
 
 unsigned int cluster_mem_transfer_X(common_kernel* common_kernel,dimension_X* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     unsigned int dst=memalloc_X();
     unsigned int src=ext_pt;
-    dma_transfer_async((DmaTransferConf) {
-        .ext = src,
-        .loc = dst,
-        .number_of_2d_copies = dim->size_IY[int_mem],
-        .number_of_1d_copies = dim->size_IX[int_mem],
-        .length_1d_copy = dim->size_C[int_mem],
-        .hwc_to_chw = 0,
-        .stride_2d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
-        .stride_1d = dim->size_C[ext_mem],
-        .dir = 1
-    });
+    // input dimensions not tiled we can do 1D transfer
+    if(dim->size_IX[ext_mem]==dim->size_IX[int_mem] && dim->size_C[ext_mem]==dim->size_C[int_mem])
+        dma_transfer_1d_async((DmaTransferConf) {
+            .ext = ext_pt,
+            .loc = dst,
+            .length_1d_copy = dim->size_IY[int_mem]*dim->size_IX[int_mem]*dim->size_C[int_mem],
+            .dir = 1
+        });
+    // we can do some 2D transfers
+    else if(dim->size_C[ext_mem]==dim->size_C[int_mem])
+        dma_transfer_2d_async((DmaTransferConf) {
+            .ext = ext_pt,
+            .loc = dst,
+            .number_of_1d_copies = dim->size_IY[int_mem],
+            .length_1d_copy = dim->size_IX[int_mem]*dim->size_C[int_mem],
+            .stride_1d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
+            .dir = 1
+        });
+    // unlucky
+    else
+        dma_transfer_3d_async((DmaTransferConf) {
+            .ext = src,
+            .loc = dst,
+            .number_of_2d_copies = dim->size_IY[int_mem],
+            .number_of_1d_copies = dim->size_IX[int_mem],
+            .length_1d_copy = dim->size_C[int_mem],
+            .stride_2d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
+            .stride_1d = dim->size_C[ext_mem],
+            .dir = 1
+        });
     return dst;
 }
 
 unsigned int cluster_mem_transfer_Y(common_kernel* common_kernel,dimension_Y* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     unsigned int dst=memalloc_Y();
     unsigned int src=ext_pt;
-    dma_transfer_async((DmaTransferConf) {
-        .ext = src,
-        .loc = dst,
-        .number_of_2d_copies = dim->size_IY[int_mem],
-        .number_of_1d_copies = dim->size_IX[int_mem],
-        .length_1d_copy = dim->size_C[int_mem],
-        .hwc_to_chw = 0,
-        .stride_2d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
-        .stride_1d = dim->size_C[ext_mem],
-        .dir = 1
-    });
+    // input dimensions not tiled we can do 1D transfer
+    if(dim->size_IX[ext_mem]==dim->size_IX[int_mem] && dim->size_C[ext_mem]==dim->size_C[int_mem])
+        dma_transfer_1d_async((DmaTransferConf) {
+            .ext = ext_pt,
+            .loc = dst,
+            .length_1d_copy = dim->size_IY[int_mem]*dim->size_IX[int_mem]*dim->size_C[int_mem],
+            .dir = 1
+        });
+    // we can do some 2D transfers
+    else if(dim->size_C[ext_mem]==dim->size_C[int_mem])
+        dma_transfer_2d_async((DmaTransferConf) {
+            .ext = ext_pt,
+            .loc = dst,
+            .number_of_1d_copies = dim->size_IY[int_mem],
+            .length_1d_copy = dim->size_IX[int_mem]*dim->size_C[int_mem],
+            .stride_1d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
+            .dir = 1
+        });
+    // unlucky
+    else
+        dma_transfer_3d_async((DmaTransferConf) {
+            .ext = src,
+            .loc = dst,
+            .number_of_2d_copies = dim->size_IY[int_mem],
+            .number_of_1d_copies = dim->size_IX[int_mem],
+            .length_1d_copy = dim->size_C[int_mem],
+            .stride_2d = dim->size_C[ext_mem]*dim->size_IX[ext_mem],
+            .stride_1d = dim->size_C[ext_mem],
+            .dir = 1
+        });
     return dst;
 }
 
 unsigned int cluster_mem_transfer_W(common_kernel* common_kernel,dimension_W* dim,unsigned int ext_pt,int ext_mem,int int_mem){
     unsigned int dst=memalloc_W();
-    //printf("Mem transfer W: K %d C %d FY %d FX %d from %d to %d int mem idx %d\n",dim->size_K[int_mem],dim->size_C[int_mem],
-    //dim->size_FY[int_mem],dim->size_FX[int_mem],ext_pt,dst-l1_memory,int_mem);
-    if(!(common_kernel->specific_pattern==depthwise_conv2d || common_kernel->specific_pattern==depthwise_conv2d_less_4))
-        dma_transfer_async((DmaTransferConf) {
-            .ext = ext_pt,
-            .loc = dst,
-            .number_of_2d_copies = dim->size_K[int_mem],
-            .number_of_1d_copies = dim->size_FY[int_mem]*dim->size_FX[int_mem],
-            .length_1d_copy = dim->size_C[int_mem],
-            .hwc_to_chw = 0,
-            .stride_2d = dim->size_C[ext_mem]*dim->size_FY[ext_mem]*dim->size_FX[ext_mem],
-            .stride_1d = dim->size_C[ext_mem],
-            .dir = 1
-        });
-    else
-        dma_transfer_async((DmaTransferConf) {
-            .ext = ext_pt,
-            .loc = dst,
-            .number_of_2d_copies = 1,
-            .number_of_1d_copies = 1,
-            .length_1d_copy = dim->size_K[int_mem]*dim->size_FY[int_mem]*dim->size_FX[int_mem],
-            .hwc_to_chw = 0,
-            .stride_2d = dim->size_FY[ext_mem]*dim->size_FX[ext_mem],
-            .stride_1d = 1,
-            .dir = 1
-        });
+
+    #ifdef MATCH_LOG_GAP9_VERBOSE
+    printf("Mem transfer W: K %d C %d FY %d FX %d from %d to %d int mem idx %d\n",dim->size_K[int_mem],dim->size_C[int_mem],
+    dim->size_FY[int_mem],dim->size_FX[int_mem],ext_pt,dst-l1_memory,int_mem);
+    #endif
+
+    // output stationary so only output channels can be tiled for the weights, so we
+    // can always do 1D transfers
+    dma_transfer_1d_async((DmaTransferConf) {
+        .ext = ext_pt,
+        .loc = dst,
+        .length_1d_copy = dim->size_K[int_mem]*dim->size_FY[int_mem]*dim->size_FX[int_mem]*dim->size_C[int_mem],
+        .dir = 1
+    });
+
     return dst;
 }
 
 void cluster_wait_any_transfer(common_kernel* common_kernel){
     dma_transfer_wait(transfer);
+    transfer = dma_transfer_create();
 }
 
 void wait_any_computation(){

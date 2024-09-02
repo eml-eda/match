@@ -34,7 +34,8 @@ def create_model_conv_2d(weight_bits: int = 8,
                  strides: Tuple[int, int] = (1, 1),
                  shift_bits: int = 3,
                  depthwise: bool = False,
-                 input_pad: List=None
+                 input_pad: List=None,
+                 batchnorm: bool=True,
                  ):
     """Generate a small network in TVM Relay IR that performs a requantized convolution
     """
@@ -62,7 +63,7 @@ def create_model_conv_2d(weight_bits: int = 8,
                                          act=act, 
                                          shift_bits=shift_bits,
                                          groups=weights_shape[0] if depthwise else 1,
-                                         batchnorm=True)
+                                         batchnorm=batchnorm)
     #if input_pad is not None:
     #    x= relay.reshape(x,(16))
     params = params1

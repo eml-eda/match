@@ -3,7 +3,7 @@ from tvm.relay.dataflow_pattern import match as is_pattern_matching
 from match.partition.partitioning_pattern import PartitioningPattern
 from tvm.relay.dataflow_pattern import CallPattern,AttrPattern,AltPattern
 from match.codegen.temporal_mapping_generator import TemporalMappingGenerator
-from match.utils import save_codegen_schedule
+from match.utils import save_codegen_schedule,save_schedule_search_res
 from functools import partial
 import tvm 
 
@@ -72,10 +72,17 @@ class MatchTargetPattern:
 class MatchTarget(ABC):
     """Class that represents a heterogeneous target, this implementation defines this class through the singleton pattern
     """
-    def __init__(self,exec_modules,name:str="match",optimize_param:str="latency"):
-        if self.singleton_instantiated():
+    def __init__(self,exec_modules,name:str="match",optimize_param:str="latency",**kwargs):
+        if self.singleton_instantiated(**kwargs):
             return
         self.name=name
+        # can choose between riscv_cpu, arm_cpu, micro, and more, look at tvm/python/tvm/target/target.py
+        self.cpu_type="riscv_cpu"
+        # enable USMP or not?
+        self.static_mem_plan=True
+        # which algorithm to use in case we use USMP, can be greedy etc.
+        # hill_climb looks the best overall but you can play with it
+        self.static_mem_plan_algorithm="hill_climb"
         self.match_patterns=[]
         self.exec_modules=[]
         self.exec_modules_dict=dict()
@@ -86,8 +93,11 @@ class MatchTarget(ABC):
             self.add_exec_module(exec_module)
             self.exec_modules_dict[exec_module.name]=exec_module
 
-    def singleton_instantiated(self):
-        return hasattr(self,"match_patterns")
+    def singleton_instantiated(self,**kwargs):
+        prev_kwargs_ = dict() if not hasattr(self,"prev_kwargs") else self.prev_kwargs
+        self.prev_kwargs=kwargs
+        if prev_kwargs_==kwargs and hasattr(self,"match_patterns"):
+            return True
 
     # we want a singleton for caching purposes
     def __new__(class_, *args, **kwargs):
@@ -133,7 +143,7 @@ class MatchTarget(ABC):
             pt_res.set_latency(latency)
             pt_res.set_energy(energy)
             self.add_pt_res_to_cache(pt_res)
-        save_codegen_schedule(node,temporal_mapping,spatial_mapping)
+        save_codegen_schedule(node,temporal_mapping,spatial_mapping,latency,energy)
         return temporal_mapping,layer_data,match_pt.exec_module,latency,energy
 
     def add_pt_res_to_cache(self,pt_res):
@@ -179,6 +189,7 @@ class MatchTarget(ABC):
             pt_res.set_temporal_mapping(temporal_mapping)
             pt_res.set_latency(latency)
             pt_res.set_energy(energy)
+            save_schedule_search_res(match_pt.name,latency,energy,temporal_mapping,match_pt.pattern().partition(node))
             self.add_pt_res_to_cache(pt_res)
             return latency,energy
 

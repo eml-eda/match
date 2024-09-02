@@ -177,8 +177,15 @@ class WorkloadParser:
         iprec = call.args[0].args[0].checked_type.dtype
         wtype = [int(v) for v in call.args[1].args[0].checked_type.shape]
         wprec = call.args[1].args[0].checked_type.dtype
-        otype = [int(v) for v in call.checked_type.shape]
+        otype = call.checked_type.shape
         oprec = call.checked_type.dtype
+        i_n, i_c, i_h, i_w = self.get_io_from_layout("NCHW", itype)
+        w_cout, w_cin, w_ksh, w_ksw = self.get_io_from_layout("NCHW", wtype)
+        o_n, o_c, o_h, o_w = self.get_io_from_layout("NCHW", otype)
+        padding = [0, 0, 0, 0]
+        self.layer_data.strides = [1, 1]
+        self.layer_data.dilations = [1, 1]
+        groups = None
         if itype[0] != otype[0]:
             raise NotImplementedError(
                 f"Input batch size is {itype[0]}, while output batch size is {otype[0]}"
@@ -209,14 +216,20 @@ class WorkloadParser:
         o_n, o_c, o_h, o_w = self.get_io_from_layout(
             attrs.out_layout if attrs.out_layout != "" else attrs.data_layout, otype
         )
+        if attrs.groups == w_cout and w_cin==1 and w_cout>1:
+            depthwise = True
         padding = [int(a_p) for a_p in attrs.padding]
-        strides = [int(v) for v in attrs.strides]
-        dilations = [int(a_d) for a_d in attrs.dilation]
+        self.layer_data.strides = [int(v) for v in attrs.strides]
+        self.layer_data.dilations = [int(a_d) for a_d in attrs.dilation]
         groups = attrs.groups
         if itype[0] != otype[0]:
             raise NotImplementedError(
                 f"Input batch size is {i_n}, while output batch size is {o_n}"
             )
+        self.layer_data.dimension_relations = [
+            f"ix={int(self.layer_data.strides[1])}*ox+{int(self.layer_data.dilations[1])}*fx",
+            f"iy={int(self.layer_data.strides[0])}*oy+{int(self.layer_data.dilations[0])}*fy",
+        ]
         kernel_size = list()
         if "kernel_size" in dict(attrs) and attrs["kernel_size"]!=None:
             kernel_size = list(attrs["kernel_size"])

@@ -264,29 +264,22 @@ def network_transformations(opts):
     #pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))
     return pipeline
 
-class FindLayoutTransformShape(ExprVisitor):
-    """Convert relay graph to graph
+def np_to_tvm_arr(np_arr, dtype: str):
+    """ Convert a numpy array to a TVM array with datatype `dtype`.
+    Although such a function exists in TVM, it does not support creating TVM arrays with dtypes
+    that are not supported in numpy, like 'int4' or 'int2'.
+    :param np_arr: the given numpy array
+    :param dtype:  the resulting data type of the TVM array
+    :return: the TVM array
     """
-    def __init__(self):
-        super().__init__()
-        self.shapes = []
+    assert np_arr.flags["C_CONTIGUOUS"]
 
-    def visit_call(self, call):
-        """Extract parameters and construct graph"""
-        self.visit(call.op)
-        for a in call.args:
-            self.visit(a)
+    arr = tvm.nd.empty(np_arr.shape, dtype)
+    data = np_arr.ctypes.data_as(ctypes.c_void_p)
+    nbytes = ctypes.c_size_t(np_arr.size * np_arr.dtype.itemsize)
+    tvm.nd.check_call(tvm.nd._LIB.TVMArrayCopyFromBytes(arr.handle, data, nbytes))
 
-        if isinstance(call.op, tvm.ir.Op) and not isinstance(call.args[0], relay.Constant):
-            # we don't want to insert transformations on constants like weights and biases
-            if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'match':
-                self.shapes.append(call.args[0].checked_type.shape)
-
-            elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'match':
-                if call.args[0].op.attrs["Composite"].split(".")[2]=="NE16":
-                    self.shapes.append(call.args[0].checked_type.shape)
-                else:
-                    self.shapes.pop(len(self.shapes)-1)
+    return arr
 
 @transform.function_pass(opt_level=0)
 class GapPadTransform(ExprMutator):
@@ -294,55 +287,65 @@ class GapPadTransform(ExprMutator):
     TODO: make this smart to avoid unnecessary transformations
     """
 
+    MAP_OLD_TO_PADDED = dict()
     def transform_function(self, func, mod, ctx):
-        self.f = FindLayoutTransformShape()
-        self.f.visit(func)
-
         return self.visit(func)
-    
-    def visit_pad_conv_arg(self,arg):
-        # Get the parameter's type annotation.
-        var_type = arg.type_annotation
 
+
+    def visit_pad_func_body(self,call,params,is_dw):
         # Generate new variable.
-        if var_type.shape[1]%16==0 or len(var_type.shape)!=4:
-            return relay.var(arg.name_hint, shape=var_type.shape, dtype=var_type.dtype)
-        else:
-            return relay.var(arg.name_hint, shape=[var_type.shape[0],var_type.shape[1]+16-(var_type.shape[1]%16),var_type.shape[2],var_type.shape[3]], dtype=var_type.dtype)
-
-
-    def visit_pad_func_body(self,call,params):
         if isinstance(call, relay.Constant):
             return self.visit(call)
         elif call.op.name=="nn.conv2d":
+            #breakpoint()
             new_fn = self.visit(call.op)
             new_args = params
-            return relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
+            return relay.op.nn.conv2d(new_args[0], new_args[1],
+                                          strides=call.attrs.strides,
+                                          padding=call.attrs.padding,
+                                          dilation=call.attrs.dilation,
+                                          groups=int(new_args[0].type_annotation.shape[1]) if is_dw else call.attrs.groups,
+                                          out_dtype='int32',
+                                          kernel_size=new_args[1].type_annotation.shape[-2:])
+            #return relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
         else:
             new_fn = self.visit(call.op)
-            new_args = [self.visit_pad_func_body(arg,params=params) for arg in call.args]
+            #breakpoint()
+            if is_dw and call.op.name!="right_shift":
+                new_args = list()
+                for arg in call.args:
+                    if isinstance(arg,relay.Constant):
+                        if len(arg.checked_type.shape)>1:
+                            new_args.append(relay.const(np_to_tvm_arr(np.pad(arg.data.numpy(),((0,0),(0,16-(int(arg.checked_type.shape[1])%16)),(0,0),(0,0))),dtype=arg.checked_type.dtype), dtype=arg.checked_type.dtype))
+                        else:
+                            new_args.append(relay.const(np_to_tvm_arr(np.pad(arg.data.numpy(),((0,16-(int(arg.checked_type.shape[0])%16)))),dtype=arg.checked_type.dtype), dtype=arg.checked_type.dtype))
+                    else:
+                        new_args.append(self.visit_pad_func_body(arg,params=params,is_dw=is_dw))
+            else:
+                new_args = [self.visit_pad_func_body(arg,params=params,is_dw=is_dw) for arg in call.args]
             return relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
 
-    def visit_pad_func(self,fn):
+    def visit_pad_func(self,fn,is_dw):
         """Rewrite function arguments
         """
         new_params = []
         binds = {}
-
-        for param in fn.params:
+        for idx,param in enumerate(fn.params):
             # Get the parameter's type annotation.
             var_type = param.type_annotation
 
             # Generate new variable.
-            new_param = relay.var(param.name_hint, shape=var_type.shape if len(var_type.shape)!=4 or var_type.shape[1]%16==0 else [var_type.shape[0],var_type.shape[1]+16-(var_type.shape[1]%16),var_type.shape[2],var_type.shape[3]], dtype=var_type.dtype)
+            if idx==1 and is_dw:
+                new_param = relay.var(param.name_hint, shape=var_type.shape if len(var_type.shape)!=4 or var_type.shape[0]%16==0 else [var_type.shape[0]+16-(var_type.shape[0]%16),var_type.shape[1],var_type.shape[2],var_type.shape[3]], dtype=var_type.dtype)
+            else:
+                new_param = relay.var(param.name_hint, shape=var_type.shape if len(var_type.shape)!=4 or var_type.shape[1]%16==0 else [var_type.shape[0],var_type.shape[1]+16-(var_type.shape[1]%16),var_type.shape[2],var_type.shape[3]], dtype=var_type.dtype)
 
             new_params.append(new_param)
             binds[param] = new_param
 
-        new_body = self.visit_pad_func_body(fn.body,new_params)
+        new_body = self.visit_pad_func_body(fn.body,new_params,is_dw)
         # Rewrite the body to use new parameters.
         new_body = relay.bind(new_body, binds)
-
         # Construct the updated function and return.
         return relay.Function(
             new_params,
@@ -353,46 +356,62 @@ class GapPadTransform(ExprMutator):
             attrs=fn.attrs,
         )
     
-    def visit_pad_call_args(self,arg):
-        def np_to_tvm_arr(np_arr, dtype: str):
-            """ Convert a numpy array to a TVM array with datatype `dtype`.
-            Although such a function exists in TVM, it does not support creating TVM arrays with dtypes
-            that are not supported in numpy, like 'int4' or 'int2'.
-            :param np_arr: the given numpy array
-            :param dtype:  the resulting data type of the TVM array
-            :return: the TVM array
-            """
-            assert np_arr.flags["C_CONTIGUOUS"]
-
-            arr = tvm.nd.empty(np_arr.shape, dtype)
-            data = np_arr.ctypes.data_as(ctypes.c_void_p)
-            nbytes = ctypes.c_size_t(np_arr.size * np_arr.dtype.itemsize)
-            tvm.nd.check_call(tvm.nd._LIB.TVMArrayCopyFromBytes(arr.handle, data, nbytes))
-
-            return arr
+    def visit_pad_call_args(self,arg,old_arg,is_dw,idx):
         # Generate new variable.
-        if isinstance(arg, relay.Constant):
-            if int(arg.checked_type.shape[1])%16==0:
+        #breakpoint()
+        if idx==0:
+            if int(old_arg.checked_type.shape[1])%16==0:
                 return arg
             else:
-                return relay.const(np_to_tvm_arr(np.pad(arg.data.numpy(),((0,0),(0,16-(int(arg.checked_type.shape[1])%16)),(0,0),(0,0))),dtype=arg.checked_type.dtype), dtype=arg.checked_type.dtype)
-        elif isinstance(arg,relay.Var):
-            if int(arg.checked_type.shape[1])%16==0:
+                #if isinstance(old_arg,relay.Call) and old_arg.op.name == 'annotation.compiler_begin' and isinstance(old_arg.args[0],relay.Var):
+                #    param = old_arg.args[0]
+                #    var_type = old_arg.args[0].type_annotation
+                #    if is_dw:
+                #        self.NEW_VAR_ARGS.append(relay.var(param.name_hint, shape=var_type.shape if len(var_type.shape)!=4 or var_type.shape[0]%16==0 else [var_type.shape[0]+16-(var_type.shape[0]%16),var_type.shape[1],var_type.shape[2],var_type.shape[3]], dtype=var_type.dtype))
+                #    else:
+                #        self.NEW_VAR_ARGS.append(relay.var(param.name_hint, shape=var_type.shape if len(var_type.shape)!=4 or var_type.shape[1]%16==0 else [var_type.shape[0],var_type.shape[1]+16-(var_type.shape[1]%16),var_type.shape[2],var_type.shape[3]], dtype=var_type.dtype))
+                #else:    
+                new_arg=relay.reshape(relay.nn.pad(relay.reshape(arg.args[0],(old_arg.checked_type.shape[0],old_arg.checked_type.shape[2],old_arg.checked_type.shape[3],old_arg.checked_type.shape[1])),((0,0),(0,0),(0,0),(0,16-(int(old_arg.checked_type.shape[1])%16)))),(old_arg.checked_type.shape[0],old_arg.checked_type.shape[1]+16-(int(old_arg.checked_type.shape[1])%16),old_arg.checked_type.shape[2],old_arg.checked_type.shape[3]))
+                new_fn = self.visit(arg.op)
+                return relay.Call(new_fn,[new_arg] , arg.attrs)
+        if isinstance(arg, relay.Call) and isinstance(arg.args[0],relay.Constant):
+            if int(old_arg.args[0].checked_type.shape[0 if is_dw else 1])%16==0:
                 return arg
             else:
-                return relay.reshape(relay.nn.pad(relay.reshape(arg,(arg.checked_type.shape[0],arg.checked_type.shape[2],arg.checked_type.shape[3],arg.checked_type.shape[1])),((0,0),(0,0),(0,0),(0,16-(int(arg.checked_type.shape[1])%16)))),(arg.checked_type.shape[0],arg.checked_type.shape[1]+16-(int(arg.checked_type.shape[1])%16),arg.checked_type.shape[2],arg.checked_type.shape[3]))
-        elif isinstance(arg.op, tvm.ir.Op):
-            new_fn = self.visit(arg.op)
-            new_args = [self.visit_pad_call_args(arg_) for arg_ in arg.args]
-            return relay.Call(new_fn, new_args, arg.attrs, arg.type_args, arg.span)
+                new_arg = relay.const(np_to_tvm_arr(np.pad(arg.args[0].data.numpy(),((0,16-(int(old_arg.checked_type.shape[0])%16)),(0,0),(0,0),(0,0)) if is_dw else ((0,0),(0,16-(int(old_arg.checked_type.shape[1])%16)),(0,0),(0,0))),dtype=old_arg.checked_type.dtype), dtype=old_arg.checked_type.dtype)
+                new_fn = self.visit(arg.op)
+                return relay.Call(new_fn,[new_arg] , arg.attrs)
         else:
             return self.visit(arg)
 
+    def is_dw(self,call):
+        conv = call
+        while conv.op.name!="nn.conv2d":
+            conv = conv.args[0]
+        return conv.attrs.groups==conv.args[0].checked_type.shape[1] and conv.attrs.groups > 1
 
-    def visit_pad_call(self,call):
-        new_fn = self.visit_pad_func(call.op)
-        new_args = [self.visit_pad_call_args(arg) for arg in call.args]
-        return relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
+
+    def visit_pad_call(self,call,old_call):
+        #breakpoint()
+        if old_call in self.MAP_OLD_TO_PADDED:
+            return self.MAP_OLD_TO_PADDED[old_call]
+        #breakpoint()
+        is_dw = self.is_dw(call.op.body)
+        #if is_dw:
+        #    return call,(None,None,None)
+        new_fn = self.visit_pad_func(call.op,is_dw)
+        new_args = [self.visit_pad_call_args(arg,old_call.args[idx],is_dw,idx) for idx,arg in enumerate(call.args)]
+        final_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
+        original_out_shape=None
+        padded_shape=None
+        strided_shape=None
+        if is_dw:
+            original_out_shape=[int(x) for x in old_call.checked_type.shape]
+            padded_shape=[original_out_shape[0],original_out_shape[2],original_out_shape[3],original_out_shape[1]+(16-(original_out_shape[1]%16))]
+            strided_shape=[original_out_shape[0],original_out_shape[2],original_out_shape[3],original_out_shape[1]]
+        self.MAP_OLD_TO_PADDED[old_call]=(final_call,(original_out_shape,padded_shape,strided_shape))
+        return self.MAP_OLD_TO_PADDED[old_call]
+
 
     def visit_call(self, call):
         """Rewrite ops
@@ -401,18 +420,34 @@ class GapPadTransform(ExprMutator):
         new_args = [self.visit(arg) for arg in call.args]
         new_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
 
-        if isinstance(call.op, tvm.ir.Op) and not isinstance(call.args[0], relay.Constant):
-            
-            if len(self.f.shapes)>0 and call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'match' and call.args[0].op.attrs["Composite"].split(".")[2]=="NE16":
-                # insert transformation after this op
-                self.f.shapes.pop(0)
-                new_args = [self.visit_pad_call(call.args[0])]+[self.visit(arg) for arg in call.args[1:]]
-                new_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
-
+        if isinstance(call.op, tvm.ir.Op) and not isinstance(call.args[0], relay.Constant)\
+            and call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'match'\
+                and call.args[0].op.attrs["Composite"].split(".")[2]=="NE16"\
+                    and len(call.args[0].args[0].checked_type.shape)==4 and (call.args[0].args[0].checked_type.shape[1]%16)!=0:
+            # insert transformation after this op
+            new_args_ = []
+            new_arg,(orig,padd,strid)=self.visit_pad_call(new_args[0],call.args[0])
+            new_args_.append(new_arg)
+            new_args_+=new_args[1:]
+            new_call = relay.Call(new_fn, new_args_, call.attrs, call.type_args, call.span)
+            if orig is not None:
+                new_call = relay.reshape(relay.strided_slice(relay.reshape(new_call,tuple(padd)),
+                                            begin=(0,0,0,0),
+                                            end=tuple(strid)),
+                                            tuple(orig))
         return new_call
     
+
+IS_PADDING_DONE = True
+
 def adjust_network(opts):
     pipeline=[]
-    pipeline.append(GapPadTransform())
-    
+    if IS_PADDING_DONE:
+        pipeline.append(transform.InferType())
+        pipeline.append(GapPadTransform())
+        pipeline.append(transform.InferType())
+        # TODO: add a transformation that after the padding one deletes useless padding on the inputs, if not
+        # used elsewhere not padded and then changes directly the input, getting then the same thing as statically padding
+        #pipeline.append(GapRemovePadOnInputs())
+        #pipeline.append(transform.InferType())
     return pipeline

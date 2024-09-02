@@ -25,7 +25,11 @@ class TemporalMappingGenerator:
         self.layer_data=None
 
     def generate_workload(self):
-        self.workload_parser.visit()
+        try:
+            self.workload_parser.visit()
+        except Exception as exc:
+            #breakpoint()
+            raise exc
         self.layer_data=self.workload_parser.get_layer_data()
 
     def set_exec_module_for_layer(self):

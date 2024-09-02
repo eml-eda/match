@@ -15,10 +15,16 @@ class RelaySave:
 output_path=None
 relay_list=[]
 schedules=[]
+searched_schedules=[]
+tmap_searched=[]
 
 def reset_schedules():
     global schedules
+    global searched_schedules
+    global tmap_searched
     schedules=[]
+    searched_schedules=[]
+    tmap_searched=[]
 
 def reset_relay_list():
     global relay_list
@@ -86,7 +92,7 @@ def save_all_relay():
             with open(f"{get_output_path()}/{relay_save.prefix}_params.txt","wb") as par_file:
                 par_file.write(relay_save.params)
 
-def save_codegen_schedule(node,temporal_mapping,spatial_mapping):
+def save_codegen_schedule(node,temporal_mapping,spatial_mapping,latency,energy):
     loops_str=""
     for idx,tmap in enumerate(temporal_mapping):
         loops_str+="\t"*idx
@@ -95,12 +101,36 @@ def save_codegen_schedule(node,temporal_mapping,spatial_mapping):
         for op in ops:
             mem_op=f'mem_{op}'
             op_str+=f" [{op} in {tmap[mem_op]}] "
-        loops_str+=f"for {tmap['fullname']} in {tmap['size']}: {op_str}"
+        loops_str+=f"for {tmap['fullname']} in 0:{tmap['size']}: {op_str}\n"
 
     schedules.append(f"\nFor node\n{node}\
-                    \nMATCH found that the best schedule has the following temporal mapping\
+                    \nMATCH found that the best schedule, with expected latency {latency} and energy {energy}, has the following temporal mapping\
                     \n{loops_str}\n")
-    
+
+def save_schedule_search_res(name,latency,energy,temporal_mapping,node):
+    loops_str=""
+    for idx,tmap in enumerate(temporal_mapping):
+        loops_str+="\t"*idx
+        ops=[k[4:] for k in tmap.keys() if 'mem_' in k]
+        op_str=""
+        for op in ops:
+            mem_op=f'mem_{op}'
+            op_str+=f" [{op} in {tmap[mem_op]}] "
+        loops_str+=f"for {tmap['fullname']} in 0:{tmap['size']}: {op_str}\n"
+
+    searched_schedules.append(f"\nFor node\n{node}\
+                    \nMATCH found a schedule with pattern {name} with expected latency {latency} and energy {energy}\n with the following temporal mapping\
+                    \n{loops_str}\n")
+    tmap_searched.append("\n#################------##############\n")
+
+def save_tmap_search_res(layer_data,temporal_mapping,latency,energy):
+    tmap_searched.append(f"\nFor layer data with sizes: {layer_data.loop_dim_size} and strides {layer_data.strides} tmap:\
+                    \n{temporal_mapping}\nhas expected latency {latency} and energy {energy}\n")
+
 def save_all_schedules():
     with open(f"{get_output_path()}/match_schedules.log","w") as scheds_file:
         scheds_file.writelines(schedules)
+    with open(f"{get_output_path()}/match_searched_schedules.log","w") as scheds_file:
+        scheds_file.writelines(searched_schedules)
+    with open(f"{get_output_path()}/match_searched_tmaps.log","w") as scheds_file:
+        scheds_file.writelines(tmap_searched)

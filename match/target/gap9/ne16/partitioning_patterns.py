@@ -4,7 +4,7 @@ import logging
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_var, is_constant
 from match.partition.partitioning_pattern import PartitioningPattern
 
-logger = logging.getLogger("Gap9Cluster")
+logger = logging.getLogger("Gap9NE16")
 
 
 def batchnorm_pattern(prev_op):
@@ -25,6 +25,13 @@ def conv2d_bnorm_requant_pattern():
             wildcard(), wildcard()
     )
     bnorm = batchnorm_pattern(is_op("cast")(conv2d)) | batchnorm_pattern(conv2d)
+    return _requant_pattern(bnorm)
+
+def conv2d_biasadd_requant_pattern():
+    conv2d = is_op("nn.conv2d")(
+            wildcard(), wildcard()
+    )
+    bnorm = is_op("nn.bias_add")(is_op("cast")(conv2d), is_constant()) | is_op("nn.bias_add")(conv2d, is_constant())
     return _requant_pattern(bnorm)
 
 
@@ -117,9 +124,9 @@ def check_conv2d(pattern):
         or not is_conv2d_attr_value_supported(conv2d.attrs, 'strides', [[1, 1], [2, 2]])
         or not is_conv2d_attr_value_supported(conv2d.attrs, 'dilation', [[1, 1]])
         or not is_conv2d_attr_value_supported(conv2d.attrs, 'groups', [1, num_output_channels])
-    ):
         #or not (((num_input_channels%16)==0 and conv2d.attrs["groups"]==1)
-        #or ((num_output_channels%16)==0 and conv2d.attrs["groups"]>1))):
+        #or ((num_output_channels%16)==0 and conv2d.attrs["groups"]>1))
+        ):
 
         return False
 
@@ -127,5 +134,10 @@ def check_conv2d(pattern):
 
 def partitioning_patterns():
     return [
-        PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,additional_checks=check_conv2d,ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,
+                            additional_checks=check_conv2d,
+                            ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="conv2d_bias_add_requant",pattern=conv2d_biasadd_requant_pattern,
+                            additional_checks=check_conv2d,
+                            ordered_operation="nn.conv2d"),
     ]

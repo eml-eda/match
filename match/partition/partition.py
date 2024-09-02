@@ -102,6 +102,7 @@ def partition(mod, params, dpu, opts):
             fused = seq(mod)
             return fused
         except Exception as err:
+            #breakpoint()
             raise Exception(
                 "Error converting layout to {0}".format(str(err))
             )

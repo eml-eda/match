@@ -6,9 +6,61 @@ from tvm.relay.expr_functor import ExprMutator, ExprVisitor
 from tvm.relay.dataflow_pattern import DFPatternCallback, rewrite, wildcard, is_op, is_constant
 
 
+class DianaOnnxDigitalRequantRewriter(DFPatternCallback):
+    """Rewriter for digital requant pattern
+    """
+    def __init__(self, require_type=False):
+        super().__init__(require_type)
+
+        self.x = wildcard()
+        self.div1 = is_constant()
+        self.div2 = is_constant()
+        self.maximum = is_constant()
+        self.minimum = is_constant()
+
+        cast = is_op("cast")(self.x)
+        div1 = is_op("divide")(cast, self.div1)
+        div2 = is_op("divide")(div1, self.div2)
+        floor = is_op("floor")(div2)
+        maximum = is_op("maximum")(floor, self.maximum)
+        minimum = is_op("minimum")(maximum, self.minimum)
+        self.pattern = is_op("cast")(minimum)
+
+    def callback(self, pre, post, node_map):
+        x = node_map[self.x][0]
+        div1 = node_map[self.div1][0]
+        div2 = node_map[self.div2][0]
+        maximum = node_map[self.maximum][0]
+        minimum = node_map[self.minimum][0]
+
+        shift_factor = int(np.log2(div1.data.numpy() * div2.data.numpy()))
+
+        x = relay.op.right_shift(x, relay.const(shift_factor))
+        x = relay.op.clip(x, a_min=int(maximum.data.numpy()), a_max=int(minimum.data.numpy()))
+        return relay.op.cast(x, 'int8')
+
+
+@tvm.ir.transform.module_pass(opt_level=0)
+class DianaOnnxRequantTransform:
+    """ Find and rewrite Diana ONNX requant to requant for internal use:
+        div->div->floor->max->min to
+        right_shift->clip->cast
+    """
+    def transform_module(
+        self, mod: tvm.ir.IRModule, ctx: tvm.ir.transform.PassContext
+    ) -> tvm.ir.IRModule:
+        for global_var, func in mod.functions.items():
+            func = rewrite(DianaOnnxDigitalRequantRewriter(), func)
+            mod.update_func(global_var, func)
+        return mod
+
+    def __call__(self, mod):
+        return self.transform_module(mod)
+
+
 @transform.function_pass(opt_level=0)
-class Gap9ClusterOnnxIntegerize(ExprMutator):
-    """Cast linear layers in graph to integers and insert the necessary cast operations (from MATCH ONNX file)
+class DianaOnnxIntegerize(ExprMutator):
+    """Cast linear layers in graph to integers and insert the necessary cast operations (from Diana ONNX file)
     """
 
     def __init__(self, dtype):
@@ -121,110 +173,15 @@ class Gap9ClusterOnnxIntegerize(ExprMutator):
         )
 
 
-class DivFloorPlinioOnnx(DFPatternCallback):
-    """Rewriter for digital requant pattern
-    """
-    def __init__(self, require_type=False):
-        super().__init__(require_type)
-
-        self.div = is_op("divide")(wildcard(),is_constant())
-        self.floor = is_op("floor")(self.div)
-        self.clip = is_op("clip")(self.floor)
-        self.cast = is_op("cast")(self.clip)
-        self.pattern = self.cast
-
-    def callback(self, pre, post, node_map):
-        div = node_map[self.div][0]
-        cast = node_map[self.cast][0]
-        clip = node_map[self.clip][0]
-
-        shift_factor = int(np.log2(abs(int(div.args[1].data.numpy()))))
-
-        x = relay.op.right_shift(div.args[0], relay.const(shift_factor))
-        x = relay.op.clip(x, a_min=int(clip.attrs.a_min), a_max=int(clip.attrs.a_max))
-        return relay.op.cast(x, cast.attrs["dtype"])
-    
-class DivReqPlinioOnnx(DFPatternCallback):
-    """Rewriter for digital requant pattern
-    """
-    def __init__(self, require_type=False):
-        super().__init__(require_type)
-
-        self.div = is_op("divide")(wildcard(),is_constant())
-        self.clip = is_op("clip")(self.div)
-        self.cast = is_op("cast")(self.clip)
-        self.pattern = self.cast
-
-    def callback(self, pre, post, node_map):
-        div = node_map[self.div][0]
-        cast = node_map[self.cast][0]
-        clip = node_map[self.clip][0]
-
-        shift_factor = int(np.log2(abs(int(div.args[1].data.numpy()))))
-
-        x = relay.op.right_shift(div.args[0], relay.const(shift_factor))
-        x = relay.op.clip(x, a_min=int(clip.attrs.a_min), a_max=int(clip.attrs.a_max))
-        return relay.op.cast(x, cast.attrs["dtype"])
-    
-class FloorDivCastOnnx(DFPatternCallback):
-    """Rewriter for digital requant pattern
-    """
-    def __init__(self, require_type=False):
-        super().__init__(require_type)
-
-        #self.mul = is_op("multiply")(is_constant(),wildcard())
-        #self.floor = is_op("floor")(self.mul)
-        self.floor = is_op("floor")(wildcard())
-        self.div = is_op("divide")(self.floor,is_constant())
-        
-        #self.cast = is_op("cast")(self.div)
-        self.pattern = self.div
-        #breakpoint()
-
-    def callback(self, pre, post, node_map):
-        #breakpoint()
-        #mul = node_map[self.mul][0]
-        div = node_map[self.div][0]
-        #cast = node_map[self.cast][0]
-
-        shift_factor = int(np.log2(abs(int(div.args[1].data.numpy()))))
-
-        x = relay.op.right_shift(div.args[0].args[0], relay.const(shift_factor))
-        #return relay.op.cast(x, cast.attrs["dtype"])
-        return x
-
-@tvm.ir.transform.module_pass(opt_level=0)
-class RequantRewriterPlinioOnnx:
-    """ Find and rewrite MATCH ONNX requant to requant for internal use:
-        div->div->floor->max->min to
-        right_shift->clip->cast
-    """
-    def transform_module(
-        self, mod: tvm.ir.IRModule, ctx: tvm.ir.transform.PassContext
-    ) -> tvm.ir.IRModule:
-        for global_var, func in mod.functions.items():
-            #breakpoint()
-            func = rewrite(DivFloorPlinioOnnx(), func)
-            func = rewrite(DivReqPlinioOnnx(), func)
-            #breakpoint()
-            func = rewrite(FloorDivCastOnnx(), func)
-            #Sbreakpoint()
-            mod.update_func(global_var, func)
-        return mod
-
-    def __call__(self, mod):
-        return self.transform_module(mod)
-
-
 class FindLayoutTransformShape(ExprVisitor):
-    """Convert relay graph to graph
+    """Convert relay graph to dory graph
     """
     def __init__(self):
         super().__init__()
         self.shapes = []
 
     def visit_call(self, call):
-        """Extract parameters and construct graph"""
+        """Extract parameters and construct dory graph"""
         self.visit(call.op)
         for a in call.args:
             self.visit(a)
@@ -234,11 +191,12 @@ class FindLayoutTransformShape(ExprVisitor):
             if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'match':
                 self.shapes.append(call.args[0].checked_type.shape)
 
-            elif call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'default':
+            elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'match':
                 self.shapes.append(call.args[0].checked_type.shape)
 
+
 @transform.function_pass(opt_level=0)
-class GapLayoutTransform(ExprMutator):
+class SomaDoryLayoutTransform(ExprMutator):
     """Insert match specific layout transform before and after each 'match' annotated relay Function
     TODO: make this smart to avoid unnecessary transformations
     """
@@ -249,19 +207,14 @@ class GapLayoutTransform(ExprMutator):
 
         return self.visit(func)
 
-    def create_transform(self, x, shape, end, flatten:bool=False):
-        """NHWC to NCHW transformations
+    def create_transform(self, x, shape):
+        """Create match layout transform from 'reshape -> reverse -> reshape' op sequence
         """
-        if not end and len(shape)==4 and (shape[2]>1 or shape[3]>1):
-            #sono in realtà in HWC Ma per TVM In CHW 
-            x = relay.reshape(x,(shape[0],shape[2],shape[3],shape[1]))
-            x = relay.op.transpose(x,(0,3,1,2))
-        if end and len(shape)==4 and (shape[2]>1 or shape[3]>1):
-            # sono in CHW sia per me che per TVM ma voglio ripassare a HWC
-            #x = relay.reshape(x,(shape[0],shape[1],shape[3],shape[1]))
-            x = relay.op.transpose(x,(0,2,3,1))
-            x = relay.reshape(x,(shape[0],shape[1],shape[2],shape[3]))
-            
+
+        x = relay.reshape(x, (np.prod(shape) // 4, 4))
+        x = relay.reverse(x, axis=1)
+        x = relay.reshape(x, shape)
+
         return x
 
     def visit_call(self, call):
@@ -273,70 +226,29 @@ class GapLayoutTransform(ExprMutator):
 
         if isinstance(call.op, tvm.ir.Op) and not isinstance(call.args[0], relay.Constant):
             # we don't want to insert transformations on constants like weights and biases
-            if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'default':
+            if call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'match':
                 # insert transformation before this op
                 shape = self.f.shapes.pop(0)
-                if len(call.args)>0 and isinstance(call.args[0],tvm.relay.Call) and call.args[0].op.name=="annotation.compiler_end" and call.args[0].attrs.compiler=="match":
-                    x = self.create_transform(new_args[0], shape, False)
-                    #new_call = relay.op.annotation.compiler_begin(x, 'default-reshape')
-                else:
-                    x = new_args[0]
-                new_call = relay.op.annotation.compiler_begin(x, 'default')
+                x = self.create_transform(new_args[0], shape)
+                new_call = relay.op.annotation.compiler_begin(x, 'match')
 
-            elif call.op.name == 'annotation.compiler_begin' and call.attrs.compiler == 'match':
+            elif call.op.name == 'annotation.compiler_end' and call.attrs.compiler == 'match':
                 # insert transformation after this op
                 shape = self.f.shapes.pop(0)
-                if len(call.args)>0 and isinstance(call.args[0],tvm.relay.Call) and call.args[0].op.name=="annotation.compiler_end" and call.args[0].attrs.compiler=="default":
-                    new_call = self.create_transform(new_call, shape, True)
+                new_call = self.create_transform(new_call, shape)
 
         return new_call
 
-class Gap9ClusterFlattenRewriter(DFPatternCallback):
-    """Rewriter for digital requant pattern
-    """
-    def __init__(self, require_type=False):
-        super().__init__(require_type)
-        self.x = wildcard()
-        #self.maxpool2d = is_op("nn.max_pool2d")(wildcard())
-        transpose = is_op("transpose")(self.x)
-        reshape = is_op("reshape")(transpose)
-        comp = is_op("annotation.compiler_begin")(reshape)
-        self.pattern = is_op("annotation.compiler_end")(is_op("nn.batch_flatten")(comp))
-        
-
-    def callback(self, pre, post, node_map):
-        #max_pool = node_map[self.maxpool2d][0]
-        x = node_map[self.x][0]
-        return relay.nn.batch_flatten(x)
-
-@tvm.ir.transform.module_pass(opt_level=0)
-class Gap9BatchFlattenTransform:
-    """ Find and rewrite MATCH ONNX requant to requant for internal use:
-        div->div->floor->max->min to
-        right_shift->clip->cast
-    """
-    def transform_module(
-        self, mod: tvm.ir.IRModule, ctx: tvm.ir.transform.PassContext
-    ) -> tvm.ir.IRModule:
-        for global_var, func in mod.functions.items():
-            func = rewrite(Gap9ClusterFlattenRewriter(), func)
-            mod.update_func(global_var, func)
-        return mod
-
-    def __call__(self, mod):
-        return self.transform_module(mod)
-
-
 def network_transformations(opts):
     pipeline=[]
-    #pipeline.append(transform.ConvertLayout({'nn.conv2d': ['NHWC']}))
-    #pipeline.append(RequantRewriterPlinioOnnx())
-    pipeline.append(Gap9ClusterOnnxIntegerize('uint8'))
+    if 'requant_transform' not in opts or opts['requant_transform'] != '0':
+        pipeline.append(DianaOnnxRequantTransform())
+    pipeline.append(DianaOnnxIntegerize('int8'))
     return pipeline
 
 def adjust_network(opts):
     pipeline=[]
-    #pipeline.append(GapLayoutTransform())
-    #pipeline.append(Gap9BatchFlattenTransform())
+    #if 'layout_transform' not in opts or opts['layout_transform'] != '0':
+    #    pipeline.append(SomaDoryLayoutTransform())
     pipeline.append(transform.InferType())
     return pipeline

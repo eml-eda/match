@@ -1,8 +1,10 @@
 from match.target.gap9 import Gap9
+from match.target.diana import Diana
 from match.target.target import DefaultMatchTarget, MatchTarget
 
 TARGETS={
     "gap9":Gap9(),
+    "diana":Diana(),
 }
 target_inst=None
 

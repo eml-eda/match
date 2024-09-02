@@ -1,46 +1,43 @@
-# Imports
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  The ASF licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#   http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing,
+# software distributed under the License is distributed on an
+# "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+# KIND, either express or implied.  See the License for the
+# specific language governing permissions and limitations
+# under the License.
+"""
+Operations to support the SOMA accelerator.
+"""
+
 import tvm
 import logging
+from functools import partial
+
+from tvm.relay import transform
+from tvm.relay.build_module import bind_params_by_name
+#from tvm.driver.tvmc import TVMCException
+
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_var, is_constant
 from match.partition.partitioning_pattern import PartitioningPattern
 
-logger = logging.getLogger("Gap9Cluster")
-
-
-def batchnorm_pattern(prev_op):
-    """Add batchnorm pattern (multiply->add)"""
-    mult = is_op("multiply")(prev_op, is_constant())
-    add = is_op("add")(mult,is_constant())
-    return add
+logger = logging.getLogger("Diana")
 
 def _requant_pattern(prev_op):
     """Add requant pattern (right_shift -> clip -> cast) to prev_op"""
     right_shift = is_op("right_shift")(prev_op, is_constant())
     clip = is_op("clip")(right_shift)
-    cast = is_op("cast")(clip)
+    cast = is_op("cast")(clip).has_attr({"dtype": "uint8"})
     return cast
 
-def conv2d_bnorm_requant_pattern():
-    conv2d = is_op("nn.conv2d")(
-            wildcard(), wildcard()
-    )
-    bnorm = batchnorm_pattern(is_op("cast")(conv2d)) | batchnorm_pattern(conv2d)
-    return _requant_pattern(bnorm)
-
-def dense_bnorm_requant_pattern():
-    dense = is_op("nn.dense")(
-            wildcard(), wildcard()
-    )
-    cast = is_op("cast")(dense)
-    bnorm = batchnorm_pattern(cast)
-    return _requant_pattern(bnorm)
-
-def dense_out_pattern():
-    dense = is_op("nn.dense")(
-            wildcard(), wildcard()
-    )
-    add = is_op("add")(dense, is_constant()) | is_op("add")(is_op("cast")(dense),is_constant())
-    return add
 
 def _biasadd_requant_pattern(linear_op):
     """Add pattern bias_add-requant to linear_op"""
@@ -51,18 +48,12 @@ def _biasadd_requant_pattern(linear_op):
 
 def conv2d_pattern():
     """Create pattern for conv2D with optional fused relu."""
+
     conv2d = is_op("nn.conv2d")(
             wildcard(), wildcard()
     )
     return _biasadd_requant_pattern(conv2d | is_op("cast")(conv2d))
 
-def only_conv_2d_and_bias_pattern():
-    """Create pattern for conv2D"""
-    conv2d = is_op("nn.conv2d")(
-        wildcard(),wildcard()
-    )
-    bias_add = is_op("nn.bias_add")(conv2d, wildcard())
-    return bias_add
 
 def fully_connected_pattern():
     """Create pattern for nn.dense with optional fused relu."""
@@ -76,20 +67,11 @@ def fully_connected_pattern():
 def element_wise_add_pattern():
     """Create pattern for element-wise-add with optional fused relu."""
 
-    cast_a = is_op("cast")(wildcard())
-    cast_b = is_op("cast")(wildcard())
+    cast_a = is_op("cast")(wildcard()).has_attr({"dtype": "int32"})
+    cast_b = is_op("cast")(wildcard()).has_attr({"dtype": "int32"})
     add = is_op("add")(cast_a, cast_b)
-    # pattern cast cast add clip casst cast multiply right shift cast
-    clip = is_op("clip")(add)
-    cast_c = is_op("cast")(clip)
-    cast_d = is_op("cast")(cast_c)
-    mul = is_op("multiply")(is_constant(),cast_d)
-    rshift = is_op("right_shift")(mul, is_constant())
-    # pattern cast cast add right shif clip cast
-    rshift_clip = is_op("clip")(is_op("right_shift")(add,is_constant()))
-    # cast for both paths
-    pt = is_op("cast")(rshift | rshift_clip)
-    return pt
+    return _requant_pattern(add)
+
 
 def _check_requant(pattern):
     """Check if requant pattern is supported by the soma dory accelerator
@@ -131,10 +113,12 @@ def _check_biasadd_requant(pattern):
         logger.warning(f"Expected nn.bias_add parameters to be of type int32, but got {bias_dtype}. Acceleration for this op is not supported.")
         return None
 
-    return bias_add.args[0]
+    return bias_add.args[0] if bias_add.args[0].op.name=="nn.conv2d" else bias_add.args[0].args[0]
 
-def check_conv2d(pattern):
+
+def check_conv2d(pattern, supported_weight_bits=[8, 2]):
     """Check if the Conv2D is supported by the soma dory accelerator"""
+
     conv2d = _check_biasadd_requant(pattern)
     if conv2d is None:
         return False
@@ -159,11 +143,7 @@ def check_conv2d(pattern):
         return True
 
     def is_filter_and_padding_supported(attrs):
-        kernel_size = list()
-        if "kernel_size" in dict(attrs) and attrs["kernel_size"]!=None:
-            kernel_size = list(attrs["kernel_size"])
-        else:
-            kernel_size = list([int(v) for v in conv2d.args[1].checked_type.shape][2:])
+        kernel_size = list(attrs["kernel_size"])
         kernel_h = kernel_size[0]
         kernel_w = kernel_size[1]
         supported_kernels = [1, 3, 5, 7]
@@ -212,6 +192,11 @@ def check_conv2d(pattern):
                         Acceleration for this conv2d is not supported")
         return False
 
+    if int(weights_dtype[3:]) not in supported_weight_bits:
+        logger.warning(f"Expected Conv2D weight bit-depth to be in {supported_weight_bits}. \
+                        Acceleration for this op is not supported")
+        return False
+
     return True
 
 
@@ -222,16 +207,43 @@ def check_fully_connected(pattern):
     if fc is None:
         return False
 
+    #fc_input = fc.args[0]
+    #fc_weight = fc.args[1]
+
+    return True
+
+
+def check_element_wise_add(pattern, supported_weight_bits=[8]):
+    """Check if the element-wise-add layer is supported by the soma dory accelerator"""
+    if 8 not in supported_weight_bits:
+        return False
+
+    add = _check_requant(pattern)
+    if add is None:
+        return False
+
+    tensor_shape_a = list(add.args[0].checked_type.shape)
+    tensor_shape_b = list(add.args[1].checked_type.shape)
+    if tensor_shape_a != tensor_shape_b:
+        logger.warning(f"Tensor shapes for element-wise-add don't match:"+\
+                " Tensor a: {tensor_shape_a}," + \
+                " Tensor b: {tensor_shape_b}." + \
+                " Acceleration for this element-wise-add is not supported")
+        return False
+
     return True
 
 
 def partitioning_patterns():
+    """
+    Registers the patterns we want to match.
+    Returns
+    -------
+        The patterns.
+    """
+    supported_weight_bits_conv2d = [8, 2]
     return [
-        PartitioningPattern(name="conv2d_bnorm_requant",pattern=conv2d_bnorm_requant_pattern,ordered_operation="nn.conv2d"),
-        PartitioningPattern(name="conv2d_bias_add_requant",pattern=conv2d_pattern,ordered_operation="nn.conv2d"),
-        #PartitioningPattern(name="conv2d_bias_add",pattern=only_conv_2d_and_bias_pattern,ordered_operation="nn.conv2d"),
-        PartitioningPattern(name="dense_bnorm_requant",pattern=dense_bnorm_requant_pattern,ordered_operation="nn.dense"),
-        PartitioningPattern(name="dense_bias_add_requant",pattern=fully_connected_pattern,additional_checks=check_fully_connected,ordered_operation="nn.dense"),
-        PartitioningPattern(name="add_requant",pattern=element_wise_add_pattern,ordered_operation="add"),
-        PartitioningPattern(name="dense_out",pattern=dense_out_pattern,ordered_operation="dense")
+        PartitioningPattern(name="conv2d", pattern=conv2d_pattern, additional_checks=partial(check_conv2d, supported_weight_bits=supported_weight_bits_conv2d),ordered_operation="nn.conv2d"),
+        PartitioningPattern(name="dense", pattern=fully_connected_pattern, additional_checks=check_fully_connected,ordered_operation="dense"),
+        PartitioningPattern(name="elem_add", pattern=element_wise_add_pattern, additional_checks=partial(check_element_wise_add, supported_weight_bits=supported_weight_bits_conv2d),ordered_operation="add"),
     ]

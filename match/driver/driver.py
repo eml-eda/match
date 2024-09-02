@@ -41,7 +41,10 @@ class MatchDriver:
         tvmc_compile_and_unpack(self.model, 
                                       target=f'match {target_options} ,c',
                                       fuse_layers=fusion,
-                                      build_path=self.build_dir)
+                                      build_path=self.build_dir,
+                                      cpu_type=self.target.cpu_type,
+                                      static_mem_plan=self.target.static_mem_plan,
+                                      static_mem_plan_algorithm=self.target.static_mem_plan_algorithm)
 
 
 def driver(mod: tvm.ir.IRModule, 

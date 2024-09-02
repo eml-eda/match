@@ -6,7 +6,13 @@
 #include <ne16_pulp_bsp.h>
 #include <ne16_monitor.h>
 
+// size of the buffer
+#ifdef MATCH_NE16_BUFFERED
 #define DB_BUFFER_SIZE 2
+#else
+#define DB_BUFFER_SIZE 1
+#endif
+
 #define NE16_TASKS 3
 #define LOADER_TASK (0)
 #define EXECUTE_TASK (1)
@@ -21,9 +27,9 @@ static nnx_monitor_t nnx_monitor;
 
 static ne16_dev_t* nnx_dev;
 static ne16_task_t nnx_tasks[DB_BUFFER_SIZE];
-static unsigned int nnx_db_O[NE16_TASKS]={0,0,0};
-static unsigned int nnx_db_I[NE16_TASKS]={0,0,0};
-static unsigned int nnx_db_W[NE16_TASKS]={0,0,0};
+static unsigned int nnx_db_O[NE16_TASKS+1]={0,0,0,0};
+static unsigned int nnx_db_I[NE16_TASKS+1]={0,0,0,0};
+static unsigned int nnx_db_W[NE16_TASKS+1]={0,0,0,0};
 
 static unsigned int nnx_input_loaded=0;
 
