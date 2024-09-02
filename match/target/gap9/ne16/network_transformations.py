@@ -438,14 +438,16 @@ class GapPadTransform(ExprMutator):
         return new_call
     
 
+IS_PADDING_DONE = True
 
 def adjust_network(opts):
     pipeline=[]
-    pipeline.append(transform.InferType())
-    pipeline.append(GapPadTransform())
-    pipeline.append(transform.InferType())
-    # TODO: add a transformation that after the padding one deletes useless padding on the inputs, if not
-    # used elsewhere not padded and then changes directly the input, getting then the same thing as statically padding
-    #pipeline.append(GapRemovePadOnInputs())
-    #pipeline.append(transform.InferType())
+    if IS_PADDING_DONE:
+        pipeline.append(transform.InferType())
+        pipeline.append(GapPadTransform())
+        pipeline.append(transform.InferType())
+        # TODO: add a transformation that after the padding one deletes useless padding on the inputs, if not
+        # used elsewhere not padded and then changes directly the input, getting then the same thing as statically padding
+        #pipeline.append(GapRemovePadOnInputs())
+        #pipeline.append(transform.InferType())
     return pipeline

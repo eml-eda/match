@@ -294,6 +294,7 @@ class Gap9NE16CostModel(ZigZagMatchCostModel):
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=temporal_mapping,
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
+        self.IS_PADDING_COUNTED = True
     
     def def_transfer_cost(self):
         USE_PLINIO_TRANSFER_MODEL = False
@@ -382,9 +383,17 @@ class Gap9NE16CostModel(ZigZagMatchCostModel):
     
     def def_innermost_loops_cost(self):
         is_dw = self.layer_data.specific_pattern=='depthwise_conv2d'
-        self.padding_of_k = 0 if self.loop_sizes["K"]%16==0 else 16-(self.loop_sizes["K"]%16)
-        self.padding_of_k_l1 = 0 if self.size_per_mem_level["O"]["K"][0]%16==0 else 16-(self.size_per_mem_level["O"]["K"][0]%16)
-        self.padding_of_c = 0 if self.loop_sizes["C"]%16==0 else 16-(self.loop_sizes["C"]%16)
+        if self.IS_PADDING_COUNTED:
+            # HOW MUCH PADDING IS REQUIRED
+            self.padding_of_k = 0 if self.loop_sizes["K"]%16==0 else 16-(self.loop_sizes["K"]%16)
+            self.padding_of_k_l1 = 0 if self.size_per_mem_level["O"]["K"][0]%16==0 else 16-(self.size_per_mem_level["O"]["K"][0]%16)
+            self.padding_of_c = 0 if self.loop_sizes["C"]%16==0 else 16-(self.loop_sizes["C"]%16)
+        else:
+            # TRYING CASE WHERE PADDING IS NOT REQURIED
+            self.padding_of_k = 0
+            self.padding_of_k_l1 = 0
+            self.padding_of_c = 0
+
         self.ne16_layer_params = (
             self.loop_sizes["OY"],
             self.loop_sizes["OX"],
@@ -422,7 +431,7 @@ class Gap9NE16CostModel(ZigZagMatchCostModel):
         self.SOFTWARE_PAD_COST = 0
         self.SOFTWARE_SLICING_COST = 0
         
-        if self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16!=0:
+        if self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16!=0 and self.IS_PADDING_COUNTED:
             #add software padding cost
             self.SOFTWARE_PAD_COST = self.partial_relevant_loop_sizes["IY"] * self.partial_relevant_loop_sizes["IX"] * (self.loop_sizes[SOFTWARE_DIM_TO_PAD]+(16-self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16))*1.5
             if is_dw:

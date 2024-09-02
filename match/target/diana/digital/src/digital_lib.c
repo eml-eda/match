@@ -89,8 +89,10 @@ void* diana_digital_kernel_wrapper(match_kernel* kernel){
     kernel->common_kernel->c_y:kernel->common_kernel->c_x):(kernel->common_kernel->specific_pattern!=depthwise_conv_2d?
     (kernel->common_kernel->c_i>kernel->common_kernel->c_w?
     kernel->common_kernel->c_w:kernel->common_kernel->c_i):kernel->common_kernel->k_o);
-    
+    if(diana_kernel.c%16 && kernel->common_kernel->specific_pattern==dense) diana_kernel.c+=(16-(diana_kernel.c%16));
+
     diana_kernel.k=kernel->common_kernel->k_o;
+    if(diana_kernel.k%16) diana_kernel.k+=(16-(diana_kernel.k%16));
 
     diana_kernel.cx=kernel->common_kernel->specific_pattern==elem_add?
     kernel->common_kernel->ox:(kernel->common_kernel->ix_i
