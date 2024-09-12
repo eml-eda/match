@@ -1,10 +1,13 @@
 from match.target.gap9 import Gap9
 from match.target.diana import Diana
 from match.target.target import DefaultMatchTarget, MatchTarget
+from match.target.llmcpu import LLMCpu
 
 TARGETS={
     "gap9":Gap9(),
     "diana":Diana(),
+    "llmcpu":LLMCpu(),
+    "cpu":DefaultMatchTarget(),
 }
 target_inst=None
 
