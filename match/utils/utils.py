@@ -81,6 +81,8 @@ def add_save_relay(prefix="",mod=None,params=None):
         mod=None if mod is None else relay_tvm.astext(mod),
         params=None if params is None else relay_tvm.save_param_dict(params=params)
     ))
+    # FOR TESTING PURPOSES
+    save_all_relay()
 
 def save_all_relay():
     global relay_list

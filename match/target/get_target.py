@@ -5,6 +5,7 @@ from match.target.target import DefaultMatchTarget, MatchTarget
 TARGETS={
     "gap9":Gap9(),
     "diana":Diana(),
+    "cpu":DefaultMatchTarget(),
 }
 target_inst=None
 

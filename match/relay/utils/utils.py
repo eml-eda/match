@@ -317,7 +317,7 @@ def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
                   executor=Executor("aot",
                                     {
                                         "interface-api": "c",
-                                        "unpacked-api": 1,
+                                        "unpacked-api": True,
                                         #"workspace-byte-alignment": 4,
                                     },
                                     ),
