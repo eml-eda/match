@@ -1,29 +1,33 @@
+from pathlib import Path
+import shutil
+from typing import List
+from match.model import MatchModel
 from match.relay.compiled_module import CompiledModule
 from match.relay.models import create_model_add_convs, create_model_conv_2d
 from match.target.get_target import get_target, reset_target, set_target
-from match.driver.driver import driver
 import argparse
 from match.relay.get_relay import get_relay_from
 
-from match.utils import save_all_relay,add_save_relay,reset_relay_list,reset_output_path,set_output_path,reset_schedules,save_all_schedules
-import copy
 
-def match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, target=None, target_name=None,output_path="./match_output"):
-    if relay_mod==None:    
-        relay_mod,relay_params=get_relay_from(input_type,filename,params_filename)
-    reset_output_path()
-    reset_relay_list()
-    reset_schedules()
-    set_output_path(output_path)
-    add_save_relay(prefix="start",mod=relay_mod,params=relay_params)
+def match(input_type="onnx", models_to_compile:List[MatchModel]=[], filename=None, params_filename=None, target=None, target_name=None,output_path="./match_output"):
+    if len(models_to_compile)==0:    
+        models_to_compile = get_relay_from(input_type,filename,params_filename)
+    #add_save_relay(prefix="start",mod=relay_mod,params=relay_params)
     reset_target()
     if target!=None:
         set_target(target=target)
     target=get_target(target_name=target_name)
-    driver(relay_mod, relay_params, target=target,output_path=output_path)
-    save_all_relay()
-    save_all_schedules()
-    return CompiledModule.result
+    results = {}
+    if Path(output_path).absolute().is_dir():
+        # remove build folder and all contents
+        shutil.rmtree(Path(output_path).absolute())
+        # make the build folder again
+        Path(output_path).absolute().mkdir(parents=True)
+    for model_to_compile in models_to_compile:
+        model_to_compile.compile_model(target=target,out_path=output_path)
+        model_to_compile.move_static_app_to(out_path=output_path)
+        results[model_to_compile.name] = CompiledModule.result
+    return results
 
 def get_relay_network(input_type="onnx",filename="examples/temponet_ht.onnx",params_filename=None):
     return get_relay_from(input_type,filename,params_filename)
@@ -119,8 +123,10 @@ if __name__ == "__main__":
         
     match(
         input_type=input_type,
-        relay_mod=mod,
-        relay_params=params,
+        models_to_compile=[] if mod is None else [MatchModel(
+            relay_mod=mod,
+            relay_params=params,
+        )],
         filename=filename,
         params_filename=params_filename,
         target=target,

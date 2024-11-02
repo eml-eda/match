@@ -16,6 +16,10 @@ from match.target.memory_inst import MemoryInst
 import tvm
 from tvm.relay.dataflow_pattern import wildcard, is_op
 from match.partition.partitioning_pattern import PartitioningPattern
+from tvm import relay
+from tvm.relay import transform
+from tvm.relay.expr_functor import ExprMutator, ExprVisitor
+from tvm.relay.dataflow_pattern import DFPatternCallback, rewrite, wildcard, is_op, is_constant
 
 class LLMCpuEx(ExecModule):
     def __init__(self,**kwargs):
@@ -47,8 +51,32 @@ class LLMCpuEx(ExecModule):
                 wildcard(), wildcard()
             )
         return [
-            PartitioningPattern(name="dense", pattern=dense_pattern, ordered_operation="dense"),
+            #PartitioningPattern(name="dense", pattern=dense_pattern, ordered_operation="dense"),
         ]
+
+    def network_transformations(self, opts):
+        class RemoveBoolCastPattern(DFPatternCallback):
+            def __init__(self, require_type=False):
+                super().__init__(require_type)
+                self.pattern = is_op("cast")(wildcard()).has_attr({"dtype":"bool"})
+
+            def callback(self, pre, post, node_map):
+                return pre.args[0]
+
+        @tvm.ir.transform.module_pass(opt_level=0)
+        class RemoveBoolCastTransform:
+            def transform_module(
+                self, mod: tvm.ir.IRModule, ctx: tvm.ir.transform.PassContext
+            ) -> tvm.ir.IRModule:
+                for global_var, func in mod.functions.items():
+                    func = rewrite(RemoveBoolCastPattern(), func)
+                    mod.update_func(global_var, func)
+                return mod
+
+            def __call__(self, mod):
+                return self.transform_module(mod)
+            
+        return [RemoveBoolCastTransform()]
 
     def def_include_list(self,patter_name):
         return ["llmcpulib.h"]

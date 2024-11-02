@@ -1,5 +1,6 @@
 
 
+import itertools
 from typing import List
 
 
@@ -13,6 +14,6 @@ class DynamicDim:
         self.name = name
 
 
-def get_combinations(dynamic_dims:List[DynamicDim]=[]):
-    combination = [[(dim.name,cutoffs) for cutoff in dim.cutoffs] for dim in dynamic_dims]
+def get_cutoff_combinations(dynamic_dims:List[DynamicDim]=[]):
+    combination = [[(dim.name,cutoff) for cutoff in dim.cutoffs] for dim in dynamic_dims]
     return list(itertools.product(*combination))
