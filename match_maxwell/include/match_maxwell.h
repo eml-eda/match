@@ -38,4 +38,7 @@
 
 unsigned int maxwell_load_activations(common_kernel* common_kernel,dimension_I* dim,unsigned int ext_pt,int ext_mem,int int_mem);
 
+void maxwell_compute_tile_and_store_output(common_kernel* common_kernel,dimension_O* dim,unsigned int int_pt,unsigned int ext_pt,
+                                    int int_mem,int ext_mem);
+
 #endif

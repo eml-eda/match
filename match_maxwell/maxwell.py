@@ -6,9 +6,14 @@ from match.target.exec_module import ComputationalApis, ExecModule
 from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
 import tvm
-import logging
+from tvm import relay
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_var, is_constant
 from match.partition.partitioning_pattern import PartitioningPattern
+import ctypes
+from pathlib import Path
+import numpy as np
+from numpy import typing as npt
+from typing import Dict, Optional, Tuple
 
 class MaxwellMemAcc(ExecModule):
     def __init__(self):
@@ -19,6 +24,7 @@ class MaxwellMemAcc(ExecModule):
                                           src_path=os.path.dirname(__file__)+"/src",
                                           inc_path=os.path.dirname(__file__)+"/include")
         self.NUM_BANKS = 2
+        self.module_options["MAXWELL_NUM_BANKS"] = self.NUM_BANKS
 
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "gap9cluster_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
@@ -42,7 +48,6 @@ class MaxwellMemAcc(ExecModule):
             bias_add = is_op("nn.bias_add")(conv2d, wildcard())
             relu = is_op("nn.relu")(bias_add)
             return relu
-            # return relu
         
         return [
             PartitioningPattern(name="conv2d_biasadd_relu",pattern=conv2d_pattern,ordered_operation="nn.conv2d"),
@@ -60,13 +65,14 @@ class MaxwellMemAcc(ExecModule):
     def memories_def(self, pattern_name, operands):
         return [
             # from lower level to higher level memories
-            MemoryInst(name="COMPUTE_MEMORY",k_bytes=8,operands=["I","O","W"]),
-            MemoryInst(name="INTER_LAYER_MEMORY",k_bytes=32,operands=["I","O","W"],r_ports=1,w_ports=1,rw_ports=0),
+            MemoryInst(name="COMPUTE_MEMORY",k_bytes=self.NUM_BANKS*4,operands=operands),
+            MemoryInst(name="INTER_LAYER_MEMORY",k_bytes=128,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
             #MemoryInst(name="EXT_MEM",k_bytes=2406,operands=operands)
         ]
     
     def mem_apis_def(self, memory_apis = ...):
         memory_apis.mem_transfer["I"]="maxwell_load_activations"
+        memory_apis.copy_out_curr_computation="maxwell_compute_and_store"
         return memory_apis
 
 
@@ -75,23 +81,6 @@ class MaxwellTarget(MatchTarget):
         super(MaxwellTarget,self).__init__([
             MaxwellMemAcc(),
         ],name="maxwell")
-
-    def match_additional_checks_(self, node, match_pt: match.target.MatchTargetPattern = None):
-        breakpoint()
-        return super().match_additional_checks_(node, match_pt)
-
-
-
-import ctypes
-import os
-from pathlib import Path
-import match.target
-import numpy as np
-from numpy import typing as npt
-from typing import Dict, List, Optional, Tuple
-from tvm import relay
-import tvm
-import match
 
 def numpy_to_array(np_arr: npt.NDArray, dtype: str):
     """ Convert a numpy array to a TVM array with datatype `dtype`.
@@ -249,5 +238,3 @@ if __name__=="__main__":
                                  output_path=str(Path("./model_build").absolute()))
     else:
         run_model(output_path=str(Path("./model_build").absolute()))
-
-
