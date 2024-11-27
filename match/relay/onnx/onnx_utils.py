@@ -1,5 +1,9 @@
+from typing import Dict, List
 import onnx
 import numpy as np
+import copy
+
+from match.model import DynamicDim
 
 def sanitize_onnx_only_remove(onnx_model: onnx.ModelProto):
     for node in onnx_model.graph.node:
@@ -468,3 +472,37 @@ def sanitize_onnx_plinio(onnx_model: onnx.ModelProto):
     #onnx_model.graph.output[0].type.tensor_type.elem_type=onnx.helper.np_dtype_to_tensor_dtype(np.dtype("int32"))#nodes_out_types[original_out_to_new_node_version[onnx_model.graph.output[0].name]])
     onnx_model.graph.output[0].name=str(onnx_model.graph.node[::-1][0].output[0])
     return {"out_types":nodes_out_types,"to_append":nodes_to_append,"out_to_graph_idx":output_to_graph_idx,"new_ops_at":nodes_with_new_ops}
+
+
+
+def get_onnx_static_model(onnx_model: onnx.ModelProto=None,static_params:Dict={}):
+    static_onnx_model = copy.deepcopy(onnx_model)
+    #breakpoint()
+    # static definement of inputs
+    for i_idx in range(len(onnx_model.graph.input)):
+        for d_idx in range(len(onnx_model.graph.input[i_idx].type.tensor_type.shape.dim)):
+            dim_name = onnx_model.graph.input[i_idx].type.tensor_type.shape.dim[d_idx].dim_param
+            dynamic_dims = dim_name.split(" ")[::2]
+            if any([dyn_dim in static_params for dyn_dim in dynamic_dims]):
+                dim_value = 0
+                for dyn_dim in dynamic_dims:
+                    if dyn_dim.isdigit():
+                        dim_value+=int(dyn_dim)
+                    elif dyn_dim in static_params:
+                        dim_value+=static_params[dyn_dim]
+                static_onnx_model.graph.input[i_idx].type.tensor_type.shape.dim[d_idx].dim_value = dim_value
+    # static definement of outputs
+    for o_idx in range(len(onnx_model.graph.output)):
+        for d_idx in range(len(onnx_model.graph.output[o_idx].type.tensor_type.shape.dim)):
+            dim_name = onnx_model.graph.output[o_idx].type.tensor_type.shape.dim[d_idx].dim_param
+            dynamic_dims = dim_name.split(" ")[::2]
+            if any([dyn_dim in static_params for dyn_dim in dynamic_dims]):
+                dim_value = 0
+                for dyn_dim in dynamic_dims:
+                    if dyn_dim.isdigit():
+                        dim_value+=int(dyn_dim)
+                    elif dyn_dim in static_params:
+                        dim_value+=static_params[dyn_dim]
+                static_onnx_model.graph.output[o_idx].type.tensor_type.shape.dim[d_idx].dim_value = dim_value
+
+    return static_onnx_model

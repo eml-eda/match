@@ -3,7 +3,7 @@ from math import prod
 import re
 
 import numpy as np
-from match.relay.compiled_module import CompiledModule
+from match.relay import CompiledModule
 from tvm.relay.expr_functor import ExprMutator, ExprVisitor
 from tvm.relay.dataflow_pattern import DFPatternCallback, is_op, rewrite, wildcard
 from tvm.relay import transform
@@ -136,8 +136,10 @@ class MatchSaveModule:
         global_var=mod.get_global_var("main")
         func=mod.functions[global_var]
         relay_inputs=func.params
-        match_inputs=[{"name":inp_.name_hint,"size":prod(inp_.type_annotation.shape[1:]),"type":inp_.type_annotation.dtype,"prec":np.dtype(inp_.type_annotation.dtype).itemsize,"shape":[int(sh) for sh in inp_.type_annotation.shape]} for inp_ in relay_inputs]
-        match_output={"size":prod(func.ret_type.shape[1:]),"prec":np.dtype(func.ret_type.dtype).itemsize,"type":func.ret_type.dtype,"shape":[int(sh) for sh in func.ret_type.shape]}
+        #match_inputs=[{"name":inp_.name_hint,"size":prod(inp_.type_annotation.shape[1:]),"type":inp_.type_annotation.dtype,"prec":np.dtype(inp_.type_annotation.dtype).itemsize,"shape":[int(sh) for sh in inp_.type_annotation.shape]} for inp_ in relay_inputs]
+        #match_output={"size":prod(func.ret_type.shape[1:]),"prec":np.dtype(func.ret_type.dtype).itemsize,"type":func.ret_type.dtype,"shape":[int(sh) for sh in func.ret_type.shape]}
+        match_inputs = None
+        match_output = None
         CompiledModule.define_compiled_module(mod=mod,match_inputs=match_inputs,match_output=match_output)
         return mod
 

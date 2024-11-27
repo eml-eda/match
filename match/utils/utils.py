@@ -6,6 +6,32 @@ from mako.template import Template
 from tvm import relay as relay_tvm
 import match
 
+def numpy_dtype_to_c_type(dtype):
+    """Translate NumPy dtype to corresponding C type."""
+    dtype_str = str(dtype)
+    
+    # Mapping NumPy dtype to C type
+    mapping = {
+        'float32': 'float',
+        'float64': 'double',
+        'int32': 'int',
+        'int64': 'long int',  # or 'long long int'
+        'int8': 'char',
+        'uint8': 'unsigned char',
+        'int16': 'short',
+        'uint16': 'unsigned short',
+        'uint32': 'unsigned int',
+        'uint64': 'unsigned long int',  # or 'unsigned long long int'
+        'bool': '_Bool'  # or 'bool' in C99
+    }
+    
+    # Check if dtype exists in mapping
+    if dtype_str in mapping:
+        return mapping[dtype_str]
+    else:
+        raise ValueError(f"Unsupported dtype: {dtype}")
+
+
 class RelaySave:
     def __init__(self,prefix,mod,params):
         self.prefix=prefix
@@ -81,6 +107,7 @@ def add_save_relay(prefix="",mod=None,params=None):
         mod=None if mod is None else relay_tvm.astext(mod),
         params=None if params is None else relay_tvm.save_param_dict(params=params)
     ))
+    save_all_relay()
 
 def save_all_relay():
     global relay_list

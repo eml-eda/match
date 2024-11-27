@@ -35,6 +35,7 @@ class WorkloadParser:
             "nn.dense": self.visit_dense,
             "add": self.visit_add,
             "multiply": self.visit_multiply,
+            "nn.relu": self.visit_relu,
         }
         self.supported_operators = tuple(self.visit_router.keys())
         self.index = 0
@@ -97,6 +98,11 @@ class WorkloadParser:
         else:
             self.occurrences[unique_name]=1
         return unique_name
+    def visit_relu(self,call,attrs):
+        attrs = {
+            "activation": "relu",
+        }
+        self.layer_data.layer_attrs = {**self.layer_data.layer_attrs, **attrs}
 
     def visit_cast(self, call, attrs):
         op = ops.Cast(
@@ -318,6 +324,7 @@ class WorkloadParser:
     def visit_call(self, call):
         if call.op.name not in self.supported_operators:
             # skip if not supported for testing purposes
+            print("[WORKLOAD PARSER] The operator",call.op.name,"is not supported yet")
             raise NotImplementedError(
                 f"Currently the operator {call.op.name} is not supported."
             )

@@ -6,6 +6,7 @@ import re
 import os
 import subprocess
 import argparse
+from match.target.target import DefaultMatchTarget, MatchTarget
 import tvm
 import tvm.relay as relay
 import numpy as np
@@ -15,7 +16,6 @@ from tvm.relay.backend import Executor, Runtime
 
 from typing import Tuple, Dict, Optional, Union
 import numpy.typing as npt
-from match.target.target import MatchTarget
 from mako.template import Template
 from match.utils import get_output_path
 
@@ -268,7 +268,9 @@ def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
                  static_mem_plan=True,
                  static_mem_plan_algorithm="hill_climb",
                  fuse_layers: bool = True, 
-                 package_path: pathlib.Path = pathlib.Path("model.tar")):
+                 package_path: pathlib.Path = pathlib.Path("model.tar"),
+                 mod_name: str = "default",
+                 ):
     '''
     Utility wrapper for TVMC that sets supported
     :param model: TVMC model that you wish to compile
@@ -317,7 +319,7 @@ def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
                   executor=Executor("aot",
                                     {
                                         "interface-api": "c",
-                                        "unpacked-api": 1,
+                                        "unpacked-api": True,
                                         #"workspace-byte-alignment": 4,
                                     },
                                     ),
@@ -325,6 +327,7 @@ def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
                   output_format="mlf",
                   package_path=package_path,
                   pass_context_configs=pass_context_configs,
+                  mod_name=mod_name,
                   #desired_layout="NHWC",
                   #desired_layout_ops=["nn.conv2d"]
                   )
@@ -335,7 +338,8 @@ def tvmc_compile_and_unpack(model: TVMCModel, target: str = "match, c",
                             build_path: str = "./build",
                             cpu_type: str = "riscv_cpu",
                             static_mem_plan: bool = True,
-                            static_mem_plan_algorithm: str = "hill_climb"):
+                            static_mem_plan_algorithm: str = "hill_climb",
+                            mod_name: str = "default",):
     '''
     Utility function that calls tvmc_wrapper and extracts output mlf
     (= TVM model library format) file.
@@ -350,7 +354,8 @@ def tvmc_compile_and_unpack(model: TVMCModel, target: str = "match, c",
     # Compile new model
     mlf_path = os.path.join(build_path, "model.tar")
     tvmc_wrapper(model=model, target=target, fuse_layers=fuse_layers, package_path=mlf_path,
-                 cpu_type=cpu_type,static_mem_plan=static_mem_plan,static_mem_plan_algorithm=static_mem_plan_algorithm)
+                 cpu_type=cpu_type,static_mem_plan=static_mem_plan,static_mem_plan_algorithm=static_mem_plan_algorithm,
+                 mod_name=mod_name)
     # extract mlf file
     mlf = tarfile.TarFile(mlf_path)
     mlf.extractall(build_path)
@@ -359,7 +364,7 @@ def tvmc_compile_and_unpack(model: TVMCModel, target: str = "match, c",
 
 def create_build_dir(build_path: str = "./build",
                      match_lib_path: str = "./lib",
-                     target: MatchTarget=None):
+                     target:MatchTarget=DefaultMatchTarget()):
     """
     param byoc_path: path to import Makefiles and C dependencies from
     """

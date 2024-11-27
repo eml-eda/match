@@ -1,23 +1,11 @@
 from match.codegen.template import TemplateDataGenerator,TemplateEngine
-from match.codegen.temporal_mapping_generator import TemporalMappingGenerator
-from match.codegen.temporal_mapping_engine import get_temporal_mapping_engine
 
 # TVM imports
 import tvm
-# ZigZag imports
-from math import ceil
-from mako.template import Template
-from mako import exceptions
-import functools
-import operator
-from collections import OrderedDict
-import copy
-from typing import Dict,List,Type
-from match.utils import mock_func
 from match.target import get_target
 
 def get_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:str=""):
-    target=get_target.get_target()
+    target=get_target()
     temporal_mapping,layer_data,exec_module,latency,energy=target.get_layer_from_module(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
     tempgen = TemplateDataGenerator(mod,temporal_mapping=temporal_mapping,
                                     layer_data=layer_data,exec_module=exec_module,pattern_name=pattern_name,

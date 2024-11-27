@@ -1,4 +1,9 @@
 from abc import ABC,abstractmethod
+import os
+from pathlib import Path
+import subprocess
+
+import mako
 from tvm.relay.dataflow_pattern import match as is_pattern_matching
 from match.partition.partitioning_pattern import PartitioningPattern
 from tvm.relay.dataflow_pattern import CallPattern,AttrPattern,AltPattern
@@ -88,6 +93,18 @@ class MatchTarget(ABC):
         self.exec_modules_dict=dict()
         self.disabled_exec_modules=[]
         self.optimize_param="energy" if optimize_param=="energy" else "latency"
+        self.tvm_runtime_path=os.path.dirname(__file__)+"/default_lib/include/tvm_runtime.h"
+        self.crt_config_path=os.path.dirname(__file__)+"/default_lib/include/crt_config.h"
+        self.makefile_path=os.path.dirname(__file__)+"/default_lib/Makefile"
+        self.match_default_inputs_include_template_path=os.path.dirname(__file__)+"/default_lib/include/match_default_inputs_template.h"
+        self.match_default_inputs_src_template_path=os.path.dirname(__file__)+"/default_lib/src/match_default_inputs_template.c"
+        self.main_template_path=os.path.dirname(__file__)+"/default_lib/src/main_template.c"
+        self.model_generative_apis_src_template_path=os.path.dirname(__file__)+"/default_lib/src/match_model_gen_apis_template.c"
+        self.model_generative_apis_include_template_path=os.path.dirname(__file__)+"/default_lib/include/match_model_gen_apis_template.h"
+        self.clean_funcs=[]
+        self.init_funcs=[]
+        self.include_list=[]
+        self.input_macros=""
         self.__cached_pattern_results__=[]
         for exec_module in exec_modules:
             self.add_exec_module(exec_module)
@@ -104,6 +121,30 @@ class MatchTarget(ABC):
         if not hasattr(class_,"_instance"):
             class_._instance = object.__new__(class_, *args, **kwargs)
         return class_._instance
+
+    def gen_libs_and_main(self,match_inputs,match_outputs,dynamic_dims,runtime,out_path):
+        abs_out_path = str(Path(out_path).absolute())
+        subprocess.getoutput(f"cp {self.tvm_runtime_path} {abs_out_path}/include/tvm_runtime.h")
+        subprocess.getoutput(f"cp {self.crt_config_path} {abs_out_path}/include/crt_config.h")
+        subprocess.getoutput(f"cp {self.makefile_path} {abs_out_path}/Makefile")
+        templates_data = {
+            "target":self,
+            "match_inputs":match_inputs,
+            "match_outputs":match_outputs,
+            "runtime":runtime,
+            "dynamic_dims":dynamic_dims,
+            "app":"textgen_logits_only",
+        }
+        with open(abs_out_path+"/include/match_default_inputs.h","w") as inp_file:
+            inp_file.write(mako.template.Template(filename=self.match_default_inputs_include_template_path).render(**templates_data))
+        with open(abs_out_path+"/src/match_default_inputs.c","w") as inp_file:
+            inp_file.write(mako.template.Template(filename=self.match_default_inputs_src_template_path).render(**templates_data))
+        with open(abs_out_path+"/src/main.c","w") as main_file:
+            main_file.write(mako.template.Template(filename=self.main_template_path).render(**templates_data))
+        with open(abs_out_path+"/src/match_model_gen_apis.c","w") as model_api_file:
+            model_api_file.write(mako.template.Template(filename=self.model_generative_apis_src_template_path).render(**templates_data))
+        with open(abs_out_path+"/include/match_model_gen_apis.h","w") as model_api_file:
+            model_api_file.write(mako.template.Template(filename=self.model_generative_apis_include_template_path).render(**templates_data))
 
     def get_match_pattern_from_pattern_name(self,pattern_name:str="conv2d"):
         for pt in self.match_patterns:
