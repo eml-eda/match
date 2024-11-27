@@ -1,4 +1,4 @@
-from match.target.target import DefaultMatchTarget, MatchTarget
+from match.target import DefaultMatchTarget, MatchTarget
 from tvm.driver.tvmc.model import TVMCModel
 import os
 from typing import Dict
@@ -13,11 +13,13 @@ class MatchDriver:
                  params: Dict[str, tvm.nd.array],
                  build_dir: pathlib.Path = "./match_output",
                  no_of_inputs: int = 1,
-                 target: MatchTarget=DefaultMatchTarget()):
+                 target: MatchTarget=DefaultMatchTarget(),
+                 mod_name: str="default"):
         self.model = TVMCModel(mod, params)
         self.build_dir = build_dir
         self.no_of_inputs = no_of_inputs
         self.target = target
+        self.mod_name = mod_name
         ## Placeholders in case profiling code is added
         create_build_dir(self.build_dir, os.path.dirname(__file__)+"/../codegen/template/lib",target=self.target)
         
@@ -44,13 +46,15 @@ class MatchDriver:
                                       build_path=self.build_dir,
                                       cpu_type=self.target.cpu_type,
                                       static_mem_plan=self.target.static_mem_plan,
-                                      static_mem_plan_algorithm=self.target.static_mem_plan_algorithm)
+                                      static_mem_plan_algorithm=self.target.static_mem_plan_algorithm,
+                                      mod_name=self.mod_name,)
 
 
 def driver(mod: tvm.ir.IRModule, 
            params: Dict[str, tvm.nd.array],
            target: MatchTarget=DefaultMatchTarget(),
-           output_path="./match_output"):
+           output_path="./match_output",
+           mod_name: str="default",):
     """Compile a model for MATCH
 
     Args:
@@ -60,5 +64,6 @@ def driver(mod: tvm.ir.IRModule,
     """
     match_driver = MatchDriver(mod, params,
                           target=target,
-                          build_dir=output_path)
+                          build_dir=output_path,
+                          mod_name=mod_name,)
     match_driver.tvm_compile(fusion=True)

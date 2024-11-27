@@ -113,7 +113,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
             Dict[Str,Number]: Cost of transfer per each iteration for every single operand
         """
         return {
-            operand:self.input_transfer_costs[operand][1] if operand in self.input_operands else self.output_transfer_costs[1]
+            operand:sum(self.input_transfer_costs[operand]) if operand in self.input_operands else sum(self.output_transfer_costs)
             for operand in self.operands
         }
 

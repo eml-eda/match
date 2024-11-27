@@ -1,29 +1,52 @@
+from pathlib import Path
+import shutil
+from typing import Dict, List
+from match.model.dynamic_dim import DynamicDim
+from match.model.model import MatchModel,build_runtime, get_match_inputs_and_outputs
 from match.relay.compiled_module import CompiledModule
 from match.relay.models import create_model_add_convs, create_model_conv_2d
 from match.target.get_target import get_target, reset_target, set_target
-from match.driver.driver import driver
 import argparse
 from match.relay.get_relay import get_relay_from
+from match.utils.utils import set_output_path
 
-from match.utils import save_all_relay,add_save_relay,reset_relay_list,reset_output_path,set_output_path,reset_schedules,save_all_schedules
-import copy
 
-def match(input_type="onnx",relay_mod=None, relay_params=None, filename=None, params_filename=None, target=None, target_name=None,output_path="./match_output"):
-    if relay_mod==None:    
-        relay_mod,relay_params=get_relay_from(input_type,filename,params_filename)
-    reset_output_path()
-    reset_relay_list()
-    reset_schedules()
-    set_output_path(output_path)
-    add_save_relay(prefix="start",mod=relay_mod,params=relay_params)
+def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
+          filename=None, params_filename=None,
+          target=None, target_name=None,
+          dynamic_dims:Dict[str,DynamicDim]={},
+          match_inputs=None,match_outputs=None,
+          output_path="./match_output"):
+    if Path(output_path).absolute().is_dir():
+        # remove build folder and all contents
+        shutil.rmtree(Path(output_path).absolute())
+    # make the build folder again
+    Path(output_path).absolute().mkdir(parents=True)
+    set_output_path(str(Path(output_path).absolute()))
+    if len(models_to_compile)==0:    
+        models_to_compile,match_inputs,match_outputs,dynamic_dims = get_relay_from(input_type,filename,params_filename)
+    #add_save_relay(prefix="start",mod=relay_mod,params=relay_params)
     reset_target()
     if target!=None:
         set_target(target=target)
     target=get_target(target_name=target_name)
-    driver(relay_mod, relay_params, target=target,output_path=output_path)
-    save_all_relay()
-    save_all_schedules()
-    return CompiledModule.result
+    results = {}
+    for model_to_compile in models_to_compile:
+        model_to_compile.compile_model(target=target,out_path=output_path)
+        model_to_compile.move_static_app_to(out_path=output_path)
+        results[model_to_compile.name] = CompiledModule.result
+    
+    runtime="default"
+    if len(dynamic_dims)>0:
+        runtime="generative"
+    
+    if match_inputs is None or match_outputs is None:
+        match_inputs,match_outputs=get_match_inputs_and_outputs(models_to_compile)
+    
+    build_runtime(models_to_compile,dynamic_dims,match_inputs,match_outputs,runtime,output_path)
+    
+    target.gen_libs_and_main(match_inputs=match_inputs,match_outputs=match_outputs,dynamic_dims=dynamic_dims,runtime=runtime,out_path=output_path)
+    return results
 
 from match.relay.utils.utils import create_build_dir
 from tvm.driver.tvmc.model import TVMCModel
@@ -247,8 +270,10 @@ if __name__ == "__main__":
     else:
         match(
             input_type=input_type,
-            relay_mod=mod,
-            relay_params=params,
+            models_to_compile=[] if mod is None else [MatchModel(
+                relay_mod=mod,
+                relay_params=params,
+            )],
             filename=filename,
             params_filename=params_filename,
             target=target,
