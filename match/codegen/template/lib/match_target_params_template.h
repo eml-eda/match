@@ -1,5 +1,5 @@
-#ifndef _MATCH_TARGET_PARAMS_H
-#define _MATCH_TARGET_PARAMS_H
+#ifndef __MATCH_TARGET_PARAMS_H__
+#define __MATCH_TARGET_PARAMS_H__
 
 #define NUM_MEMORY_LEVELS ${max([1]+[len(memory_names[exec_module.name]) for exec_module in exec_modules])+1}
 

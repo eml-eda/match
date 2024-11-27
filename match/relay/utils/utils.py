@@ -6,6 +6,7 @@ import re
 import os
 import subprocess
 import argparse
+from match.target.target import DefaultMatchTarget, MatchTarget
 import tvm
 import tvm.relay as relay
 import numpy as np
@@ -15,7 +16,6 @@ from tvm.relay.backend import Executor, Runtime
 
 from typing import Tuple, Dict, Optional, Union
 import numpy.typing as npt
-from match.target.target import MatchTarget
 from mako.template import Template
 from match.utils import get_output_path
 
@@ -364,7 +364,7 @@ def tvmc_compile_and_unpack(model: TVMCModel, target: str = "match, c",
 
 def create_build_dir(build_path: str = "./build",
                      match_lib_path: str = "./lib",
-                     target: MatchTarget=None):
+                     target:MatchTarget=DefaultMatchTarget()):
     """
     param byoc_path: path to import Makefiles and C dependencies from
     """

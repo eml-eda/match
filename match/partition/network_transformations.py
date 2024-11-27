@@ -3,7 +3,7 @@ from math import prod
 import re
 
 import numpy as np
-from match.relay.compiled_module import CompiledModule
+from match.relay import CompiledModule
 from tvm.relay.expr_functor import ExprMutator, ExprVisitor
 from tvm.relay.dataflow_pattern import DFPatternCallback, is_op, rewrite, wildcard
 from tvm.relay import transform

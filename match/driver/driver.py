@@ -1,4 +1,4 @@
-from match.target.target import DefaultMatchTarget, MatchTarget
+from match.target import DefaultMatchTarget, MatchTarget
 from tvm.driver.tvmc.model import TVMCModel
 import os
 from typing import Dict

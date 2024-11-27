@@ -3,9 +3,13 @@
 import os
 from pathlib import Path
 import subprocess
-from typing import Dict
+from typing import Dict, List
+
+import mako
+from match.model.dynamic_dim import DynamicDim
 from match.utils import save_all_relay,add_save_relay,reset_relay_list,reset_output_path,set_output_path,reset_schedules,save_all_schedules
 from match.driver.driver import driver
+from mako.template import Template
 
 class MatchModel:
 
@@ -81,3 +85,20 @@ class MatchModel:
             # remove all the static stuff and move the codegen in the overall build folder
             move_final_relay()
             create_mod_dir_and_mv(rm_dirlist=["codegen","templates","include","src","runtime"])
+
+
+
+def build_runtime(static_models:List[MatchModel]=[],dynamic_dims:Dict[str,DynamicDim]={},match_inputs=None,match_outputs=None,runtime:str="default",out_path:str="/build"):
+    abs_out_path = str(Path(out_path).absolute())
+    temp_args = {
+        "generative_models":{model.name:model for model in static_models},
+        "models":{model.name:model for model in static_models},
+        "dynamic_dims":dynamic_dims,
+        "outputs":match_outputs,
+        "inputs":match_inputs,
+        "runtime":runtime,
+    }
+    with open(abs_out_path+"/src/match_runtime.c","w") as run_file:
+        run_file.write(Template(filename=os.path.dirname(__file__)+"/../codegen/template/lib/match_runtime_template.c").render(**temp_args))
+    with open(abs_out_path+"/include/match_runtime.h","w") as run_file:
+        run_file.write(Template(filename=os.path.dirname(__file__)+"/../codegen/template/lib/match_runtime_template.h").render(**temp_args))

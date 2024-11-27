@@ -1,32 +1,48 @@
 from pathlib import Path
 import shutil
-from typing import List
-from match.model import MatchModel
+from typing import Dict, List
+from match.model.dynamic_dim import DynamicDim
+from match.model.model import MatchModel,build_runtime
 from match.relay.compiled_module import CompiledModule
 from match.relay.models import create_model_add_convs, create_model_conv_2d
 from match.target.get_target import get_target, reset_target, set_target
 import argparse
 from match.relay.get_relay import get_relay_from
+from match.utils.utils import set_output_path
 
 
-def match(input_type="onnx", models_to_compile:List[MatchModel]=[], filename=None, params_filename=None, target=None, target_name=None,output_path="./match_output"):
+def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
+          filename=None, params_filename=None,
+          target=None, target_name=None,
+          dynamic_dims:Dict[str,DynamicDim]={},
+          match_inputs=None,match_outputs=None,
+          output_path="./match_output"):
+    if Path(output_path).absolute().is_dir():
+        # remove build folder and all contents
+        shutil.rmtree(Path(output_path).absolute())
+    # make the build folder again
+    Path(output_path).absolute().mkdir(parents=True)
+    set_output_path(str(Path(output_path).absolute()))
     if len(models_to_compile)==0:    
-        models_to_compile = get_relay_from(input_type,filename,params_filename)
+        models_to_compile,match_inputs,match_outputs,dynamic_dims = get_relay_from(input_type,filename,params_filename)
     #add_save_relay(prefix="start",mod=relay_mod,params=relay_params)
     reset_target()
     if target!=None:
         set_target(target=target)
     target=get_target(target_name=target_name)
     results = {}
-    if Path(output_path).absolute().is_dir():
-        # remove build folder and all contents
-        shutil.rmtree(Path(output_path).absolute())
-        # make the build folder again
-        Path(output_path).absolute().mkdir(parents=True)
     for model_to_compile in models_to_compile:
         model_to_compile.compile_model(target=target,out_path=output_path)
         model_to_compile.move_static_app_to(out_path=output_path)
         results[model_to_compile.name] = CompiledModule.result
+    
+    runtime="default"
+    if len(dynamic_dims)>0:
+        runtime="generative"
+    
+    build_runtime(models_to_compile,dynamic_dims,match_inputs,match_outputs,runtime,output_path)
+    
+    target.gen_libs_and_main(match_inputs=match_inputs,match_outputs=match_outputs,dynamic_dims=dynamic_dims,runtime=runtime,out_path=output_path)
     return results
 
 def get_relay_network(input_type="onnx",filename="examples/temponet_ht.onnx",params_filename=None):

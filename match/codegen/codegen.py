@@ -1,19 +1,7 @@
 from match.codegen.template import TemplateDataGenerator,TemplateEngine
-from match.codegen.temporal_mapping_generator import TemporalMappingGenerator
-from match.codegen.temporal_mapping_engine import get_temporal_mapping_engine
 
 # TVM imports
 import tvm
-# ZigZag imports
-from math import ceil
-from mako.template import Template
-from mako import exceptions
-import functools
-import operator
-from collections import OrderedDict
-import copy
-from typing import Dict,List,Type
-from match.utils import mock_func
 from match.target import get_target
 
 def get_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:str=""):

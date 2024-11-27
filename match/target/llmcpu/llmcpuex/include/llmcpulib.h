@@ -7,8 +7,6 @@
 #include <match_kernel.h>
 #include <stdio.h>
 
-void* llmkernel_wrapper(match_kernel* kernel){
-    printf("Kernel\n");
-};
+void* llm_matmul(match_kernel* kernel);
 
 #endif

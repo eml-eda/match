@@ -40,8 +40,8 @@ class LLMCpuEx(ExecModule):
     def memories_def(self, pattern_name, operands):
         mem = [
             # from lower level to higher level memories
-            MemoryInst(name="L2_CACHE",k_bytes=32*1024,operands=operands,r_bw=64*8,w_bw=64*8,r_ports=0,w_ports=0,rw_ports=2,double_buffering_support=False),
-            MemoryInst(name="SDRAM",k_bytes=8*1024*1024,operands=operands,r_ports=1,w_ports=1,rw_ports=0,r_bw=16*8,w_bw=16*8),
+            MemoryInst(name="L2_CACHE",k_bytes=32*1024*1024,operands=operands,r_bw=64*8,w_bw=64*8,r_ports=0,w_ports=0,rw_ports=2,double_buffering_support=False),
+            MemoryInst(name="SDRAM",k_bytes=8*1024*1024*1024,operands=operands,r_ports=1,w_ports=1,rw_ports=0,r_bw=16*8,w_bw=16*8),
         ]
         return mem
     
