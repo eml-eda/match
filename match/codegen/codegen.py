@@ -5,7 +5,7 @@ import tvm
 from match.target import get_target
 
 def get_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:str=""):
-    target=get_target.get_target()
+    target=get_target()
     temporal_mapping,layer_data,exec_module,latency,energy=target.get_layer_from_module(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
     tempgen = TemplateDataGenerator(mod,temporal_mapping=temporal_mapping,
                                     layer_data=layer_data,exec_module=exec_module,pattern_name=pattern_name,

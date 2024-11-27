@@ -1,7 +1,7 @@
 
 import os
 from typing import Dict
-
+import match
 from match.target.exec_module import ComputationalApis, ExecModule
 from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
@@ -16,8 +16,8 @@ class MaxwellMemAcc(ExecModule):
                                           specific_patterns=[
                                               "conv2d_biasadd_relu"
                                           ],
-                                          src_path=os.path.dirname(__file__)+"/maxwell_src",
-                                          inc_path=os.path.dirname(__file__)+"/maxwell_include")
+                                          src_path=os.path.dirname(__file__)+"/src",
+                                          inc_path=os.path.dirname(__file__)+"/include")
         self.NUM_BANKS = 2
 
 
@@ -40,8 +40,9 @@ class MaxwellMemAcc(ExecModule):
                 wildcard(), wildcard()
             )
             bias_add = is_op("nn.bias_add")(conv2d, wildcard())
-            relu = is_op("relu")(bias_add).hasattr()
+            relu = is_op("nn.relu")(bias_add)
             return relu
+            # return relu
         
         return [
             PartitioningPattern(name="conv2d_biasadd_relu",pattern=conv2d_pattern,ordered_operation="nn.conv2d"),
@@ -59,8 +60,8 @@ class MaxwellMemAcc(ExecModule):
     def memories_def(self, pattern_name, operands):
         return [
             # from lower level to higher level memories
-            MemoryInst(name="COMPUTE_MEMORY",k_bytes=8,operands=["I","O"]),
-            MemoryInst(name="INTER_LAYER_MEMORY",k_bytes=32,operands=["I","O"],r_ports=1,w_ports=1,rw_ports=0),
+            MemoryInst(name="COMPUTE_MEMORY",k_bytes=8,operands=["I","O","W"]),
+            MemoryInst(name="INTER_LAYER_MEMORY",k_bytes=32,operands=["I","O","W"],r_ports=1,w_ports=1,rw_ports=0),
             #MemoryInst(name="EXT_MEM",k_bytes=2406,operands=operands)
         ]
     
@@ -74,6 +75,10 @@ class MaxwellTarget(MatchTarget):
         super(MaxwellTarget,self).__init__([
             MaxwellMemAcc(),
         ],name="maxwell")
+
+    def match_additional_checks_(self, node, match_pt: match.target.MatchTargetPattern = None):
+        breakpoint()
+        return super().match_additional_checks_(node, match_pt)
 
 
 

@@ -18,6 +18,7 @@ def numpy_dtype_to_c_type(dtype):
         'int64': 'long int',  # or 'long long int'
         'int8': 'char',
         'uint8': 'unsigned char',
+        'int16': 'short',
         'uint16': 'unsigned short',
         'uint32': 'unsigned int',
         'uint64': 'unsigned long int',  # or 'unsigned long long int'

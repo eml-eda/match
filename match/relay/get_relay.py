@@ -1,3 +1,4 @@
+from match.model.model import MatchModel
 from match.relay.onnx.onnx import onnx_to_relay
 from tvm import relay
 
@@ -10,7 +11,7 @@ def relay_from_file(relay_filename,params_filename):
         params_bytes=params_file.read()
     mod=relay.fromtext(mod_text)
     params=relay.load_param_dict(params_bytes)
-    return mod,params
+    return [MatchModel(relay_mod=mod,relay_params=params)],None,None,{}
 
 def get_relay_from(input_type,filename,params_filename):
     if input_type=="onnx":
