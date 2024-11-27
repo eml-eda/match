@@ -1,6 +1,6 @@
 #include <match_mem.h>
 
-void match_init_platform(void (*inner_function)(unsigned int* args_inner_function),unsigned int* args){
+void match_init_platform(void (*inner_function)(unsigned int* args_inner_function),unsigned int* args,common_kernel* comm_kernel){
     // API to offload execution to a controller
     inner_function(args);
 }

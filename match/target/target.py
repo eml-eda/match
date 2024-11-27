@@ -1,9 +1,14 @@
 from abc import ABC,abstractmethod
+import os
+from pathlib import Path
+import subprocess
+
+import mako
 from tvm.relay.dataflow_pattern import match as is_pattern_matching
 from match.partition.partitioning_pattern import PartitioningPattern
 from tvm.relay.dataflow_pattern import CallPattern,AttrPattern,AltPattern
 from match.codegen.temporal_mapping_generator import TemporalMappingGenerator
-from match.utils import save_codegen_schedule
+from match.utils import save_codegen_schedule,save_schedule_search_res
 from functools import partial
 import tvm 
 
@@ -72,28 +77,74 @@ class MatchTargetPattern:
 class MatchTarget(ABC):
     """Class that represents a heterogeneous target, this implementation defines this class through the singleton pattern
     """
-    def __init__(self,exec_modules,name:str="match",optimize_param:str="latency"):
-        if self.singleton_instantiated():
+    def __init__(self,exec_modules,name:str="match",optimize_param:str="latency",**kwargs):
+        if self.singleton_instantiated(**kwargs):
             return
         self.name=name
+        # can choose between riscv_cpu, arm_cpu, micro, and more, look at tvm/python/tvm/target/target.py
+        self.cpu_type="riscv_cpu"
+        # enable USMP or not?
+        self.static_mem_plan=True
+        # which algorithm to use in case we use USMP, can be greedy etc.
+        # hill_climb looks the best overall but you can play with it
+        self.static_mem_plan_algorithm="hill_climb"
         self.match_patterns=[]
         self.exec_modules=[]
         self.exec_modules_dict=dict()
         self.disabled_exec_modules=[]
         self.optimize_param="energy" if optimize_param=="energy" else "latency"
+        self.tvm_runtime_path=os.path.dirname(__file__)+"/default_lib/include/tvm_runtime.h"
+        self.crt_config_path=os.path.dirname(__file__)+"/default_lib/include/crt_config.h"
+        self.makefile_path=os.path.dirname(__file__)+"/default_lib/Makefile"
+        self.match_default_inputs_include_template_path=os.path.dirname(__file__)+"/default_lib/include/match_default_inputs_template.h"
+        self.match_default_inputs_src_template_path=os.path.dirname(__file__)+"/default_lib/src/match_default_inputs_template.c"
+        self.main_template_path=os.path.dirname(__file__)+"/default_lib/src/main_template.c"
+        self.model_generative_apis_src_template_path=os.path.dirname(__file__)+"/default_lib/src/match_model_gen_apis_template.c"
+        self.model_generative_apis_include_template_path=os.path.dirname(__file__)+"/default_lib/include/match_model_gen_apis_template.h"
+        self.clean_funcs=[]
+        self.init_funcs=[]
+        self.include_list=[]
+        self.input_macros=""
         self.__cached_pattern_results__=[]
         for exec_module in exec_modules:
             self.add_exec_module(exec_module)
             self.exec_modules_dict[exec_module.name]=exec_module
 
-    def singleton_instantiated(self):
-        return hasattr(self,"match_patterns")
+    def singleton_instantiated(self,**kwargs):
+        prev_kwargs_ = dict() if not hasattr(self,"prev_kwargs") else self.prev_kwargs
+        self.prev_kwargs=kwargs
+        if prev_kwargs_==kwargs and hasattr(self,"match_patterns"):
+            return True
 
     # we want a singleton for caching purposes
     def __new__(class_, *args, **kwargs):
         if not hasattr(class_,"_instance"):
             class_._instance = object.__new__(class_, *args, **kwargs)
         return class_._instance
+
+    def gen_libs_and_main(self,match_inputs,match_outputs,dynamic_dims,runtime,out_path):
+        abs_out_path = str(Path(out_path).absolute())
+        subprocess.getoutput(f"cp {self.tvm_runtime_path} {abs_out_path}/include/tvm_runtime.h")
+        subprocess.getoutput(f"cp {self.crt_config_path} {abs_out_path}/include/crt_config.h")
+        subprocess.getoutput(f"cp {self.makefile_path} {abs_out_path}/Makefile")
+        templates_data = {
+            "target":self,
+            "match_inputs":match_inputs,
+            "match_outputs":match_outputs,
+            "runtime":runtime,
+            "dynamic_dims":dynamic_dims,
+            "app":"textgen_logits_only",
+        }
+        with open(abs_out_path+"/include/match_default_inputs.h","w") as inp_file:
+            inp_file.write(mako.template.Template(filename=self.match_default_inputs_include_template_path).render(**templates_data))
+        with open(abs_out_path+"/src/match_default_inputs.c","w") as inp_file:
+            inp_file.write(mako.template.Template(filename=self.match_default_inputs_src_template_path).render(**templates_data))
+        with open(abs_out_path+"/src/main.c","w") as main_file:
+            main_file.write(mako.template.Template(filename=self.main_template_path).render(**templates_data))
+        with open(abs_out_path+"/src/match_model_gen_apis.c","w") as model_api_file:
+            model_api_file.write(mako.template.Template(filename=self.model_generative_apis_src_template_path).render(**templates_data))
+        with open(abs_out_path+"/include/match_model_gen_apis.h","w") as model_api_file:
+            model_api_file.write(mako.template.Template(filename=self.model_generative_apis_include_template_path).render(**templates_data))
 
     def get_match_pattern_from_pattern_name(self,pattern_name:str="conv2d"):
         for pt in self.match_patterns:
@@ -133,7 +184,7 @@ class MatchTarget(ABC):
             pt_res.set_latency(latency)
             pt_res.set_energy(energy)
             self.add_pt_res_to_cache(pt_res)
-        save_codegen_schedule(node,temporal_mapping,spatial_mapping)
+        save_codegen_schedule(node,temporal_mapping,spatial_mapping,latency,energy)
         return temporal_mapping,layer_data,match_pt.exec_module,latency,energy
 
     def add_pt_res_to_cache(self,pt_res):
@@ -179,6 +230,7 @@ class MatchTarget(ABC):
             pt_res.set_temporal_mapping(temporal_mapping)
             pt_res.set_latency(latency)
             pt_res.set_energy(energy)
+            save_schedule_search_res(match_pt.name,latency,energy,temporal_mapping,match_pt.pattern().partition(node))
             self.add_pt_res_to_cache(pt_res)
             return latency,energy
 

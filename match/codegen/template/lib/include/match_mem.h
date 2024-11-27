@@ -3,7 +3,7 @@
 #include <match_tile_indexes.h>
 #include <match_kernel.h>
 
-void match_init_platform(void (*inner_function)(unsigned int* args_inner_function),unsigned int* args);
+void match_init_platform(void (*inner_function)(unsigned int* args_inner_function),unsigned int* args,common_kernel* comm_kernel);
 
 void match_task_id(common_kernel* comm_kernel);
 

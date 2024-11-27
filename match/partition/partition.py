@@ -31,14 +31,13 @@ from tvm.relay.build_module import bind_params_by_name
 # don't remove this import even if it does not seem to be used
 # because this is the point where the match backend is registered
 import tvm.relay.backend.contrib.match
-from match.target.target import MatchTarget
 
-from match.target import get_target
+from match.target import get_target,MatchTarget,DefaultMatchTarget
 
 
 logger = logging.getLogger("match")
 
-def pattern_table(target:MatchTarget=None):
+def pattern_table(target:MatchTarget=DefaultMatchTarget()):
     """
     Registers the patterns we want to match.
     Returns
@@ -102,6 +101,7 @@ def partition(mod, params, dpu, opts):
             fused = seq(mod)
             return fused
         except Exception as err:
+            #breakpoint()
             raise Exception(
                 "Error converting layout to {0}".format(str(err))
             )

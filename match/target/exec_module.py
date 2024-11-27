@@ -47,6 +47,7 @@ class PlatformApis:
     """
     def __init__(self, pattern_name="conv2d"):
         self.init_platform="match_init_platform"
+        self.init_platform_need_kernel_data=False
         self.set_task_id="match_task_id"
 
 class SyncApis:
@@ -73,7 +74,8 @@ class ExecModule(ABC):
     def __init__(self,name:str="default_exec_module",
                  specific_patterns=[],
                  src_path:str="",
-                 inc_path:str=""):
+                 inc_path:str="",
+                 **kwargs):
         self.name=name
         self.FULL_DIM = sys.maxsize
         self.optimal_spatial_mapping = None
@@ -136,12 +138,13 @@ class ExecModule(ABC):
         """
         return [
             # from lower level to higher level memories
+            # TEST: set now L1 to 9 kB just to force TILING 
             MemoryInst(name="l1_mem",k_bytes=90,operands=operands,double_buffering_support=True),
             MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]
 
     def get_all_memories_names(self):
-        return ["l1_mem","l2_mem"]
+        return [m.name for m in self.memories_def(pattern_name="conv2d",operands=["O","I","W"])]
 
     def match_memories(self,pattern_name,operands):
         self.platform_memories=self.memories_def(pattern_name,operands)
@@ -325,3 +328,6 @@ class ExecModule(ABC):
 
     def adjust_network(self,opts):
         return []
+
+    def generate_architecture_for(self,dse:str='zigzag',optimal_spatial_mapping:Any=None,platform_memories:Any=None,layer_data:Any=None):
+        return None

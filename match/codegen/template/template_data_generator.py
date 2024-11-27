@@ -101,7 +101,7 @@ class TemplateDataGenerator:
             [
                 mfl["fullname"]
                 for mfl in self.temporal_mapping
-                if mfl["index"] > 0 and (mfl["fullname"] in general_template_data["sw_for_loops_dict"])
+                if mfl["fullname"] in general_template_data["sw_for_loops_dict"]
             ]
         )
         # we don't need "virtual" tiles of size 1 I think
@@ -136,6 +136,10 @@ class TemplateDataGenerator:
                     size_ = floor(current_dims[operand][dim_name] / fl["size"])
                     tiling_sizes[operand][fl_fullname] = {"name":fl["name"],"size":size_,"index":fl["index"]}
                     current_dims[operand][dim_name] = size_
+            else:
+                for operand in general_template_data["input_operands"]:
+                    dim_name=fl["fullname"] if fl["name"] not in general_template_data["input_dim_mapping"] else general_template_data["input_dim_mapping"][fl["name"]]
+                    fl_input_translations[operand][fl["fullname"]]=dim_name
         general_template_data["fl_input_translations"]=fl_input_translations
         #print(f"For {general_template_data['func_name']} tiling sizes {tiling_sizes}\n\n")
 
@@ -158,18 +162,14 @@ class TemplateDataGenerator:
                 rel_dim: {
                     general_template_data["default_mem"][operand]: general_template_data["layer_attrs"]["loop_sizes"][
                         rel_dim
-                        if "nn.conv2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["nn.conv2d_depthwise"]
-                        or operand not in general_template_data["input_operands"]
+                        if ("nn.conv2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["nn.conv2d_depthwise"] and rel_dim in ["K","C"]) or operand not in general_template_data["input_operands"]
                         else general_template_data["input_dim_mapping"][rel_dim]
                     ],
                     **{
                         general_template_data["sw_for_loops_dict"][fl_mem_t_fn][f"mem_{operand}"]: int(
                             general_template_data["layer_attrs"]["loop_sizes"][
                                 rel_dim
-                                if ("nn.conv2d" in self.layer_data.pattern_operations and
-                                     self.layer_data.layer_attrs["nn.conv2d_depthwise"]
-                                     and rel_dim in ["K","C"])
-                                or operand not in general_template_data["input_operands"]
+                                if ("nn.conv2d" in self.layer_data.pattern_operations and self.layer_data.layer_attrs["nn.conv2d_depthwise"] and rel_dim in ["K","C"]) or operand not in general_template_data["input_operands"]
                                 else general_template_data["input_dim_mapping"][rel_dim]
                             ]
                             / np.prod(
@@ -191,7 +191,9 @@ class TemplateDataGenerator:
             }
             for operand in general_template_data["operands"]
         }
-        
+       
+        #print(general_template_data["fl_input_translations"],general_template_data["sw_for_loops"])
+        #print(general_template_data["tiling_sizes"])
         # mem computation sizes
         for operand in general_template_data["operands"]:
             is_op_input=operand in general_template_data["input_operands"]
@@ -209,7 +211,7 @@ class TemplateDataGenerator:
                         if sl["name"]==rel_dim:
                             general_template_data["size_loops_mem"][operand]\
                                 [rel_dim]["mem_computation"]=\
-                                    general_template_data["tiling_sizes"][operand]\
+                                    sl["size"] if (general_template_data["fl_input_translations"][operand][sl["fullname"]] if is_op_input else sl["fullname"]) not in general_template_data["tiling_sizes"][operand] else general_template_data["tiling_sizes"][operand]\
                                     [general_template_data["fl_input_translations"][operand][sl["fullname"]] if is_op_input else sl["fullname"]]["size"]
                             break
                 rel_dim_name=rel_dim
@@ -258,7 +260,8 @@ class TemplateDataGenerator:
                 np.array(
                     [np.prod(
                         [general_template_data["size_loops_mem"][operand][dim][op_mem] + 
-                        (np.sum(general_template_data["overlaps"][general_template_data["input_dim_mapping"][dim]]) if operand in general_template_data["input_operands"] and dim in general_template_data["padded_dims"] else 0)
+                        (np.sum(general_template_data["overlaps"][general_template_data["input_dim_mapping"][dim]])\
+                         if operand in general_template_data["input_operands"] and dim in general_template_data["padded_dims"] and general_template_data["size_loops_mem"][operand][dim][op_mem]!=general_template_data["layer_attrs"]["loop_sizes"][general_template_data["input_dim_mapping"][dim]] else 0)
                          for dim in general_template_data["size_loops_mem"][operand].keys()]
                     )
                 for op_mem in self.template_data['ordered_operand_memories'][operand]

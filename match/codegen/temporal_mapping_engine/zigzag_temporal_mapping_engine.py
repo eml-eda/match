@@ -55,10 +55,9 @@ class ZigZagEngine(TemporalMappingEngine):
             """ size=#bit, bw=#bit"""
             memory_hierarchy_graph = MemoryHierarchy(operational_array=multiplier_array)
             for plat_mem in platform_memories:
-
                 mem_inst = MemoryInstance(
                     name = plat_mem.name,
-                    size = floor(( plat_mem.k_bytes * 1024 - plat_mem.buffer_for_layer_func(self.layer_data,self.pattern_name))* 8) ,
+                    size = floor(( plat_mem.k_bytes * 1024 - plat_mem.buffer_for_layer_func(self.layer_data,self.pattern_name,self.layer_data.specific_pattern))* 8),
                     r_bw=floor(plat_mem.r_bw),
                     w_bw=floor(plat_mem.w_bw),
                     r_cost=100,
@@ -122,6 +121,9 @@ class ZigZagEngine(TemporalMappingEngine):
             acc_name = 'MATCH'
             return Accelerator(acc_name, cores)
         
+        ex_module_acc=self.exec_module.generate_architecture_for(dse='zigzag',optimal_spatial_mapping=optimal_spatial_mapping,platform_memories=platform_memories,layer_data=self.layer_data)
+        if ex_module_acc is not None:
+            return ex_module_acc
         return get_accelerator(optimal_spatial_mapping=optimal_spatial_mapping,platform_memories=platform_memories)
     
     def generate_temporal_mapping(self,spatial_mapping:Dict={},platform_memories:Dict={},optimal_spatial_mapping:List=[],cost_model:Any=None): 
@@ -130,27 +132,40 @@ class ZigZagEngine(TemporalMappingEngine):
         self.workload[1]["match_layer_data"] = self.layer_data
         self.spatial_mapping = spatial_mapping
         try:
-            self.energy, self.latency, cme = api.get_hardware_performance_zigzag(
-                workload=self.workload,
-                accelerator=self.accelerator,
-                mapping=spatial_mapping,
-                opt="latency",
-                dump_filename_pattern=f"tmp/match-layer_?.json",
-                pickle_filename=f"tmp/match-saved_list_of_cmes.pickle",
-                lpf_limit=self.lpf_limit,
-                cost_model_class= cost_model
-            )
-            if hasattr(cme[0][0],"is_tm_valid") and not cme[0][0].is_tm_valid:
-                raise NoValidLoopOrderingFoundException(
-                    f"No valid loop ordering was found for layer {cme.layer}. Please make sure the spatial mapping is compatible with the architecture."
-                )
-        except NoValidLoopOrderingFoundException as exc:
-            self.energy=-1
-            self.latency=-1
-            self.cme=None
-            print(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
-            raise Exception(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
+            current_spatial_mapping = self.spatial_mapping
+            found_valid_temporal_mapping = False
+            while not found_valid_temporal_mapping:
+                try:
+                    print("Looking for temporal mapping with following spatial mapping",current_spatial_mapping)
+                    self.energy, self.latency, cme = api.get_hardware_performance_zigzag(
+                        workload=self.workload,
+                        accelerator=self.accelerator,
+                        mapping=current_spatial_mapping,
+                        opt="latency",
+                        dump_filename_pattern=f"tmp/match-layer_?.json",
+                        pickle_filename=f"tmp/match-saved_list_of_cmes.pickle",
+                        lpf_limit=self.lpf_limit,
+                        cost_model_class= cost_model
+                    )
+                    if hasattr(cme[0][0],"is_tm_valid"):
+                        found_valid_temporal_mapping = cme[0][0].is_tm_valid
+                except NoValidLoopOrderingFoundException as exc:
+                    found_valid_temporal_mapping = False
+                if not found_valid_temporal_mapping and all([v[1]==1 for v in list(current_spatial_mapping[self.pattern_name]["spatial_mapping"].values())]):
+                    raise NoValidLoopOrderingFoundException(
+                        f"No valid loop ordering was found for layer {cme[0][0].layer}."
+                    )
+                if not found_valid_temporal_mapping:
+                    max_spatial_size = max(list(current_spatial_mapping[self.pattern_name]["spatial_mapping"].values()),key= lambda a: a[1])
+                    curr_ = current_spatial_mapping[self.pattern_name]["spatial_mapping"]
+                    for dim_ in curr_.keys():
+                        dim_spat_size = current_spatial_mapping[self.pattern_name]["spatial_mapping"][dim_]
+                        if dim_spat_size==max_spatial_size:
+                            current_spatial_mapping[self.pattern_name]["spatial_mapping"][dim_] = (max_spatial_size[0],floor(max_spatial_size[1]/2))
+                            break
+
         except Exception as exc:
+            #breakpoint()
             self.energy=-1
             self.latency=-1
             self.cme=None
@@ -158,6 +173,7 @@ class ZigZagEngine(TemporalMappingEngine):
             raise Exception(f"[TEMPORAL MAPPING ENGINE] No valid loop ordering found: {exc}")
         self.cme = cme[0][0]
         self.zigzag_temporal_mapping = self.cme.temporal_mapping.mapping_dic_stationary
+        #breakpoint()
         if self.debuglayer:
             print(f"\n\nOur result Latency was Comp {self.cme.latency_total0} total {self.cme.latency_total2}\n\n")
             print(f"Total network energy = {self.energy} pJ")

@@ -6,6 +6,31 @@ from mako.template import Template
 from tvm import relay as relay_tvm
 import match
 
+def numpy_dtype_to_c_type(dtype):
+    """Translate NumPy dtype to corresponding C type."""
+    dtype_str = str(dtype)
+    
+    # Mapping NumPy dtype to C type
+    mapping = {
+        'float32': 'float',
+        'float64': 'double',
+        'int32': 'int',
+        'int64': 'long int',  # or 'long long int'
+        'int8': 'char',
+        'uint8': 'unsigned char',
+        'uint16': 'unsigned short',
+        'uint32': 'unsigned int',
+        'uint64': 'unsigned long int',  # or 'unsigned long long int'
+        'bool': '_Bool'  # or 'bool' in C99
+    }
+    
+    # Check if dtype exists in mapping
+    if dtype_str in mapping:
+        return mapping[dtype_str]
+    else:
+        raise ValueError(f"Unsupported dtype: {dtype}")
+
+
 class RelaySave:
     def __init__(self,prefix,mod,params):
         self.prefix=prefix
@@ -15,10 +40,16 @@ class RelaySave:
 output_path=None
 relay_list=[]
 schedules=[]
+searched_schedules=[]
+tmap_searched=[]
 
 def reset_schedules():
     global schedules
+    global searched_schedules
+    global tmap_searched
     schedules=[]
+    searched_schedules=[]
+    tmap_searched=[]
 
 def reset_relay_list():
     global relay_list
@@ -75,6 +106,7 @@ def add_save_relay(prefix="",mod=None,params=None):
         mod=None if mod is None else relay_tvm.astext(mod),
         params=None if params is None else relay_tvm.save_param_dict(params=params)
     ))
+    save_all_relay()
 
 def save_all_relay():
     global relay_list
@@ -86,7 +118,7 @@ def save_all_relay():
             with open(f"{get_output_path()}/{relay_save.prefix}_params.txt","wb") as par_file:
                 par_file.write(relay_save.params)
 
-def save_codegen_schedule(node,temporal_mapping,spatial_mapping):
+def save_codegen_schedule(node,temporal_mapping,spatial_mapping,latency,energy):
     loops_str=""
     for idx,tmap in enumerate(temporal_mapping):
         loops_str+="\t"*idx
@@ -98,9 +130,33 @@ def save_codegen_schedule(node,temporal_mapping,spatial_mapping):
         loops_str+=f"for {tmap['fullname']} in 0:{tmap['size']}: {op_str}\n"
 
     schedules.append(f"\nFor node\n{node}\
-                    \nMATCH found that the best schedule has the following temporal mapping\
+                    \nMATCH found that the best schedule, with expected latency {latency} and energy {energy}, has the following temporal mapping\
                     \n{loops_str}\n")
-    
+
+def save_schedule_search_res(name,latency,energy,temporal_mapping,node):
+    loops_str=""
+    for idx,tmap in enumerate(temporal_mapping):
+        loops_str+="\t"*idx
+        ops=[k[4:] for k in tmap.keys() if 'mem_' in k]
+        op_str=""
+        for op in ops:
+            mem_op=f'mem_{op}'
+            op_str+=f" [{op} in {tmap[mem_op]}] "
+        loops_str+=f"for {tmap['fullname']} in 0:{tmap['size']}: {op_str}\n"
+
+    searched_schedules.append(f"\nFor node\n{node}\
+                    \nMATCH found a schedule with pattern {name} with expected latency {latency} and energy {energy}\n with the following temporal mapping\
+                    \n{loops_str}\n")
+    tmap_searched.append("\n#################------##############\n")
+
+def save_tmap_search_res(layer_data,temporal_mapping,latency,energy):
+    tmap_searched.append(f"\nFor layer data with sizes: {layer_data.loop_dim_size} and strides {layer_data.strides} tmap:\
+                    \n{temporal_mapping}\nhas expected latency {latency} and energy {energy}\n")
+
 def save_all_schedules():
     with open(f"{get_output_path()}/match_schedules.log","w") as scheds_file:
         scheds_file.writelines(schedules)
+    with open(f"{get_output_path()}/match_searched_schedules.log","w") as scheds_file:
+        scheds_file.writelines(searched_schedules)
+    with open(f"{get_output_path()}/match_searched_tmaps.log","w") as scheds_file:
+        scheds_file.writelines(tmap_searched)

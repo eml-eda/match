@@ -1,19 +1,7 @@
 from match.codegen.template import TemplateDataGenerator,TemplateEngine
-from match.codegen.temporal_mapping_generator import TemporalMappingGenerator
-from match.codegen.temporal_mapping_engine import get_temporal_mapping_engine
 
 # TVM imports
 import tvm
-# ZigZag imports
-from math import ceil
-from mako.template import Template
-from mako import exceptions
-import functools
-import operator
-from collections import OrderedDict
-import copy
-from typing import Dict,List,Type
-from match.utils import mock_func
 from match.target import get_target
 
 def get_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:str=""):
@@ -30,7 +18,12 @@ def get_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:str=""):
 
 def codegen(mod: tvm.ir.IRModule):
     _,exec_module_name,pattern_name = mod.body.op.attrs["Composite"].split(".")[1:]
-    code, error_codegen = get_code(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
+    try:
+        code, error_codegen = get_code(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
+    except Exception as exc:
+        #breakpoint()
+        raise exc
     if error_codegen:
+        #breakpoint()
         raise Exception("Couldn't generate output")
     return code

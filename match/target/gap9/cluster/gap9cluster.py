@@ -7,11 +7,12 @@ from match.target.gap9.cluster.network_transformations import network_transforma
 from match.target.gap9.cluster.network_transformations import adjust_network as gap_adjust_net
 from match.target.gap9.cluster.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
 from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
+from match.target.memory_inst import MemoryInst
 import os
 import tvm
 
 class Gap9Cluster(ExecModule):
-    def __init__(self):
+    def __init__(self,**kwargs):
         super(Gap9Cluster, self).__init__(name="cluster",
                                           specific_patterns=[
                                               "pointwise_conv2d",
@@ -23,7 +24,9 @@ class Gap9Cluster(ExecModule):
                                               "dense_out"
                                           ],
                                           src_path=os.path.dirname(__file__)+"/src",
-                                          inc_path=os.path.dirname(__file__)+"/include")
+                                          inc_path=os.path.dirname(__file__)+"/include",
+                                          **kwargs)
+        self.L1_SIZE=90 if "l1_size" not in kwargs else kwargs["l1_size"]
 
     def optimal_spatial_mapping_def(self, pattern_name: str = "gap9cluster_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
         conv2d_patterns=[
@@ -38,15 +41,15 @@ class Gap9Cluster(ExecModule):
         ]
         if pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])==1:
             return [
-                ("OY",4),("OX",4),("K",4)
+                ("OY",8),("OX",2),("K",4)
             ]
         elif pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])<4 and layer_attrs["nn.conv2d_depthwise"]:
             return [
-                ("K",8),("OX",4),("OY",self.FULL_DIM)
+                ("K",8),("OX",8),("OY",self.FULL_DIM)
             ]
         elif pattern_name in conv2d_patterns and layer_attrs["nn.conv2d_depthwise"]:
             return [
-                ("K",8),("OX",4),("OY",self.FULL_DIM)
+                ("K",8),("OX",8),("OY",self.FULL_DIM),
             ]
         elif pattern_name in conv2d_patterns:
             return [
@@ -57,9 +60,9 @@ class Gap9Cluster(ExecModule):
                 ("OY",8),("OX",2)
             ]
         elif pattern_name in dense_patterns:
-            # TODO: K 8 C 1
+            # TODO: K 8 C 4
             return [
-                ("K",8),("C",2)
+                ("K",8)
             ]
         else:
             # DEFAULT LIKE CONV2D
@@ -96,19 +99,32 @@ class Gap9Cluster(ExecModule):
             return "conv2d"
 
     def memories_def(self, pattern_name, operands):
-        memories=super().memories_def(pattern_name=pattern_name,operands=operands)
-        if pattern_name!="add_requant":
-            memories[0].double_buffering_support=True
+        memories = [
+            # from lower level to higher level memories
+            # TEST: set now L1 to 9 kB just to force TILING 
+            MemoryInst(name="l1_mem",k_bytes=self.L1_SIZE,operands=operands,double_buffering_support=True),
+            MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
+        ]
+        if pattern_name=="add_requant":
+            memories[0].double_buffering_support=False
 
-        def buffers_for_l1_mem(layer_data,pattern_name):
+        def buffers_for_l1_mem(layer_data,pattern_name,specific_pattern):
             buff_mem=0
             # buffer for the cores of the accelerator (weights dimensions)
-            if pattern_name!='add_requant' :
+            NUM_CORES = 8
+            NO_IM2COL_PTS_LIST = ['add_requant','dense_out','dense_bnorm_requant','dense_bias_add_requant']
+            NO_IM2COL_SPEC_PTS_LIST = ['pointwise_conv2d']
+            IS_DW = "depthwise_conv2d" in specific_pattern
+            if IS_DW:
+                buff_mem = layer_data.loop_dim_size["FY"] * (layer_data.pr_loop_dim_size["IY"] + sum(layer_data.padding["IY"])) + layer_data.loop_dim_size["FY"]
+            elif (pattern_name not in NO_IM2COL_PTS_LIST) and (specific_pattern not in NO_IM2COL_SPEC_PTS_LIST):
                 buff_mem=2*layer_data.loop_dim_size['C']*layer_data.loop_dim_size['FY']*layer_data.loop_dim_size['FX']
             # buff for each core
-            buff_mem*=8
+            buff_mem*=NUM_CORES
             # bias
             if pattern_name!="add_requant":
+                buff_mem+=layer_data.loop_dim_size['K']*4
+            if pattern_name not in ['conv2d_bias_add_requant','conv2d_bias_add','dense_bias_add_requant','add_requant','dense_out']:
                 buff_mem+=layer_data.loop_dim_size['K']*4
             return buff_mem
         

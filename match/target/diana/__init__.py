@@ -1,0 +1,1 @@
+from .diana import Diana
