@@ -37,9 +37,20 @@ int main(int argc,char** argv){
     );
 
     % else:
-    match_default_runtime(&match_ctx);
-    % endif
+    % for out_name,out in match_outputs.items():
+    ${out["c_type"]}* ${out_name}_pt = malloc(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+    % endfor
 
+    match_default_runtime(
+        % for out_name in match_outputs.keys():
+        ${out_name}_pt,
+        % endfor
+        &match_ctx);
+    % endif
+    
+    % for out_name in match_outputs.keys():
+    free(${out_name}_pt);
+    % endfor
     // target specific cleaning functions
     % for clean_func in target.clean_funcs:
     ${clean_func}();

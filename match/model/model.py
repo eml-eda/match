@@ -1,15 +1,20 @@
 
 
+from math import prod
 import os
 from pathlib import Path
 import subprocess
 from typing import Dict, List
 
 import mako
+import numpy as np
 from match.model.dynamic_dim import DynamicDim
 from match.utils import save_all_relay,add_save_relay,reset_relay_list,reset_output_path,set_output_path,reset_schedules,save_all_schedules
 from match.driver.driver import driver
 from mako.template import Template
+
+from match.utils.utils import numpy_dtype_to_c_type
+import tvm
 
 class MatchModel:
 
@@ -102,3 +107,12 @@ def build_runtime(static_models:List[MatchModel]=[],dynamic_dims:Dict[str,Dynami
         run_file.write(Template(filename=os.path.dirname(__file__)+"/../codegen/template/lib/match_runtime_template.c").render(**temp_args))
     with open(abs_out_path+"/include/match_runtime.h","w") as run_file:
         run_file.write(Template(filename=os.path.dirname(__file__)+"/../codegen/template/lib/match_runtime_template.h").render(**temp_args))
+
+def get_match_inputs_and_outputs(static_models:List[MatchModel]=[]):
+    mod_checked_types = tvm.relay.transform.InferType()(static_models[0].relay_mod)
+    func=mod_checked_types["main"]
+    relay_inputs=func.params
+    relay_out_types=func.checked_type.arg_types[1:]
+    match_inputs={inp_.name_hint:{"name":inp_.name_hint,"c_arr_size":int(prod(inp_.type_annotation.shape)*np.dtype(inp_.type_annotation.dtype).itemsize),"c_type":numpy_dtype_to_c_type(inp_.type_annotation.dtype),"prod_shape":int(prod(inp_.type_annotation.shape)),"shape":[int(sh) for sh in inp_.type_annotation.shape], "c_arr_values":"{"+str([1 for _ in range(int(prod(inp_.type_annotation.shape)))])[1:-1]+"}"} for inp_ in relay_inputs}
+    match_outputs = {f"output{idx if len(relay_out_types)>1 else ''}":{"name":f"output{idx if len(relay_out_types)>1 else ''}","c_arr_size":int(prod(out.shape)*np.dtype(out.dtype).itemsize),"c_type":numpy_dtype_to_c_type(out.dtype),"prod_shape":int(prod(out.shape)),"shape":[int(sh) for sh in out.shape],} for idx,out in enumerate(relay_out_types)}
+    return match_inputs,match_outputs

@@ -275,7 +275,11 @@ void match_generative_runtime(
 % else:
 #include <match_default_inputs.h>
 
-void match_default_runtime(match_runtime_ctx* match_ctx){
+void match_default_runtime(
+    % for out_name,out in outputs.items():
+    ${out["c_type"]}* ${out_name}_pt,
+    % endfor
+    match_runtime_ctx* match_ctx){
     struct tvmgen_default_inputs model_inps = {
         % for inp_name in inputs.keys():
         .${inp_name} = ${inp_name}_default,
@@ -283,7 +287,7 @@ void match_default_runtime(match_runtime_ctx* match_ctx){
     };
     struct tvmgen_default_outputs model_outs = {
         % for out_name in outputs.keys():
-        .${out_name} = ${out_name}_default,
+        .${out_name} = ${out_name}_pt,
         % endfor
     };
     match_ctx->status = tvmgen_default_run(&model_inps,&model_outs);

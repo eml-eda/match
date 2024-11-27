@@ -6,8 +6,8 @@
 #include <${include}.h>
 % endfor
 
-% for inp in match_inputs:
-${inp["c_type"]} ${target.input_macros} ${inp["name"]}_default[${inp["c_arr_size"]}] = ${inp["c_arr_values"]};
+% for inp_name,inp in match_inputs.items():
+extern const ${inp["c_type"]} ${target.input_macros} ${inp["name"]}_default[${inp["c_arr_size"]}];
 % endfor
 % endif
 

@@ -35,6 +35,10 @@ void match_generative_runtime(
     match_runtime_ctx* match_ctx
 );
 
-void match_default_runtime(match_runtime_ctx* match_ctx);
+void match_default_runtime(
+    % for out_name,out in outputs.items():
+    ${out["c_type"]}* ${out_name}_pt,
+    % endfor
+    match_runtime_ctx* match_ctx);
 
 #endif

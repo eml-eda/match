@@ -2,7 +2,7 @@ from pathlib import Path
 import shutil
 from typing import Dict, List
 from match.model.dynamic_dim import DynamicDim
-from match.model.model import MatchModel,build_runtime
+from match.model.model import MatchModel,build_runtime, get_match_inputs_and_outputs
 from match.relay.compiled_module import CompiledModule
 from match.relay.models import create_model_add_convs, create_model_conv_2d
 from match.target.get_target import get_target, reset_target, set_target
@@ -39,6 +39,9 @@ def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
     runtime="default"
     if len(dynamic_dims)>0:
         runtime="generative"
+    
+    if match_inputs is None or match_outputs is None:
+        match_inputs,match_outputs=get_match_inputs_and_outputs(models_to_compile)
     
     build_runtime(models_to_compile,dynamic_dims,match_inputs,match_outputs,runtime,output_path)
     
