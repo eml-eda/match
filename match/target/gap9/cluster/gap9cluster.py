@@ -1,4 +1,4 @@
-from math import ceil
+from math import ceil, prod
 from typing import Dict, List
 
 import numpy as np
@@ -28,7 +28,7 @@ class Gap9Cluster(ExecModule):
                                           **kwargs)
         self.L1_SIZE=90 if "l1_size" not in kwargs else kwargs["l1_size"]
 
-    def optimal_spatial_mapping_def(self, pattern_name: str = "gap9cluster_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
+    def zigzag_optimal_spatial_mapping_def(self, match_node=None, pattern_name = "conv_2d"):
         conv2d_patterns=[
             "conv2d_bnorm_requant",
             "conv2d_bias_add_requant",
@@ -39,15 +39,17 @@ class Gap9Cluster(ExecModule):
             "dense_bias_add_requant",
             "dense_out"
         ]
-        if pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])==1:
+        fx_fy = prod(match_node.ops["conv2d"].kernel_size)
+        dw = match_node.ops["conv2d"].depthwise
+        if pattern_name in conv2d_patterns and fx_fy==1:
             return [
                 ("OY",8),("OX",2),("K",4)
             ]
-        elif pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])<4 and layer_attrs["nn.conv2d_depthwise"]:
+        elif pattern_name in conv2d_patterns and fx_fy<4 and dw:
             return [
                 ("K",8),("OX",8),("OY",self.FULL_DIM)
             ]
-        elif pattern_name in conv2d_patterns and layer_attrs["nn.conv2d_depthwise"]:
+        elif pattern_name in conv2d_patterns and dw:
             return [
                 ("K",8),("OX",8),("OY",self.FULL_DIM),
             ]
@@ -70,7 +72,7 @@ class Gap9Cluster(ExecModule):
                 ("OY",8),("OX",2),("K",4)
             ]
     
-    def specific_pattern_def(self, pattern_name: str = "conv_2d", dim_sizes: Dict[str, int] = ..., layer_attrs: Dict = ...):
+    def specific_pattern_def(self, match_node=None, pattern_name = "conv_2d"):
         conv2d_patterns=[
             "conv2d_bnorm_requant",
             "conv2d_bias_add_requant",
@@ -80,11 +82,13 @@ class Gap9Cluster(ExecModule):
             "dense_bnorm_requant",
             "dense_bias_add_requant",
         ]
-        if pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])==1:
+        fx_fy = prod(match_node.ops["conv2d"].kernel_size)
+        dw = match_node.ops["conv2d"].depthwise
+        if pattern_name in conv2d_patterns and fx_fy==1:
             return "pointwise_conv2d"
-        elif pattern_name in conv2d_patterns and (dim_sizes['FY']*dim_sizes['FX'])<4 and layer_attrs["nn.conv2d_depthwise"]:
+        elif pattern_name in conv2d_patterns and fx_fy<4 and dw:
             return "depthwise_conv2d_less_4"
-        elif pattern_name in conv2d_patterns and layer_attrs["nn.conv2d_depthwise"]:
+        elif pattern_name in conv2d_patterns and dw:
             return "depthwise_conv2d"
         elif pattern_name in conv2d_patterns:
             return "conv2d"
@@ -108,24 +112,31 @@ class Gap9Cluster(ExecModule):
         if pattern_name=="add_requant":
             memories[0].double_buffering_support=False
 
-        def buffers_for_l1_mem(layer_data,pattern_name,specific_pattern):
+        def buffers_for_l1_mem(match_node,pattern_name,specific_pattern):
             buff_mem=0
             # buffer for the cores of the accelerator (weights dimensions)
             NUM_CORES = 8
             NO_IM2COL_PTS_LIST = ['add_requant','dense_out','dense_bnorm_requant','dense_bias_add_requant']
             NO_IM2COL_SPEC_PTS_LIST = ['pointwise_conv2d']
             IS_DW = "depthwise_conv2d" in specific_pattern
+            conv = match_node.ops["conv2d"] if "conv2d" in match_node.ops else None
+            inp_tensors_names = [n for n in match_node.var_tensors.keys()]
+            out_tensors_names = [n for n in match_node.output_tensors.keys()]
+            inp_dims = [d.size for d in match_node.var_tensors[inp_tensors_names[0]].dims]
+            out_dims = [d.size for d in match_node.output_tensors[out_tensors_names[0]].dims]
+            k_size = (1,1) if conv is None else conv.kernel_size
+            pad = (0,0,0,0) if conv is None else conv.padding
             if IS_DW:
-                buff_mem = layer_data.loop_dim_size["FY"] * (layer_data.pr_loop_dim_size["IY"] + sum(layer_data.padding["IY"])) + layer_data.loop_dim_size["FY"]
+                buff_mem = k_size[0] * (inp_dims[2] + sum([pad[0],pad[2]])) + k_size[0]
             elif (pattern_name not in NO_IM2COL_PTS_LIST) and (specific_pattern not in NO_IM2COL_SPEC_PTS_LIST):
-                buff_mem=2*layer_data.loop_dim_size['C']*layer_data.loop_dim_size['FY']*layer_data.loop_dim_size['FX']
+                buff_mem=2*inp_dims[1]*k_size[0]*k_size[1]
             # buff for each core
             buff_mem*=NUM_CORES
             # bias
             if pattern_name!="add_requant":
-                buff_mem+=layer_data.loop_dim_size['K']*4
+                buff_mem+=out_dims[1]*4
             if pattern_name not in ['conv2d_bias_add_requant','conv2d_bias_add','dense_bias_add_requant','add_requant','dense_out']:
-                buff_mem+=layer_data.loop_dim_size['K']*4
+                buff_mem+=out_dims[1]*4
             return buff_mem
         
         memories[0].buffer_for_layer_func=buffers_for_l1_mem
@@ -137,7 +148,7 @@ class Gap9Cluster(ExecModule):
     def network_transformations(self,opts):
         return gap9network_transformations(opts=opts)
 
-    def def_include_list(self,patter_name):
+    def def_include_list(self,pattern_name):
         return ["cluster_mem.h","cluster_comp.h"]
 
     def mem_apis_def(self,mem_apis: MemoryApis=MemoryApis()):
@@ -185,7 +196,7 @@ class Gap9Cluster(ExecModule):
     def adjust_network(self, opts):
         return gap_adjust_net(opts=opts)
     
-    def weights_and_constants(self,pattern_name,layer_data,layer_arguments:List=[]):
+    def weights_and_constants(self, match_node, pattern_name):
         """define how the weights and constants of a layer must be saved in C on the generated code
 
         Args:
@@ -203,18 +214,19 @@ class Gap9Cluster(ExecModule):
             return np.frombuffer(value.tobytes(),dtype='uint8')
         arguments=np.array([],dtype=np.uint8)
         single_constants=dict()
-        for (layer_arg_name,layer_arg_val) in layer_arguments:
-            if isinstance(layer_arg_val, tvm.relay.Constant):
-                if len(layer_arg_val.data.shape)==0:
-                    single_constants[layer_arg_name]=str(layer_arg_val.data)
+        conv2d = "conv2d" in match_node.ops_occurrences
+        dense = "nn.dense" in match_node.ops_occurrences
+        for (layer_arg_name,layer_arg_val) in match_node.const_tensors.items():
+            if len(layer_arg_val.data.shape)==0:
+                single_constants[layer_arg_name]=str(layer_arg_val.data)
+            else:
+                if layer_arg_name=="FunctionVar_0_1" and conv2d:
+                    constbytes=bytaze(layer_arg_val.data.transpose((0,2,3,1)))
+                elif layer_arg_name=="FunctionVar_0_1" and dense:
+                    constbytes=bytaze(layer_arg_val.data.transpose((0,1)))
                 else:
-                    if layer_arg_name=="nn.conv2d.param.0":
-                        constbytes=bytaze(layer_arg_val.data.numpy().transpose((0,2,3,1)))
-                    elif layer_arg_name=="nn.dense.param.0":
-                        constbytes=bytaze(layer_arg_val.data.numpy().transpose((0,1)))
-                    else:
-                        constbytes=bytaze(layer_arg_val.data.numpy())
-                    arguments=np.concatenate((arguments,constbytes))
+                    constbytes=bytaze(layer_arg_val.data)
+                arguments=np.concatenate((arguments,constbytes))
         return {
             "value":c_friendly_npvalue(arguments),
             "len":arguments.shape[0],

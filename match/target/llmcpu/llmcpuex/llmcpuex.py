@@ -30,12 +30,6 @@ class LLMCpuEx(ExecModule):
                                           src_path=os.path.dirname(__file__)+"/src",
                                           inc_path=os.path.dirname(__file__)+"/include",
                                           **kwargs)
-        
-
-    def optimal_spatial_mapping_def(self, pattern_name: str = "conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
-        return [
-                ("K",16)
-            ]
 
     def memories_def(self, pattern_name, operands):
         mem = [
@@ -51,7 +45,7 @@ class LLMCpuEx(ExecModule):
                 wildcard(), wildcard()
             )
         return [
-            #PartitioningPattern(name="dense", pattern=dense_pattern, ordered_operation="dense"),
+            PartitioningPattern(name="dense", pattern=dense_pattern, ordered_operation="dense"),
         ]
 
     def network_transformations(self, opts):
@@ -78,7 +72,7 @@ class LLMCpuEx(ExecModule):
             
         return [RemoveBoolCastTransform()]
 
-    def def_include_list(self,patter_name):
+    def def_include_list(self,pattern_name):
         return ["llmcpulib.h"]
 
     def comp_apis_def(self,comp_apis: ComputationalApis=ComputationalApis()):

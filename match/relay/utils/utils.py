@@ -1,23 +1,16 @@
 import pathlib
-import tarfile
 import shutil
 import ctypes
-import re
 import os
-import subprocess
-import argparse
 from match.target.target import DefaultMatchTarget, MatchTarget
 import tvm
 import tvm.relay as relay
 import numpy as np
-from tvm.driver.tvmc.compiler import compile_model
-from tvm.driver.tvmc.model import TVMCModel
-from tvm.relay.backend import Executor, Runtime
 
-from typing import Tuple, Dict, Optional, Union
+from typing import Tuple, Dict
 import numpy.typing as npt
 from mako.template import Template
-from match.utils import get_output_path
+from mako import exceptions
 
 def numpy_to_array(np_arr: npt.NDArray, dtype: str):
     """ Convert a numpy array to a TVM array with datatype `dtype`.
@@ -36,8 +29,7 @@ def numpy_to_array(np_arr: npt.NDArray, dtype: str):
 
     return arr
 
-
-def relay_gap9_layout_transform(x, shape):
+def relay_layout_transform(x, shape):
     """
     Creates a relay layout transform that reverses chunks of four bytes
     """
@@ -66,7 +58,7 @@ def simple_basic_type_checker(x,weights_shape):
             call = None
     return [1,int(weights_shape[0]),int(starting_shape[2]//strides[0]),int(starting_shape[3]//strides[1])]
 
-def relay_gap9_conv2d(input_tensor: relay.Var, layer_name: str,
+def relay_conv2d_uint8_requant(input_tensor: relay.Var, layer_name: str,
                       w_value: tvm.nd.array,
                       b_value: tvm.nd.array,
                       strides: Tuple[int, ...] = (1, 1),
@@ -78,8 +70,7 @@ def relay_gap9_conv2d(input_tensor: relay.Var, layer_name: str,
                                                     Dict[relay.Expr,
                                                          tvm.nd.array]]:
     '''
-    Creates a relay conv2d op which is GAP9 compatible
-    This means it can be offloaded to the accelerator.
+    Creates a relay conv2d op
     :param input_tensor: relay.Var for input
     :param layer_name: string that determines relay variable naming
     :param w_value: int8 tensor that contains weight values
@@ -151,14 +142,14 @@ def relay_gap9_conv2d(input_tensor: relay.Var, layer_name: str,
     return x, params
 
 
-def relay_gap9_dense(input_tensor: relay.Var, layer_name: str,
+def relay_dense_uint8_requant(input_tensor: relay.Var, layer_name: str,
                      w_value: tvm.nd.array,
                      b_value: tvm.nd.array,
                      act: bool = False,
                      shift_bits: int = 0,
                      batchnorm: bool = False):
     """
-    Creates a relay dense op which is gap9 compatible
+    Creates a relay dense op
     :param input_tensor: relay.Var for input
     :param layer_name: string that determines relay variable naming
     :param w_value: int8 tensor that contains weight values, must be of shape (num_inputs, num_outputs, 1, 1)
@@ -205,12 +196,12 @@ def relay_gap9_dense(input_tensor: relay.Var, layer_name: str,
     return x, params
 
 
-def relay_gap9_add(input_tensor_a: relay.Var,
+def relay_add_uint8_requant(input_tensor_a: relay.Var,
                    input_tensor_b: relay.Var,
                    layer_name: str,
                    shift_bits: int = 0):
     """
-    Creates a relay element-wise-add op which is gap9 compatible
+    Creates a relay element-wise-add op
     :param input_tensor_a: relay.Var for input tensor A
     :param input_tensor_b: relay.Var for input tensor B
     :param layer_name: string that determines relay variable naming
@@ -262,106 +253,6 @@ def create_random_array(shape: Tuple[int, ...], dtype: str) -> tvm.nd.array:
                                  size=shape, dtype=np_dtype)
     return numpy_to_array(np_array, dtype)
 
-
-def tvmc_wrapper(model: TVMCModel, target: str = "match, c",
-                 cpu_type = "riscv_cpu",
-                 static_mem_plan=True,
-                 static_mem_plan_algorithm="hill_climb",
-                 fuse_layers: bool = True, 
-                 package_path: pathlib.Path = pathlib.Path("model.tar"),
-                 mod_name: str = "default",
-                 ):
-    '''
-    Utility wrapper for TVMC that sets supported
-    :param model: TVMC model that you wish to compile
-    :param target: Can be "match, c" if you want to offload all possible
-        computations to accelerator, and can be "c" for golden model checking.
-    :param fuse_layers: sets relay.FuseOps.max_depth parameter to 1
-        if set to False. This tells relay to not fuse operations.
-        This can be useful when debuggin the TVM-generated c code kernels.
-    '''
-    # Check arguments
-    # Add -device=arm_cpu as default device for TVM C codegen
-    # This will use the arm_cpu relay strategy as opposed to the x86 one.
-    target += f" -device={cpu_type}"
-    # This has to be set by default to use the C runtime
-    """
-    These are the existing configurations: tir.ReduceBranchingThroughOvercompute, tir.experimental_dma_bypass_cache,
-    tir.reset_start_id, relay.collage.tvm_max_depth, tir.LoopPartition, tir.usmp.custom_algorithm, tir.instr_siblings,
-    relay.FuseOps.max_depth, tir.debug_keep_trivial_loop, tir.InjectDoubleBuffer, tir.detect_global_barrier, testing.immutable_module,
-    ir.enable_si_builder, tir.use_async_copy, relay.fallback_device_type, te.keep_schedule_record, tir.usmp.algorithm, tir.noalias,
-    tir.disable_storage_rewrite, relay.collage.byoc_fusion_style, tir.Simplify, relay.frontend.fill_span, tir.usmp.use_workspace_io,
-    tir.lwp_disable_func_prof, tir.RemoveNoOp, relay.backend.use_meta_schedule_dispatch, tir.disable_assert, tir.enable_debug,
-    tir.add_lower_pass, tir.contrib.ethos-u.copy_compute_reordering_max_copy_movements, relay.backend.tir_converter,
-    relay.backend.use_auto_scheduler, tir.contrib.ethos-u.copy_compute_reordering_reorder_by_cycles,
-    relay.ToMixedPrecision.keep_orig_output_dtype, tir.instrument_bound_checkers, tir.enable_equiv_terms_in_cse_tir, tir.HoistIfThenElse,
-    tir.lwp_min_height, tir.instrument_lwp, relay.remove_standalone_reshapes.enable, tir.disable_cse_tir, tir.lwp_max_depth,
-    relay.FuseOps.link_params, tir.UnrollLoop, relay.backend.use_meta_schedule, tir.vtcm_capacity, relay.collage.byoc_max_depth,
-    tir.is_entry_func, tir.ptx_ldg32, tir.HoistExpression, tir.usmp.enable, tir.disable_vectorize
-    """
-    pass_context_configs = []
-    # vectorize doesnt' work good with C
-    pass_context_configs.append("tir.disable_vectorize=1")
-    # enable static memory plan
-    pass_context_configs.append(f"tir.usmp.enable={int(static_mem_plan)}")
-    # algorithm to use for static memory plan
-    #if static_mem_plan:
-    pass_context_configs.append(f"tir.usmp.algorithm={static_mem_plan_algorithm}")
-    #pass_context_configs.append("tir.disable_storage_rewrite=1")
-    #pass_context_configs.append("tir.usmp.use_workspace_io=1")
-    #pass_context_configs.append("tir.InjectDoubleBuffer=1")
-    #pass_context_configs.append("relay.backend.disable_memory_plan=1")
-    if not fuse_layers:
-        pass_context_configs.append('relay.FuseOps.max_depth=1')
-    compile_model(tvmc_model=model,
-                  target=target,
-                  opt_level=3,
-                  executor=Executor("aot",
-                                    {
-                                        "interface-api": "c",
-                                        "unpacked-api": True,
-                                        #"workspace-byte-alignment": 4,
-                                    },
-                                    ),
-                  runtime=Runtime("crt"),
-                  output_format="mlf",
-                  package_path=package_path,
-                  pass_context_configs=pass_context_configs,
-                  mod_name=mod_name,
-                  #desired_layout="NHWC",
-                  #desired_layout_ops=["nn.conv2d"]
-                  )
-
-
-def tvmc_compile_and_unpack(model: TVMCModel, target: str = "match, c",
-                            fuse_layers: bool = True,
-                            build_path: str = "./build",
-                            cpu_type: str = "riscv_cpu",
-                            static_mem_plan: bool = True,
-                            static_mem_plan_algorithm: str = "hill_climb",
-                            mod_name: str = "default",):
-    '''
-    Utility function that calls tvmc_wrapper and extracts output mlf
-    (= TVM model library format) file.
-    :param model: TVMC model that you wish to compile
-    :param target: Can be "match, c" if you want to offload all possible
-        computations to accelerator, and can be "c" for golden model checking.
-    :param fuse_layers: sets relay.FuseOps.max_depth parameter to 1
-        if set to False. This tells relay to not fuse operations.
-        This can be useful when debuggin the TVM-generated c code kernels.
-    :param build_path: path to export mlf file output to
-    '''
-    # Compile new model
-    mlf_path = os.path.join(build_path, "model.tar")
-    tvmc_wrapper(model=model, target=target, fuse_layers=fuse_layers, package_path=mlf_path,
-                 cpu_type=cpu_type,static_mem_plan=static_mem_plan,static_mem_plan_algorithm=static_mem_plan_algorithm,
-                 mod_name=mod_name)
-    # extract mlf file
-    mlf = tarfile.TarFile(mlf_path)
-    mlf.extractall(build_path)
-    # remove the archive
-    os.remove(mlf_path)
-
 def create_build_dir(build_path: str = "./build",
                      match_lib_path: str = "./lib",
                      target:MatchTarget=DefaultMatchTarget()):
@@ -380,26 +271,25 @@ def create_build_dir(build_path: str = "./build",
         # If no build folder exists create one
         build_path.mkdir(parents=True)
     # Copy over other necessary files
-    src_dir = pathlib.Path("src")
-    include_dir = pathlib.Path("include")
-    # Copy over src, include folders
-    shutil.copytree(src=match_lib_path / src_dir, 
-                    dst=build_path / src_dir, dirs_exist_ok=True)
-    shutil.copytree(src=match_lib_path / include_dir, 
-                    dst=build_path / include_dir, dirs_exist_ok=True)
+    pathlib.Path(build_path / "src").mkdir(parents=True,exist_ok=True)
+    pathlib.Path(build_path / "include").mkdir(parents=True,exist_ok=True)
+
+    shutil.copytree(src=match_lib_path / "static" / "match" /"src",
+                    dst=build_path / "src" / "match", dirs_exist_ok=True)
+    shutil.copytree(src=match_lib_path / "static" / "match" /"include",
+                    dst=build_path / "include" / "match", dirs_exist_ok=True)
     for ex_mod in target.exec_modules:
         # Copy over src, include folders
         if os.path.isdir(ex_mod.src_path):
             shutil.copytree(src=pathlib.Path(ex_mod.src_path), 
-                            dst=build_path / src_dir, dirs_exist_ok=True)
+                            dst=build_path / "src" / ex_mod.name, dirs_exist_ok=True)
         else:
             print(f"Src directory doesn't exist for exec module {ex_mod.name} path {ex_mod.src_path}!")
         if os.path.isdir(ex_mod.src_path):
             shutil.copytree(src=pathlib.Path(ex_mod.inc_path), 
-                            dst=build_path / include_dir, dirs_exist_ok=True)
+                            dst=build_path / "include" / ex_mod.name, dirs_exist_ok=True)
         else:
             print(f"Include directory doesn't exist for exec module {ex_mod.name} path {ex_mod.inc_path}!")
-    match_target_params_template = Template(filename=f"{match_lib_path}/match_target_params_template.h")
     memory_names={ex_mod.name:ex_mod.get_all_memories_names() for ex_mod in target.exec_modules}
     patterns_set=set()
     memories_set=set()
@@ -407,7 +297,30 @@ def create_build_dir(build_path: str = "./build",
         memories_set.update(exec_module.get_all_memories_names())
         patterns_set.update([pt.name for pt in exec_module.partitioning_patterns()])
         patterns_set.update(exec_module.specific_patterns)
-    temp_data={"exec_modules":target.exec_modules,"memory_names":memory_names,"patterns_list":list(patterns_set),"memories_list":list(memories_set)}
-    match_target_params=match_target_params_template.render(**temp_data)
-    with open(f"{build_path}/include/match_target_params.h", "w") as fw:
-        fw.write(match_target_params)
+    template_data={"exec_modules":target.exec_modules,"memory_names":memory_names,"patterns_list":list(patterns_set),"memories_list":list(memories_set)}
+
+    def translate_filename_and_get_template_data(filename, target):
+        if filename == "exec_module":
+            return {exec_module.name+"/"+exec_module.name:{"exec_module":exec_module} for exec_module in target.exec_modules}
+        if filename == "target":
+            return {target.name:{"target":target}}
+        return {filename:template_data}
+        
+    for base_dir in ["src", "include"]:
+        template_dir = match_lib_path / "mako" / "create" / base_dir
+        for filename in os.listdir(template_dir):
+            filename_without_dots = filename.split(".")
+            filename_without_ext = ".".join(filename_without_dots[:-1])
+            ext = filename_without_dots[-1]
+            if ext in {"c","h","json"}:
+                for build_filename,build_template_data in translate_filename_and_get_template_data(filename_without_ext, target).items():
+                    try:
+                        template = Template(filename = os.path.join(template_dir, filename))
+                        rendered_content = template.render(**build_template_data)
+                        output_path = os.path.join(build_path, base_dir, build_filename + "." + ext)
+                        with open(output_path, "w") as output_file:
+                            output_file.write(rendered_content)
+                    except Exception as exc:
+                        print(f"[UTILS:: create_build_dir] Error processing template: {filename}")
+                        with open(os.path.join(build_path, base_dir, filename_without_ext+".html"), "wb") as output_file:
+                            output_file.write(exceptions.html_error_template().render())

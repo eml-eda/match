@@ -5,8 +5,6 @@ from zigzag.classes.cost_model.cost_model import CostModelEvaluation
 from zigzag.classes.mapping.temporal.temporal_mapping import TemporalMapping
 from zigzag.classes.opt.temporal.loma.engine import NoValidLoopOrderingFoundException
 
-from match.utils import save_tmap_search_res
-
 class ZigZagMatchCostModel(CostModelEvaluation):
     """MATCH implementation of the cost model that will be used by ZigZag
     """
@@ -62,7 +60,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.operand_loops = self.layer.operand_loop_dim
         self.spatial_sizes = self.spatial_mapping.spatial_loop_dim_size
         self.pattern_name = self.layer.layer_attrs["operator_type"]
-        self.layer_data = self.layer.layer_attrs["match_layer_data"]
+        self.match_node = self.layer.layer_attrs["match_node"]
 
     def def_innermost_loops_cost(self):
         """This function computes the cost of each single iteration of the kernel
@@ -90,15 +88,42 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.computational_iters=self.sorted_multiplicities[-1]
     
     def calc_relevancy_map(self):
-        self.relevancy_map = self.layer_data.ordered_relevant_loops
+        dense = "dense" in self.match_node.ops_occurrences
+        conv2d = "conv2d" in self.match_node.ops_occurrences
+        conv2d_dw = conv2d and self.match_node.ops["conv2d"].depthwise
+        add = (not dense) and (not conv2d) and "add" in self.match_node.ops_occurrences
+        if dense:
+            ordered_relevant_loops = {
+                "I": ["C", "OY", "OX"],
+                "O": ["K", "OY", "OX"],
+                "W": ["K", "C", "FY", "FX"],
+            }
+        elif conv2d:
+            ordered_relevant_loops = {
+                "I": [['OY','OX','C'],[("C" if not conv2d_dw else "K"), "OY", "OX"]][1],
+                "O": [['OY','OX','K'],["K", "OY", "OX"]][1],
+                "W": [['K','C','FY','FX'],["K", "C", "FY", "FX"]][1],
+            }
+        elif add:
+            ordered_relevant_loops = {
+                "X": ["K", "OY", "OX"],
+                "O": ["K", "OY", "OX"],
+                "Y": ["K", "OY", "OX"],
+            }
+        else:
+            ordered_relevant_loops = {
+                "X":[],"Y":[],"W":[],"I":[],"O":[]
+            }
+        self.relevancy_map = ordered_relevant_loops
 
     def calc_sizes_per_mem_level(self):
+        strides = self.match_node.ops["conv2d"].strides if "conv2d" in self.match_node.ops_occurrences else (1,1)
         self.size_per_mem_level = {
             operand: {
                 reldim: [prod(
                     [val[1] for m_lev in range(memory_level+1) for val in self.temp_mapping[operand][m_lev] if val[0] == reldim] +
                     [val[1] for val in self.spatial_sizes if val[0]==reldim] + [
-                        self.layer_data.strides[0 if reldim=="OY" else 1] if operand in self.input_operands and reldim in ["OY","OX"] else 1
+                        strides[0 if reldim=="OY" else 1] if operand in self.input_operands and reldim in ["OY","OX"] else 1
                     ]
                 ) for memory_level in range(len(self.temp_mapping[operand]))]
                 for reldim in self.relevancy_map[operand]
@@ -162,5 +187,3 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.calc_match_overall_latency()
         # set overall latency
         self.latency_total2=self.match_overall_latency
-
-        #save_tmap_search_res(self.layer_data,self.temp_mapping,self.latency_total2,0)

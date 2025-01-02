@@ -10,7 +10,7 @@ import mako
 import numpy as np
 from match.model.dynamic_dim import DynamicDim
 from match.utils import save_all_relay,add_save_relay,reset_relay_list,reset_output_path,set_output_path,reset_schedules,save_all_schedules
-from match.driver.driver import driver
+from match.compile.c_aot import MatchCompilerCAoT
 from mako.template import Template
 
 from match.utils.utils import numpy_dtype_to_c_type
@@ -38,7 +38,11 @@ class MatchModel:
         model_path = self.get_path(out_path=out_path)
         set_output_path(model_path)
         #breakpoint()
-        driver(self.relay_mod, self.relay_params, target=target,output_path=model_path,mod_name=self.name)
+        compiler = MatchCompilerCAoT(self.relay_mod, self.relay_params,
+                            target=target,
+                            build_dir=model_path,
+                            mod_name=self.name,)
+        compiler.tvm_compile(fusion=True)
         #self.rename_lib(out_path=out_path)
         save_all_relay()
         save_all_schedules()

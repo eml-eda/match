@@ -1,0 +1,6 @@
+def @main(%input_0: Tensor[(1, 3, 32, 32), int8] /* ty=Tensor[(1, 3, 32, 32), int8] */) -> Tensor[(1, 1, 16, 16), int32] {
+  %0 = nn.conv2d(%input_0, meta[relay.Constant][0] /* ty=Tensor[(1, 3, 3, 3), int8] */, strides=[2, 2], padding=[1, 1, 1, 1], kernel_size=[3, 3], out_dtype="int32") /* ty=Tensor[(1, 1, 16, 16), int32] */;
+  %1 = nn.bias_add(%0, meta[relay.Constant][1] /* ty=Tensor[(1), int32] */, axis=0) /* ty=Tensor[(1, 1, 16, 16), int32] */;
+  nn.relu(%1) /* ty=Tensor[(1, 1, 16, 16), int32] */
+}
+

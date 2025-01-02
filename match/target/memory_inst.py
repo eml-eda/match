@@ -40,8 +40,10 @@ def no_buffer(*args):
 class MemoryInst:
     """Class that represents a memory instance on MATCH.
     """
-    def __init__(self,name:str="l1_mem",k_bytes:int=1,r_bw:int=32,w_bw:int=32,r_ports:int=0,w_ports:int=0,
-                 rw_ports:int=1,operands:List[str]=[],double_buffering_support:bool=False,
+    def __init__(self,name:str="l1_mem",k_bytes:int=1,
+                 r_bw:int=32,w_bw:int=32,r_ports:int=0,w_ports:int=0,rw_ports:int=1,
+                 operands:List[str]=[],double_buffering_support:bool=False,
+                 sw_controlled:bool=False,page_size:int=1,
                  buffer_for_layer_func:Callable=no_buffer,used_ports:Dict[str,Tuple[PortConnection]]={}):
         """_summary_
 
@@ -58,6 +60,10 @@ class MemoryInst:
             buffer_for_layer_func (Callable, optional): Function to get the size in Bs for internal buffers(im2col etc.). Defaults to no_buffer.
             used_ports (Dict[str,Tuple[PortConnection]], optional): Optional parameter to manually define the connection of the memory. Defaults to {}.
         """
+        # added
+        self.page_size=page_size
+        self.sw_controlled=sw_controlled
+        # original
         self.name=name
         self.k_bytes=k_bytes
         self.r_bw=r_bw

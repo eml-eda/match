@@ -1,0 +1,390 @@
+Flat profile:
+
+Each sample counts as 0.01 seconds.
+  %   cumulative   self              self     total           
+ time   seconds   seconds    calls   s/call   s/call  name    
+ 31.80      1.93     1.93   100001     0.00     0.00  block_0_compute
+ 14.00      2.78     0.85 691206912     0.00     0.00  set_FunctionVar_0_0_dim_2
+ 13.01      3.57     0.79 691206912     0.00     0.00  set_FunctionVar_0_0_dim_3
+ 12.19      4.31     0.74 921609216     0.00     0.00  loop_FX_end
+  8.57      4.83     0.52 691206912     0.00     0.00  loop_FX_update
+  5.11      5.14     0.31   100001     0.00     0.00  tvmgen_cpuonly_fused_nn_conv2d_add_nn_relu
+  3.62      5.36     0.22 230402304     0.00     0.00  loop_FY_update
+  2.97      5.54     0.18 307203072     0.00     0.00  loop_FY_end
+  2.80      5.71     0.17 102401024     0.00     0.00  loop_C_end
+  1.98      5.83     0.12 230402304     0.00     0.00  loop_FX_set
+  1.48      5.92     0.09 76800768     0.00     0.00  loop_C_update
+  0.82      5.97     0.05 38400384     0.00     0.00  loop_OX_end
+  0.49      6.00     0.03 25600256     0.00     0.00  loop_OX_update
+  0.33      6.02     0.02 76800768     0.00     0.00  loop_FY_set
+  0.33      6.04     0.02 19200192     0.00     0.00  loop_OX_1_end
+  0.16      6.05     0.01 12800128     0.00     0.00  loop_OX_set
+  0.16      6.06     0.01  6400064     0.00     0.00  loop_OX_1_set
+  0.16      6.07     0.01  6400064     0.00     0.00  loop_OX_2_update
+  0.00      6.07     0.00 25600256     0.00     0.00  loop_C_set
+  0.00      6.07     0.00 12800128     0.00     0.00  loop_OX_1_update
+  0.00      6.07     0.00  9600096     0.00     0.00  loop_OX_2_end
+  0.00      6.07     0.00  4800048     0.00     0.00  loop_OX_3_end
+  0.00      6.07     0.00  3200032     0.00     0.00  loop_OX_2_set
+  0.00      6.07     0.00  3200032     0.00     0.00  loop_OX_3_update
+  0.00      6.07     0.00  2400024     0.00     0.00  loop_OY_1_end
+  0.00      6.07     0.00  1600016     0.00     0.00  loop_OX_3_set
+  0.00      6.07     0.00  1600016     0.00     0.00  loop_OY_1_update
+  0.00      6.07     0.00  1200012     0.00     0.00  loop_OY_2_end
+  0.00      6.07     0.00   800008     0.00     0.00  loop_OY_1_set
+  0.00      6.07     0.00   800008     0.00     0.00  loop_OY_2_update
+  0.00      6.07     0.00   600006     0.00     0.00  loop_OY_3_end
+  0.00      6.07     0.00   400004     0.00     0.00  loop_OY_2_set
+  0.00      6.07     0.00   400004     0.00     0.00  loop_OY_3_update
+  0.00      6.07     0.00   300003     0.00     0.00  loop_OY_4_end
+  0.00      6.07     0.00   200002     0.00     0.00  loop_OY_3_set
+  0.00      6.07     0.00   200002     0.00     0.00  loop_OY_4_update
+  0.00      6.07     0.00   100001     0.00     0.00  TVMBackendAllocWorkspace
+  0.00      6.07     0.00   100001     0.00     0.00  TVMBackendFreeWorkspace
+  0.00      6.07     0.00   100001     0.00     0.00  TVMPlatformMemoryAllocate
+  0.00      6.07     0.00   100001     0.00     0.00  TVMPlatformMemoryFree
+  0.00      6.07     0.00   100001     0.00     0.00  loop_OY_4_set
+  0.00      6.07     0.00   100001     0.00     0.00  tvmgen_cpuonly___tvm_main__
+  0.00      6.07     0.00   100001     0.00     0.00  tvmgen_cpuonly_run
+  0.00      6.07     0.00   100001     0.00     0.00  tvmgen_default___tvm_main__
+  0.00      6.07     0.00   100001     0.00     0.00  tvmgen_default_match_main_0
+  0.00      6.07     0.00   100001     0.00     0.00  tvmgen_default_run
+  0.00      6.07     0.00        1     0.00     6.07  match_default_runtime
+
+ %         the percentage of the total running time of the
+time       program used by this function.
+
+cumulative a running sum of the number of seconds accounted
+ seconds   for by this function and those listed above it.
+
+ self      the number of seconds accounted for by this
+seconds    function alone.  This is the major sort for this
+           listing.
+
+calls      the number of times this function was invoked, if
+           this function is profiled, else blank.
+
+ self      the average number of milliseconds spent in this
+ms/call    function per call, if this function is profiled,
+	   else blank.
+
+ total     the average number of milliseconds spent in this
+ms/call    function and its descendents per call, if this
+	   function is profiled, else blank.
+
+name       the name of the function.  This is the minor sort
+           for this listing. The index shows the location of
+	   the function in the gprof listing. If the index is
+	   in parenthesis it shows where it would appear in
+	   the gprof listing if it were to be printed.
+
+Copyright (C) 2012-2022 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+		     Call graph (explanation follows)
+
+
+granularity: each sample hit covers 4 byte(s) for 0.16% of 6.07 seconds
+
+index % time    self  children    called     name
+                0.00    6.07       1/1           main [2]
+[1]    100.0    0.00    6.07       1         match_default_runtime [1]
+                0.00    5.76  100001/100001      tvmgen_default___tvm_main__ [4]
+                0.00    0.31  100001/100001      tvmgen_cpuonly___tvm_main__ [10]
+                0.00    0.00  100001/100001      tvmgen_cpuonly_run [47]
+                0.00    0.00  100001/100001      tvmgen_default_run [48]
+-----------------------------------------------
+                                                 <spontaneous>
+[2]    100.0    0.00    6.07                 main [2]
+                0.00    6.07       1/1           match_default_runtime [1]
+-----------------------------------------------
+                1.93    3.83  100001/100001      tvmgen_default_match_main_0 [5]
+[3]     94.9    1.93    3.83  100001         block_0_compute [3]
+                0.85    0.00 691206912/691206912     set_FunctionVar_0_0_dim_2 [6]
+                0.79    0.00 691206912/691206912     set_FunctionVar_0_0_dim_3 [7]
+                0.74    0.00 921609216/921609216     loop_FX_end [8]
+                0.52    0.00 691206912/691206912     loop_FX_update [9]
+                0.22    0.00 230402304/230402304     loop_FY_update [12]
+                0.18    0.00 307203072/307203072     loop_FY_end [13]
+                0.17    0.00 102401024/102401024     loop_C_end [14]
+                0.12    0.00 230402304/230402304     loop_FX_set [15]
+                0.09    0.00 76800768/76800768     loop_C_update [16]
+                0.05    0.00 38400384/38400384     loop_OX_end [17]
+                0.03    0.00 25600256/25600256     loop_OX_update [18]
+                0.02    0.00 76800768/76800768     loop_FY_set [19]
+                0.02    0.00 19200192/19200192     loop_OX_1_end [20]
+                0.01    0.00 12800128/12800128     loop_OX_set [21]
+                0.01    0.00 6400064/6400064     loop_OX_1_set [22]
+                0.01    0.00 6400064/6400064     loop_OX_2_update [23]
+                0.00    0.00 25600256/25600256     loop_C_set [24]
+                0.00    0.00 12800128/12800128     loop_OX_1_update [25]
+                0.00    0.00 9600096/9600096     loop_OX_2_end [26]
+                0.00    0.00 4800048/4800048     loop_OX_3_end [27]
+                0.00    0.00 3200032/3200032     loop_OX_2_set [28]
+                0.00    0.00 3200032/3200032     loop_OX_3_update [29]
+                0.00    0.00 2400024/2400024     loop_OY_1_end [30]
+                0.00    0.00 1600016/1600016     loop_OX_3_set [31]
+                0.00    0.00 1600016/1600016     loop_OY_1_update [32]
+                0.00    0.00 1200012/1200012     loop_OY_2_end [33]
+                0.00    0.00  800008/800008      loop_OY_1_set [34]
+                0.00    0.00  800008/800008      loop_OY_2_update [35]
+                0.00    0.00  600006/600006      loop_OY_3_end [36]
+                0.00    0.00  400004/400004      loop_OY_2_set [37]
+                0.00    0.00  400004/400004      loop_OY_3_update [38]
+                0.00    0.00  300003/300003      loop_OY_4_end [39]
+                0.00    0.00  200002/200002      loop_OY_3_set [40]
+                0.00    0.00  200002/200002      loop_OY_4_update [41]
+                0.00    0.00  100001/100001      loop_OY_4_set [46]
+-----------------------------------------------
+                0.00    5.76  100001/100001      match_default_runtime [1]
+[4]     94.9    0.00    5.76  100001         tvmgen_default___tvm_main__ [4]
+                0.00    5.76  100001/100001      tvmgen_default_match_main_0 [5]
+-----------------------------------------------
+                0.00    5.76  100001/100001      tvmgen_default___tvm_main__ [4]
+[5]     94.9    0.00    5.76  100001         tvmgen_default_match_main_0 [5]
+                1.93    3.83  100001/100001      block_0_compute [3]
+-----------------------------------------------
+                0.85    0.00 691206912/691206912     block_0_compute [3]
+[6]     14.0    0.85    0.00 691206912         set_FunctionVar_0_0_dim_2 [6]
+-----------------------------------------------
+                0.79    0.00 691206912/691206912     block_0_compute [3]
+[7]     13.0    0.79    0.00 691206912         set_FunctionVar_0_0_dim_3 [7]
+-----------------------------------------------
+                0.74    0.00 921609216/921609216     block_0_compute [3]
+[8]     12.2    0.74    0.00 921609216         loop_FX_end [8]
+-----------------------------------------------
+                0.52    0.00 691206912/691206912     block_0_compute [3]
+[9]      8.6    0.52    0.00 691206912         loop_FX_update [9]
+-----------------------------------------------
+                0.00    0.31  100001/100001      match_default_runtime [1]
+[10]     5.1    0.00    0.31  100001         tvmgen_cpuonly___tvm_main__ [10]
+                0.31    0.00  100001/100001      tvmgen_cpuonly_fused_nn_conv2d_add_nn_relu [11]
+-----------------------------------------------
+                0.31    0.00  100001/100001      tvmgen_cpuonly___tvm_main__ [10]
+[11]     5.1    0.31    0.00  100001         tvmgen_cpuonly_fused_nn_conv2d_add_nn_relu [11]
+                0.00    0.00  100001/100001      TVMBackendAllocWorkspace [42]
+                0.00    0.00  100001/100001      TVMPlatformMemoryFree [45]
+                0.00    0.00  100001/100001      TVMBackendFreeWorkspace [43]
+-----------------------------------------------
+                0.22    0.00 230402304/230402304     block_0_compute [3]
+[12]     3.6    0.22    0.00 230402304         loop_FY_update [12]
+-----------------------------------------------
+                0.18    0.00 307203072/307203072     block_0_compute [3]
+[13]     3.0    0.18    0.00 307203072         loop_FY_end [13]
+-----------------------------------------------
+                0.17    0.00 102401024/102401024     block_0_compute [3]
+[14]     2.8    0.17    0.00 102401024         loop_C_end [14]
+-----------------------------------------------
+                0.12    0.00 230402304/230402304     block_0_compute [3]
+[15]     2.0    0.12    0.00 230402304         loop_FX_set [15]
+-----------------------------------------------
+                0.09    0.00 76800768/76800768     block_0_compute [3]
+[16]     1.5    0.09    0.00 76800768         loop_C_update [16]
+-----------------------------------------------
+                0.05    0.00 38400384/38400384     block_0_compute [3]
+[17]     0.8    0.05    0.00 38400384         loop_OX_end [17]
+-----------------------------------------------
+                0.03    0.00 25600256/25600256     block_0_compute [3]
+[18]     0.5    0.03    0.00 25600256         loop_OX_update [18]
+-----------------------------------------------
+                0.02    0.00 76800768/76800768     block_0_compute [3]
+[19]     0.3    0.02    0.00 76800768         loop_FY_set [19]
+-----------------------------------------------
+                0.02    0.00 19200192/19200192     block_0_compute [3]
+[20]     0.3    0.02    0.00 19200192         loop_OX_1_end [20]
+-----------------------------------------------
+                0.01    0.00 12800128/12800128     block_0_compute [3]
+[21]     0.2    0.01    0.00 12800128         loop_OX_set [21]
+-----------------------------------------------
+                0.01    0.00 6400064/6400064     block_0_compute [3]
+[22]     0.2    0.01    0.00 6400064         loop_OX_1_set [22]
+-----------------------------------------------
+                0.01    0.00 6400064/6400064     block_0_compute [3]
+[23]     0.2    0.01    0.00 6400064         loop_OX_2_update [23]
+-----------------------------------------------
+                0.00    0.00 25600256/25600256     block_0_compute [3]
+[24]     0.0    0.00    0.00 25600256         loop_C_set [24]
+-----------------------------------------------
+                0.00    0.00 12800128/12800128     block_0_compute [3]
+[25]     0.0    0.00    0.00 12800128         loop_OX_1_update [25]
+-----------------------------------------------
+                0.00    0.00 9600096/9600096     block_0_compute [3]
+[26]     0.0    0.00    0.00 9600096         loop_OX_2_end [26]
+-----------------------------------------------
+                0.00    0.00 4800048/4800048     block_0_compute [3]
+[27]     0.0    0.00    0.00 4800048         loop_OX_3_end [27]
+-----------------------------------------------
+                0.00    0.00 3200032/3200032     block_0_compute [3]
+[28]     0.0    0.00    0.00 3200032         loop_OX_2_set [28]
+-----------------------------------------------
+                0.00    0.00 3200032/3200032     block_0_compute [3]
+[29]     0.0    0.00    0.00 3200032         loop_OX_3_update [29]
+-----------------------------------------------
+                0.00    0.00 2400024/2400024     block_0_compute [3]
+[30]     0.0    0.00    0.00 2400024         loop_OY_1_end [30]
+-----------------------------------------------
+                0.00    0.00 1600016/1600016     block_0_compute [3]
+[31]     0.0    0.00    0.00 1600016         loop_OX_3_set [31]
+-----------------------------------------------
+                0.00    0.00 1600016/1600016     block_0_compute [3]
+[32]     0.0    0.00    0.00 1600016         loop_OY_1_update [32]
+-----------------------------------------------
+                0.00    0.00 1200012/1200012     block_0_compute [3]
+[33]     0.0    0.00    0.00 1200012         loop_OY_2_end [33]
+-----------------------------------------------
+                0.00    0.00  800008/800008      block_0_compute [3]
+[34]     0.0    0.00    0.00  800008         loop_OY_1_set [34]
+-----------------------------------------------
+                0.00    0.00  800008/800008      block_0_compute [3]
+[35]     0.0    0.00    0.00  800008         loop_OY_2_update [35]
+-----------------------------------------------
+                0.00    0.00  600006/600006      block_0_compute [3]
+[36]     0.0    0.00    0.00  600006         loop_OY_3_end [36]
+-----------------------------------------------
+                0.00    0.00  400004/400004      block_0_compute [3]
+[37]     0.0    0.00    0.00  400004         loop_OY_2_set [37]
+-----------------------------------------------
+                0.00    0.00  400004/400004      block_0_compute [3]
+[38]     0.0    0.00    0.00  400004         loop_OY_3_update [38]
+-----------------------------------------------
+                0.00    0.00  300003/300003      block_0_compute [3]
+[39]     0.0    0.00    0.00  300003         loop_OY_4_end [39]
+-----------------------------------------------
+                0.00    0.00  200002/200002      block_0_compute [3]
+[40]     0.0    0.00    0.00  200002         loop_OY_3_set [40]
+-----------------------------------------------
+                0.00    0.00  200002/200002      block_0_compute [3]
+[41]     0.0    0.00    0.00  200002         loop_OY_4_update [41]
+-----------------------------------------------
+                0.00    0.00  100001/100001      tvmgen_cpuonly_fused_nn_conv2d_add_nn_relu [11]
+[42]     0.0    0.00    0.00  100001         TVMBackendAllocWorkspace [42]
+                0.00    0.00  100001/100001      TVMPlatformMemoryAllocate [44]
+-----------------------------------------------
+                0.00    0.00  100001/100001      tvmgen_cpuonly_fused_nn_conv2d_add_nn_relu [11]
+[43]     0.0    0.00    0.00  100001         TVMBackendFreeWorkspace [43]
+-----------------------------------------------
+                0.00    0.00  100001/100001      TVMBackendAllocWorkspace [42]
+[44]     0.0    0.00    0.00  100001         TVMPlatformMemoryAllocate [44]
+-----------------------------------------------
+                0.00    0.00  100001/100001      tvmgen_cpuonly_fused_nn_conv2d_add_nn_relu [11]
+[45]     0.0    0.00    0.00  100001         TVMPlatformMemoryFree [45]
+-----------------------------------------------
+                0.00    0.00  100001/100001      block_0_compute [3]
+[46]     0.0    0.00    0.00  100001         loop_OY_4_set [46]
+-----------------------------------------------
+                0.00    0.00  100001/100001      match_default_runtime [1]
+[47]     0.0    0.00    0.00  100001         tvmgen_cpuonly_run [47]
+-----------------------------------------------
+                0.00    0.00  100001/100001      match_default_runtime [1]
+[48]     0.0    0.00    0.00  100001         tvmgen_default_run [48]
+-----------------------------------------------
+
+ This table describes the call tree of the program, and was sorted by
+ the total amount of time spent in each function and its children.
+
+ Each entry in this table consists of several lines.  The line with the
+ index number at the left hand margin lists the current function.
+ The lines above it list the functions that called this function,
+ and the lines below it list the functions this one called.
+ This line lists:
+     index	A unique number given to each element of the table.
+		Index numbers are sorted numerically.
+		The index number is printed next to every function name so
+		it is easier to look up where the function is in the table.
+
+     % time	This is the percentage of the `total' time that was spent
+		in this function and its children.  Note that due to
+		different viewpoints, functions excluded by options, etc,
+		these numbers will NOT add up to 100%.
+
+     self	This is the total amount of time spent in this function.
+
+     children	This is the total amount of time propagated into this
+		function by its children.
+
+     called	This is the number of times the function was called.
+		If the function called itself recursively, the number
+		only includes non-recursive calls, and is followed by
+		a `+' and the number of recursive calls.
+
+     name	The name of the current function.  The index number is
+		printed after it.  If the function is a member of a
+		cycle, the cycle number is printed between the
+		function's name and the index number.
+
+
+ For the function's parents, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the function into this parent.
+
+     children	This is the amount of time that was propagated from
+		the function's children into this parent.
+
+     called	This is the number of times this parent called the
+		function `/' the total number of times the function
+		was called.  Recursive calls to the function are not
+		included in the number after the `/'.
+
+     name	This is the name of the parent.  The parent's index
+		number is printed after it.  If the parent is a
+		member of a cycle, the cycle number is printed between
+		the name and the index number.
+
+ If the parents of the function cannot be determined, the word
+ `<spontaneous>' is printed in the `name' field, and all the other
+ fields are blank.
+
+ For the function's children, the fields have the following meanings:
+
+     self	This is the amount of time that was propagated directly
+		from the child into the function.
+
+     children	This is the amount of time that was propagated from the
+		child's children to the function.
+
+     called	This is the number of times the function called
+		this child `/' the total number of times the child
+		was called.  Recursive calls by the child are not
+		listed in the number after the `/'.
+
+     name	This is the name of the child.  The child's index
+		number is printed after it.  If the child is a
+		member of a cycle, the cycle number is printed
+		between the name and the index number.
+
+ If there are any cycles (circles) in the call graph, there is an
+ entry for the cycle-as-a-whole.  This entry shows who called the
+ cycle (as parents) and the members of the cycle (as children.)
+ The `+' recursive calls entry shows the number of function calls that
+ were internal to the cycle, and the calls entry for each member shows,
+ for that member, how many times it was called from other members of
+ the cycle.
+
+Copyright (C) 2012-2022 Free Software Foundation, Inc.
+
+Copying and distribution of this file, with or without modification,
+are permitted in any medium without royalty provided the copyright
+notice and this notice are preserved.
+
+Index by function name
+
+  [42] TVMBackendAllocWorkspace [25] loop_OX_1_update     [36] loop_OY_3_end
+  [43] TVMBackendFreeWorkspace [26] loop_OX_2_end         [40] loop_OY_3_set
+  [44] TVMPlatformMemoryAllocate [28] loop_OX_2_set       [38] loop_OY_3_update
+  [45] TVMPlatformMemoryFree  [23] loop_OX_2_update       [39] loop_OY_4_end
+   [3] block_0_compute        [27] loop_OX_3_end          [46] loop_OY_4_set
+  [14] loop_C_end             [31] loop_OX_3_set          [41] loop_OY_4_update
+  [24] loop_C_set             [29] loop_OX_3_update        [1] match_default_runtime
+  [16] loop_C_update          [17] loop_OX_end             [6] set_FunctionVar_0_0_dim_2
+   [8] loop_FX_end            [21] loop_OX_set             [7] set_FunctionVar_0_0_dim_3
+  [15] loop_FX_set            [18] loop_OX_update         [10] tvmgen_cpuonly___tvm_main__
+   [9] loop_FX_update         [30] loop_OY_1_end          [11] tvmgen_cpuonly_fused_nn_conv2d_add_nn_relu
+  [13] loop_FY_end            [34] loop_OY_1_set          [47] tvmgen_cpuonly_run
+  [19] loop_FY_set            [32] loop_OY_1_update        [4] tvmgen_default___tvm_main__
+  [12] loop_FY_update         [33] loop_OY_2_end           [5] tvmgen_default_match_main_0
+  [20] loop_OX_1_end          [37] loop_OY_2_set          [48] tvmgen_default_run
+  [22] loop_OX_1_set          [35] loop_OY_2_update

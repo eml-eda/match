@@ -34,6 +34,13 @@ class MemoryApis:
         }
         self.pattern_constants_loading="match_pattern_constants_loading"
 
+        # testing ones
+        self.var_mem_transfer = ""
+        self.const_mem_transfer = ""
+        self.store_tile = ""
+        self.init_mem_levels = ""
+        self.free_mem_levels = ""
+
 class ComputationalApis:
     """All the APIs relating to the computational part that are used later by MATCH templates
     """
@@ -42,6 +49,9 @@ class ComputationalApis:
         self.innermost_computation="match_innermost_computation"
         self.specific_pattern=pattern_name
 
+        # testing ones
+        self.compute_tile = ""
+
 class PlatformApis:
     """All the APIs for the management of the platform that are used by templates of MATCH
     """
@@ -49,6 +59,9 @@ class PlatformApis:
         self.init_platform="match_init_platform"
         self.init_platform_need_kernel_data=False
         self.set_task_id="match_task_id"
+
+        # testing ones
+        self.parallelize_task = ""
 
 class SyncApis:
     """All the APIs for the synchronization that are used by templates of MATCH
@@ -60,6 +73,12 @@ class SyncApis:
         self.sync_multilevel_transfer="match_sync_multilevel_transfer"
         self.wait_input_transfers="match_wait_input_transfers"
         self.wait_output_transfers="match_wait_output_transfers"
+
+        # testing ones
+        self.wait_prev_tile_computation = ""
+        self.wait_parallel = ""
+        self.wait_store_prev_tile = ""
+        self.wait_tile_computation = ""
 
 class MatchTypes:
     """MACROS and types that can be used by MATCH
@@ -78,7 +97,7 @@ class ExecModule(ABC):
                  **kwargs):
         self.name=name
         self.FULL_DIM = sys.maxsize
-        self.optimal_spatial_mapping = None
+        self.zigzag_optimal_spatial_mapping = None
         self.platform_memories = None
         self.default_include_list=[
             "match_dimensions.h",
@@ -94,6 +113,11 @@ class ExecModule(ABC):
         self.src_path=src_path
         self.inc_path=inc_path
         self.module_options=dict()
+        self.backend = "MATCH"
+
+    def backend_constraints_check(self,match_node,schedule,block,lp):
+        return True
+
 
     def partitioning_patterns(self):
 
@@ -146,6 +170,10 @@ class ExecModule(ABC):
     def get_all_memories_names(self):
         return [m.name for m in self.memories_def(pattern_name="conv2d",operands=["O","I","W"])]
 
+    @property
+    def memories(self):
+        return self.get_all_memories_names()
+    
     def match_memories(self,pattern_name,operands):
         self.platform_memories=self.memories_def(pattern_name,operands)
 
@@ -159,7 +187,7 @@ class ExecModule(ABC):
                     break
         return spatial_dim
 
-    def optimal_spatial_mapping_def(self, pattern_name: str = "conv_2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
+    def zigzag_optimal_spatial_mapping_def(self, match_node = None, pattern_name: str = "conv_2d"):
         """Define the optimal spatial mapping for the current node
 
         Args:
@@ -169,44 +197,22 @@ class ExecModule(ABC):
         """
         return [ ("K",1), ("OY",1) ]
 
-    def match_optimal_spatial_mapping(self, pattern_name: str = "conv_2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
-        self.optimal_spatial_mapping=self.optimal_spatial_mapping_def(pattern_name=pattern_name,dim_sizes=dim_sizes,layer_attrs=layer_attrs)
+    def zigzag_set_optimal_spatial_mapping(self, match_node = None, pattern_name: str = "conv_2d",):
+        self.zigzag_optimal_spatial_mapping=self.zigzag_optimal_spatial_mapping_def(match_node=match_node,pattern_name=pattern_name)
+        if self.zigzag_optimal_spatial_mapping is None:
+            self.zigzag_optimal_spatial_mapping = [ ("K",1), ]
 
-    def specific_pattern_def(self, pattern_name: str = "conv_2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
+    def specific_pattern_def(self, match_node = None, pattern_name: str = "conv_2d"):
         return pattern_name
 
-    def match_specific_pattern(self, pattern_name: str = "conv_2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
-        self.specific_pattern=self.specific_pattern_def(pattern_name=pattern_name,dim_sizes=dim_sizes,layer_attrs=layer_attrs)
-
+    def match_specific_pattern(self, match_node = None, pattern_name: str = "conv_2d"):
+        self.specific_pattern=self.specific_pattern_def(match_node=match_node,pattern_name=pattern_name)
+        
     def get_optimal_spat_size(self,optimal_spat:int=1,dim_size:int=1):
         if optimal_spat==self.FULL_DIM:
             return dim_size
         else:
-            return optimal_spat
-
-    def spatial_mapping(self,layer_data=None,pattern_name:str="conv_2d",pattern_inst=None):
-        if self.optimal_spatial_mapping is None:
-            self.optimal_spatial_mapping_def(pattern_name=pattern_name,dim_sizes=layer_data.layer_attrs["loop_sizes"],layer_attrs=layer_data.layer_attrs)
-            if self.optimal_spatial_mapping is None:
-                self.optimal_spatial_mapping = [ ("K",1), ("OY",1) ]
-        def op_link_name(operand: str="O"):
-            if operand=="O":
-                return "O"
-            elif operand in ["I","X"]:
-                return "I1"
-            else:
-                return "I2"
-        return {
-            pattern_name:
-                {
-                    "core_allocation": 1,
-                    "spatial_mapping":  {f"D{opt_idx+1}":(opt_sptmap[0],self.limit_spatial_mapping_to(\
-                        dim_size=layer_data.layer_attrs["loop_sizes"][opt_sptmap[0]],optimal_spat=self.get_optimal_spat_size(opt_sptmap[1],layer_data.layer_attrs["loop_sizes"][opt_sptmap[0]])))\
-                                        for opt_idx,opt_sptmap in enumerate(self.optimal_spatial_mapping)},
-                    "memory_operand_links": {op:op_link_name(op) for op in layer_data.operands},
-                    "unordered_loops":["FX","FY","C"],#+(["C"] if "nn.dense" != pattern_inst.ordered_operation else []),
-                }
-        }
+            return optimal_spat   
     
     def adjust_dimensions_and_precision(self,loop_dim_size:Dict[str,int]={},pr_loop_dim_size:Dict[str,int]={},
                                         operand_precision:Dict[str,int]={}, strides:List[int]=[1,1], pattern_name:str="conv2d"):
@@ -220,13 +226,13 @@ class ExecModule(ABC):
         """
         return ZigZagMatchCostModel
     
-    def adjust_temporal_mapping(self,temporal_mapping:List=[],layer_data:Any=None):
-        return temporal_mapping
+    def constrain_schedule(self,schedule,match_node):
+        return schedule
     
     def template_data(self):
         return {}
     
-    def weights_and_constants(self,pattern_name,layer_data,layer_arguments:List=[]):
+    def weights_and_constants(self,match_node,pattern_name):
         """define how the weights and constants of a layer must be saved in C on the generated code
 
         Args:
@@ -244,7 +250,7 @@ class ExecModule(ABC):
             return np.frombuffer(value.tobytes(),dtype='uint8')
         arguments=np.array([],dtype=np.uint8)
         single_constants=dict()
-        for (layer_arg_name,layer_arg_val) in layer_arguments:
+        for (layer_arg_name,layer_arg_val) in match_node.const_tensors.items():
             if isinstance(layer_arg_val, tvm.relay.Constant):
                 if len(layer_arg_val.data.shape)==0:
                     single_constants[layer_arg_name]=str(layer_arg_val.data)
@@ -329,5 +335,5 @@ class ExecModule(ABC):
     def adjust_network(self,opts):
         return []
 
-    def generate_architecture_for(self,dse:str='zigzag',optimal_spatial_mapping:Any=None,platform_memories:Any=None,layer_data:Any=None):
+    def zigzag_architecture(self, optimal_spatial_mapping = None, platform_memories = None, match_node = None):
         return None

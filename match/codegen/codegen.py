@@ -1,6 +1,7 @@
-from match.codegen.template import TemplateDataGenerator,TemplateEngine
-
+from match.codegen.template_data_generator import TemplateDataGenerator
+from match.codegen.template_engine import TemplateEngine
 # TVM imports
+from match.codegen.template_writer import TemplateWriter
 import tvm
 from match.target import get_target
 
@@ -16,10 +17,20 @@ def get_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:str=""):
     tempengine = TemplateEngine(mod=mod,exec_module=exec_module,pattern_name=pattern_name,template_data=template_data)
     return tempengine.get_code()
 
+def schedule_to_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:str=""):
+    target=get_target()
+    schedule,match_node,exec_module,latency,energy=target.get_layer_from_module(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
+    tempengine = TemplateWriter(mod=mod,target=target,exec_module=exec_module,
+                                pattern_name=pattern_name,schedule=schedule,match_node=match_node,
+                                latency=latency,energy=energy)
+    return tempengine.get_code()
+
 def codegen(mod: tvm.ir.IRModule):
     _,exec_module_name,pattern_name = mod.body.op.attrs["Composite"].split(".")[1:]
     try:
-        code, error_codegen = get_code(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
+        #code, error_codegen = get_code(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
+        code = schedule_to_code(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)
+        error_codegen = False
     except Exception as exc:
         #breakpoint()
         raise exc

@@ -24,13 +24,14 @@ class Gap9NE16(ExecModule):
                                           **kwargs)
         self.L1_SIZE=90 if "l1_size" not in kwargs else kwargs["l1_size"]
 
-    def optimal_spatial_mapping_def(self, pattern_name: str = "gap9NE16_conv2d",dim_sizes:Dict[str,int]={},layer_attrs:Dict={}):
+    def zigzag_optimal_spatial_mapping_def(self, match_node=None, pattern_name = "conv_2d"):
         return [
             ("K",16)
         ]
     
-    def specific_pattern_def(self, pattern_name: str = "conv_2d", dim_sizes: Dict[str, int] = ..., layer_attrs: Dict = ...):
-        if layer_attrs["nn.conv2d_depthwise"]:
+    #def specific_pattern_def(self, pattern_name: str = "conv_2d", dim_sizes: Dict[str, int] = ..., layer_attrs: Dict = ...):
+    def specific_pattern_def(self, match_node=None, pattern_name = "conv_2d"):
+        if match_node.ops["conv2d"].depthwise:
             return "depthwise_conv2d"
         else:
             # DEFAULT LIKE CONV2D
@@ -42,8 +43,10 @@ class Gap9NE16(ExecModule):
         Args:
             operands (List[Str]): list of operands
         """
-        def buffers_for_l1_mem(layer_data,pattern_name,specific_pattern):
-            buff = layer_data.loop_dim_size['K']*4*2
+        def buffers_for_l1_mem(match_node,pattern_name,specific_pattern):
+            out_tensors_names = [n for n in match_node.output_tensors.keys()]
+            out_dims = [d.size for d in match_node.output_tensors[out_tensors_names[0]].dims]
+            buff = out_dims[1]*4*2
             #if pattern_name=="conv2d_bnorm_requant":
             #    buff*=2
             return buff
@@ -60,7 +63,7 @@ class Gap9NE16(ExecModule):
     def network_transformations(self,opts):
         return gap9network_transformations(opts=opts)
 
-    def def_include_list(self,patter_name):
+    def def_include_list(self,pattern_name):
         return ["ne16_mem.h","ne16_comp.h"]
 
     def mem_apis_def(self,mem_apis: MemoryApis=MemoryApis()):
@@ -162,7 +165,7 @@ class Gap9NE16(ExecModule):
         #print(weight.shape)
         return weight.flatten()
 
-    def weights_and_constants(self,pattern_name,layer_data,layer_arguments:List=[]):
+    def weights_and_constants(self, match_node, pattern_name):
         def c_friendly_npvalue(arr):
             # params: arr is expected to be a numpy version of the value, it should be an array but it may be also just a single value
             if len(arr.shape)>0:
@@ -175,15 +178,18 @@ class Gap9NE16(ExecModule):
             return np.frombuffer(value.tobytes(),dtype='uint8')
         arguments=np.array([],dtype=np.uint8)
         single_constants=dict()
-        for idx,(layer_arg_name,layer_arg_val) in enumerate(layer_arguments):
+        out_tensors_names = [n for n in match_node.output_tensors.keys()]
+        out_dims = [d.size for d in match_node.output_tensors[out_tensors_names[0]].dims]
+        conv_dw = match_node.ops["conv2d"].depthwise
+        for idx,(layer_arg_name,layer_arg_val) in enumerate(match_node.const_tensors.items()):
             if isinstance(layer_arg_val, tvm.relay.Constant):
                 if len(layer_arg_val.data.shape)==0:
                     single_constants[layer_arg_name]=str(layer_arg_val.data)
                 else:
-                    if "nn.conv2d" in layer_arg_name:
-                        constbytes=self.weightEncode(layer_arg_val.data.numpy(),8,"nn.conv2d_depthwise" in layer_data.layer_attrs and layer_data.layer_attrs["nn.conv2d_depthwise"])
+                    if layer_arg_name=="FunctionVar_0_1":
+                        constbytes=self.weightEncode(layer_arg_val.data.numpy(),8,conv_dw)
                         if pattern_name=="conv2d_bias_add_requant":
-                            constbytes = np.concatenate((constbytes,bytaze(np.array([1 for _ in range(layer_data.loop_dim_size["K"])],dtype=np.int32))))
+                            constbytes = np.concatenate((constbytes,bytaze(np.array([1 for _ in range(out_dims[1])],dtype=np.int32))))
                     else:
                         constbytes=bytaze(layer_arg_val.data.numpy())
                     arguments=np.concatenate((arguments,constbytes))

@@ -1,0 +1,62 @@
+#[version = "0.0.5"]
+def @main(%input_0: Tensor[(1, 3, 32, 32), int8]) {
+  %0 = nn.conv2d(%input_0, meta[relay.Constant][0], strides=[2, 2], padding=[1, 1, 1, 1], kernel_size=[3, 3], out_dtype="int32");
+  %1 = nn.bias_add(%0, meta[relay.Constant][1], axis=0);
+  nn.relu(%1)
+}
+
+#[metadata]
+{
+  "root": 1, 
+  "nodes": [
+    {
+      "type_key": ""
+    }, 
+    {
+      "type_key": "Map", 
+      "keys": [
+        "relay.Constant"
+      ], 
+      "data": [2]
+    }, 
+    {
+      "type_key": "Array", 
+      "data": [3, 6]
+    }, 
+    {
+      "type_key": "relay.Constant", 
+      "attrs": {
+        "_checked_type_": "0", 
+        "data": "0", 
+        "span": "0", 
+        "virtual_device_": "4"
+      }
+    }, 
+    {
+      "type_key": "VirtualDevice", 
+      "attrs": {
+        "device_type_int": "-1", 
+        "memory_scope": "5", 
+        "target": "0", 
+        "virtual_device_id": "-1"
+      }
+    }, 
+    {
+      "type_key": "runtime.String"
+    }, 
+    {
+      "type_key": "relay.Constant", 
+      "attrs": {
+        "_checked_type_": "0", 
+        "data": "1", 
+        "span": "0", 
+        "virtual_device_": "4"
+      }
+    }
+  ], 
+  "b64ndarrays": [
+    "P6G0lvBAXt0AAAAAAAAAAAEAAAAAAAAABAAAAAAIAQABAAAAAAAAAAMAAAAAAAAAAwAAAAAAAAADAAAAAAAAABsAAAAAAAAALIr/DK8qRBf1JpY3QEyhWMMzzhp70iJbQ/b9", 
+    "P6G0lvBAXt0AAAAAAAAAAAEAAAAAAAAAAQAAAAAgAQABAAAAAAAAAAQAAAAAAAAAZ33lWA=="
+  ], 
+  "attrs": {"tvm_version": "0.15.dev0"}
+}

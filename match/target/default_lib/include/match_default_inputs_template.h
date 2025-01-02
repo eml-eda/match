@@ -1,6 +1,7 @@
 #ifndef __MATCH_DEFAULT_INPUTS_H__
 #define __MATCH_DEFAULT_INPUTS_H__
 
+#include <match/types.h>
 % if runtime=="default":
 % for include in target.include_list:
 #include <${include}.h>

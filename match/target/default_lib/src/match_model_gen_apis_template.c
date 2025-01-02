@@ -19,7 +19,7 @@ void match_api_prepare_inputs_from_prev_out(
     int vocab_size=1000;
     int max_index=0;
     float max_logit=-1000;
-    float* logits=out_pt_0;
+    float* logits=0x0;//out_pt_0;
     for (int b = 0; b < batch_size; b++) {
         int max_index = 0; // Index of the maximum logit
         int t=token_id-1;

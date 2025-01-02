@@ -4,10 +4,10 @@ from pathlib import Path
 import subprocess
 
 import mako
+from match.opt.generator import ScheduleGenerator
 from tvm.relay.dataflow_pattern import match as is_pattern_matching
 from match.partition.partitioning_pattern import PartitioningPattern
 from tvm.relay.dataflow_pattern import CallPattern,AttrPattern,AltPattern
-from match.codegen.temporal_mapping_generator import TemporalMappingGenerator
 from match.utils import save_codegen_schedule,save_schedule_search_res
 from functools import partial
 import tvm 
@@ -15,18 +15,18 @@ import tvm
 class PatternResult:
     """Class that stores all the information that may be relevant to cache a result of a node that we want to compile
     """
-    def __init__(self,match_target_pattern,layer_data,temporal_mapping=None,latency=0,energy=0):
+    def __init__(self,match_target_pattern,match_node,schedule=None,latency=0,energy=0):
         self.match_target_pattern=match_target_pattern
-        self.layer_data=layer_data
-        self.temporal_mapping=temporal_mapping
+        self.match_node=match_node
+        self.schedule=schedule
         self.latency=latency
         self.energy=energy
 
-    def get_temporal_mapping(self):
-        return self.temporal_mapping
+    def get_schedule(self):
+        return self.schedule
 
-    def set_temporal_mapping(self,temporal_mapping):
-        self.temporal_mapping=temporal_mapping
+    def set_schedule(self,schedule):
+        self.schedule=schedule
 
     def get_latency(self):
         return self.latency
@@ -41,7 +41,7 @@ class PatternResult:
         self.energy=energy
 
     def __eq__(self,other):
-        return self.match_target_pattern==other.match_target_pattern and self.layer_data==other.layer_data
+        return self.match_target_pattern==other.match_target_pattern and self.match_node==other.match_node
 
 def mock_func(pattern):
     return True
@@ -153,39 +153,37 @@ class MatchTarget(ABC):
         return None
 
     def get_layer_from_module(self,mod:tvm.ir.IRModule,exec_module_name:str="",pattern_name:str="conv2d"):
-        """Function to retrieve the temporal mapping with caching of a certain TVM module
+        """Function to retrieve the schedule with caching of a certain TVM module
 
         Args:
             mod (tvm.ir.IRModule): module to compile
             pattern_name (str, optional): Name of the pattern that partitioned this module. Defaults to "conv2d".
 
         Returns:
-            Temporal mapping as a list, the data of the fused layer and the module used to compile it
+            Schedule
         """
         node=mod.body.op.body
         match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{exec_module_name}.{pattern_name}")
-        tmapgen = TemporalMappingGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=True,pattern_inst=match_pt)
-        tmapgen.generate_workload()
-        tmapgen.set_exec_module_for_layer()
-        layer_data=tmapgen.get_layer_data()
-        spatial_mapping=tmapgen.get_spatial_mapping()
-        pt_res=PatternResult(match_pt,layer_data)
-        temporal_mapping,latency,energy=self.find_in_cached_list(pt_res)
-        if temporal_mapping is None:
+        schedule_gen = ScheduleGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=True,pattern_inst=match_pt)
+        schedule_gen.parse()
+        match_node=schedule_gen.get_match_node()
+        pt_res=PatternResult(match_pt,match_node)
+        schedule,latency,energy=self.find_in_cached_list(pt_res)
+        if schedule is None:
             try:
-                tmapgen.generate_temporal_mapping()
+                schedule_gen.generate()
             except Exception as exc:
                 raise Exception("No valid loop ordering found")
-            tmapgen.constraint_temporal_mapping()
-            temporal_mapping=tmapgen.get_temporal_mapping()
-            latency=tmapgen.get_latency()
-            energy=tmapgen.get_energy()
-            pt_res.set_temporal_mapping(temporal_mapping)
+            schedule_gen.apply_constraints()
+            schedule=schedule_gen.schedule
+            latency=schedule_gen.latency
+            energy=schedule_gen.energy
+            pt_res.set_schedule(schedule)
             pt_res.set_latency(latency)
             pt_res.set_energy(energy)
             self.add_pt_res_to_cache(pt_res)
-        save_codegen_schedule(node,temporal_mapping,spatial_mapping,latency,energy)
-        return temporal_mapping,layer_data,match_pt.exec_module,latency,energy
+        save_codegen_schedule(node,schedule,latency,energy)
+        return schedule,match_node,match_pt.exec_module,latency,energy
 
     def add_pt_res_to_cache(self,pt_res):
         self.__cached_pattern_results__.append(pt_res)
@@ -193,7 +191,7 @@ class MatchTarget(ABC):
     def find_in_cached_list(self,pattern_result):
         for cached_pt_res in self.__cached_pattern_results__:
             if cached_pt_res==pattern_result:
-                return cached_pt_res.temporal_mapping,cached_pt_res.latency,cached_pt_res.energy
+                return cached_pt_res.schedule,cached_pt_res.latency,cached_pt_res.energy
         return None,None,None
 
     def add_exec_modules(self,exec_modules):
@@ -201,7 +199,7 @@ class MatchTarget(ABC):
             self.add_exec_module(exec_module)
 
     def evaluate_pattern(self,node,match_pt):
-        """Search for the temporal mapping of a fused layer and its expected latency and energy performances
+        """Search for the schedule of a node and its expected latency and energy performances
 
         Args:
             node (tvm.relay.Call): Node that can be partitioned
@@ -210,27 +208,26 @@ class MatchTarget(ABC):
         Returns:
             Number,Number: latency and energy consumption results of the node with the given pattern
         """
-        tmapgen = TemporalMappingGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=False,pattern_inst=match_pt)
-        tmapgen.generate_workload()
-        tmapgen.set_exec_module_for_layer()
-        layer_data=tmapgen.get_layer_data()
-        pt_res=PatternResult(match_pt,layer_data)
-        temporal_mapping,latency,energy=self.find_in_cached_list(pt_res)
-        if temporal_mapping is not None:
+        schedule_gen = ScheduleGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=False,pattern_inst=match_pt)
+        schedule_gen.parse()
+        match_node=schedule_gen.get_match_node()
+        pt_res=PatternResult(match_pt,match_node)
+        schedule,latency,energy=self.find_in_cached_list(pt_res)
+        if schedule is not None:
             return latency,energy
         else:
             try:
-                tmapgen.generate_temporal_mapping()
+                schedule_gen.generate()
             except Exception as exc:
                 raise Exception("No valid loop ordering found")
-            tmapgen.constraint_temporal_mapping()
-            temporal_mapping=tmapgen.get_temporal_mapping()
-            latency=tmapgen.get_latency()
-            energy=tmapgen.get_energy()
-            pt_res.set_temporal_mapping(temporal_mapping)
+            schedule_gen.apply_constraints()
+            schedule=schedule_gen.schedule
+            latency=schedule_gen.latency
+            energy=schedule_gen.energy
+            pt_res.set_schedule(schedule)
             pt_res.set_latency(latency)
             pt_res.set_energy(energy)
-            save_schedule_search_res(match_pt.name,latency,energy,temporal_mapping,match_pt.pattern().partition(node))
+            save_schedule_search_res(match_pt.name,latency,energy,schedule,match_pt.pattern().partition(node))
             self.add_pt_res_to_cache(pt_res)
             return latency,energy
 
@@ -271,6 +268,8 @@ class MatchTarget(ABC):
                 latency,energy=self.evaluate_pattern(node,match_pt)
                 print(f"\nNode is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}\n")
             except Exception as exc:
+                import traceback as tb
+                print(tb.format_exc())
                 return False
             # check all the patterns that are after me
             for other_pt in self.match_patterns[match_pt.idx+1:]:
