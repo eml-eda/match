@@ -83,7 +83,7 @@ class MatchModel:
         def move_final_relay():
             subprocess.getoutput(f"mv {build_dir}/src/{self.name}.relay {build_dir}/{self.name}.relay")
         
-        if (not self.dynamic) or (self.dyn_is_max):
+        if self.name=="default":
             # move app
             move_final_relay()
             # include src runtime
@@ -109,9 +109,9 @@ def build_runtime(target=None,static_models:List[MatchModel]=[],dynamic_dims:Dic
         "runtime":runtime,
         "target":target,
     }
-    with open(abs_out_path+"/src/match_runtime.c","w") as run_file:
+    with open(abs_out_path+"/src/match/runtime.c","w") as run_file:
         run_file.write(Template(filename=os.path.dirname(__file__)+"/../libs/c/mako/match/src/runtime.c").render(**temp_args))
-    with open(abs_out_path+"/include/match_runtime.h","w") as run_file:
+    with open(abs_out_path+"/include/match/runtime.h","w") as run_file:
         run_file.write(Template(filename=os.path.dirname(__file__)+"/../libs/c/mako/match/include/runtime.h").render(**temp_args))
 
 def get_match_inputs_and_outputs(static_model:MatchModel=None):

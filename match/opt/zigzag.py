@@ -297,12 +297,6 @@ class ZigZagEngine(ScheduleEngine):
             print("[ZIGZAG_ENGINE] ZigZag Schedule: ")
             print_mapping(self.cme)
 
-    def update_tensors_tiles(self,default=False):
-        #for operand in self.zigzag_operands:
-        #    self.zigzag_operands_to_tensors
-        if default:
-            self.schedule.set_default_tensor_tiles(tensors=self.match_node.tensors_arr)
-
     def transform_schedule(self):
         mem_op_to_layer_op = self.cme.mem_op_to_layer_op
         mem_name = {}
@@ -381,4 +375,3 @@ class ZigZagEngine(ScheduleEngine):
                 )
             ]
         )
-        self.update_tensors_tiles(default=True)

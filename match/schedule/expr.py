@@ -92,7 +92,7 @@ class MatchTernaryExpr(MatchExpr):
 
     @property
     def c_expr(self):
-        return f"({self.if_expr.c_expr} ? {self.then_expr.c_expr} : {self.else_expr.c_expr}"
+        return f"{self.if_expr.c_expr} ? {self.then_expr.c_expr} : {self.else_expr.c_expr}"
 
 class MatchIfExpr(MatchExpr):
     def __init__(self, cond_expr: MatchExpr=MatchEmptyExpr(), then_expr: MatchExpr=MatchEmptyExpr(),
@@ -140,7 +140,7 @@ class MatchTensorExpr(MatchExpr):
 
     @property
     def c_expr(self):
-        return f"(({numpy_dtype_to_c_type(self.tensor.dtype)}*){self.tensor.name})[{self.tensor.c_offset_expr}]"
+        return f"(({numpy_dtype_to_c_type(self.tensor.dtype)}*){self.tensor.name}->base_pt)[{self.tensor.c_offset_expr}]"
 
 class MatchDimIdxExpr(MatchExpr):
     def __init__(self, name: str="dim_idx", dim: MatchDim=MatchDim()) -> None:

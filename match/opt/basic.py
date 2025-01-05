@@ -12,14 +12,13 @@ class BasicEngine(ScheduleEngine):
         super().__init__(exec_module=exec_module,pattern_name=pattern_name,match_node=match_node)
     
     def generate_schedule(self):
-        import pdb; pdb.set_trace()
-        breakpoint()
+        # import pdb; pdb.set_trace()
+        # breakpoint()
         schedule_blocks = []
         for op in self.match_node.ops.values():
             schedule_blocks += op.basic_schedules()[0].blocks
-        breakpoint()
-        self.schedule = MatchSchedule(blocks=schedule_blocks)
-        self.schedule.set_default_tensor_tiles(tensors=self.match_node.tensors_arr)
+        # breakpoint()
+        self.schedule = MatchSchedule(blocks=schedule_blocks,tensors=self.match_node.tensors)
 
     def transform_schedule_for_engine(self):
         pass

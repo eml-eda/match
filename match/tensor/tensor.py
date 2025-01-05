@@ -23,7 +23,7 @@ class MatchTensor:
         dims_expr = []
         for idx,dim in enumerate(self.dims):
             global_idx = f"{dim.name}->global_idx"
-            sizes_ = [str(inner_dim.size) for inner_dim in self.dims[idx:] if inner_dim.size > 1]
+            sizes_ = [str(inner_dim.size) for inner_dim in self.dims[idx+1:] if inner_dim.size > 1]
             if dim.size > 1:
                 if sizes_:
                     dims_expr.append(f"{global_idx} * {' * '.join(sizes_)}")
@@ -32,6 +32,10 @@ class MatchTensor:
         if len(dims_expr) == 0:
             return "0"
         return " + ".join(dims_expr)
+    
+    @property
+    def prod_shape(self):
+        return str(np.prod([dim.size for dim in self.dims]))
     
 class MatchTensorTile:
     def __init__(self,tensor: MatchTensor=MatchTensor(),tiled_dims: List[MatchTiledDim]=[]) -> None:

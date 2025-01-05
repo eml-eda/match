@@ -16,29 +16,38 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-#ifndef __MATCH_DEFAULT_TVM_RUNTIME_H__
-#define __MATCH_DEFAULT_TVM_RUNTIME_H__
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <tvm/runtime/c_runtime_api.h>
-#include <tvm/runtime/crt/stack_allocator.h>
+
+#include <tvm_runtime.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-void __attribute__((noreturn)) TVMPlatformAbort(tvm_crt_error_t error_code);
+void __attribute__((noreturn)) TVMPlatformAbort(tvm_crt_error_t error_code) {
+    abort();
+    exit(-1);
+}
 
-int TVMPlatformMemoryAllocate(size_t num_bytes, DLDevice dev, void** out_ptr);
+int TVMPlatformMemoryAllocate(size_t num_bytes, DLDevice dev, void** out_ptr) {
+    *out_ptr = malloc(num_bytes);
+    // Return nonzero exit code to caller on failure to allocate
+    if (*out_ptr == NULL){
+        return 1;
+    }
+    return 0;
+}
 
-int TVMPlatformMemoryFree(void* ptr, DLDevice dev);
+int TVMPlatformMemoryFree(void* ptr, DLDevice dev) {
+    free(ptr);
+    return 0;
+}
 
-void TVMLogf(const char* msg, ...);
+void TVMLogf(const char* msg, ...) {
+    printf(msg);
+}
 
-TVM_DLL int TVMFuncRegisterGlobal(const char* name, TVMFunctionHandle f, int override);
+TVM_DLL int TVMFuncRegisterGlobal(const char* name, TVMFunctionHandle f, int override) { return 0; }
 
 #ifdef __cplusplus
 }
-#endif
 #endif

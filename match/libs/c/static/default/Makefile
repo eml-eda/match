@@ -4,6 +4,7 @@ CC = gcc
 # Paths
 LIBS = -L./lib -lm
 BUILD_DIR = ./
+SRC_DIR = ./src
 # Output file name
 TARGET = match_app
 # Include paths
@@ -17,7 +18,7 @@ INCLUDES = -I${STANDALONE_CRT_PATH}/include \
 			 -I ./include/
 
 # Source files
-SRC =  $(foreach model, $(MODEL_DIRS), $(wildcard $(model)/src/*.c)) $(shell find $(abspath $(BUILD_DIR)) -name '*.c')  $(STANDALONE_CRT_PATH)/src/runtime/crt/common/crt_backend_api.c $(STANDALONE_CRT_PATH)/src/runtime/crt/memory/stack_allocator.c
+SRC =  $(foreach model, $(MODEL_DIRS), $(wildcard $(model)/src/*.c)) $(shell find $(abspath $(SRC_DIR)) -name '*.c')  $(STANDALONE_CRT_PATH)/src/runtime/crt/common/crt_backend_api.c $(STANDALONE_CRT_PATH)/src/runtime/crt/memory/stack_allocator.c
 
 
 CFLAGS = -Wall -Wextra -O3 -g $(INCLUDES)

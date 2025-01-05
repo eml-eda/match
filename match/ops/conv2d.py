@@ -3,7 +3,7 @@ from match.ops.op import MatchOp
 from typing import List,Tuple
 
 from match.schedule.block import MatchBlock
-from match.schedule.expr import MatchContinueExpr, MatchDimIdxExpr, MatchGteExpr, MatchIfExpr, MatchLtExpr, MatchMulExpr, MatchOrExpr, MatchPlusEqExpr, MatchPrimitiveExpr, MatchSubExpr, MatchTensorExpr
+from match.schedule.expr import MatchAssignExpr, MatchContinueExpr, MatchDimIdxExpr, MatchGteExpr, MatchIfExpr, MatchLtExpr, MatchMulExpr, MatchOrExpr, MatchPlusEqExpr, MatchPrimitiveExpr, MatchSubExpr, MatchTensorExpr
 from match.schedule.instr import MatchInstr
 from match.schedule.loop import MatchLoop
 from match.schedule.schedule import MatchSchedule
@@ -39,64 +39,50 @@ class MatchOpConv2D(MatchOp):
         ker_w_dim = weights.dims[3] if self.kernel_layout == "OIHW" else weights.dims[2]
         conv2d_sum = MatchPrimitiveExpr(name="conv2d_sum",dtype=self.out_dtype, const=False,
                                     init_expr=MatchPrimitiveExpr(name="zero",dtype=self.out_dtype,const=True,val=0))
-        inp_height = MatchPrimitiveExpr(name="inp_height",dtype="int32",const=False,
-                                                init_expr=MatchInstr(
-                                                    lhs_expr=MatchDimIdxExpr(name="inp_height_val",dim=inp_height_dim),
-                                                    eq_expr=MatchSubExpr(),
-                                                    rhs_expr=MatchPrimitiveExpr(name="padding_h",dtype="int32",const=True,val=self.padding[0]),
-                                                ),
-                                    )
-        inp_width = MatchPrimitiveExpr(name="inp_width",dtype="int32",const=False,
-                                                init_expr=MatchInstr(
-                                                    lhs_expr=MatchDimIdxExpr(name="inp_width_val",dim=inp_width_dim),
-                                                    eq_expr=MatchSubExpr(),
-                                                    rhs_expr=MatchPrimitiveExpr(name="padding_w",dtype="int32",const=True,val=self.padding[1]),
-                                                ),
-                                    )
         loops = []
         if batch_size_dim.size > 1:
-            loops.append(MatchLoop(dim=batch_size_dim,size=batch_size_dim.size,name="batch"),instr=[])
+            loops.append(MatchLoop(dim=batch_size_dim,size=batch_size_dim.size,name="batch",instrs=[]))
         if out_chs_dim.size > 1:
-            loops.append(MatchLoop(dim=out_chs_dim,size=out_chs_dim.size,name="out_ch"),instr=[])
+            loops.append(MatchLoop(dim=out_chs_dim,size=out_chs_dim.size,name="out_ch",instrs=[]))
         if out_h_dim.size > 1:
-            loops.append(MatchLoop(dim=out_h_dim,size=out_h_dim.size,name="out_h"),instr=[])
+            loops.append(MatchLoop(dim=out_h_dim,size=out_h_dim.size,name="out_h",instrs=[]))
         loops.append(MatchLoop(dim=out_w_dim,size=out_w_dim.size,name="out_w",init_instrs=[
                         MatchInstr(lhs_expr=conv2d_sum)
-                    ],),instr=[])
+                    ],instrs=[
+                        MatchInstr(lhs_expr=MatchTensorExpr(tensor=output),eq_expr=MatchAssignExpr(),rhs_expr=conv2d_sum)
+                    ]))
         if ker_h_dim.size > 1:
-            loops.append(MatchLoop(dim=ker_h_dim,size=ker_h_dim.size,name="ker_h"),instr=[])
+            loops.append(MatchLoop(dim=ker_h_dim,size=ker_h_dim.size,name="ker_h",instrs=[]))
         loops.append(MatchLoop(dim=ker_w_dim,size=ker_w_dim.size,name="ker_w",
             init_instrs=[
-                MatchInstr(lhs_expr=inp_height),
-                MatchInstr(lhs_expr=inp_width),
                 # if padding continue
                 MatchInstr(lhs_expr=MatchIfExpr(
                     MatchInstr(
                         # if less than 0 it means that its padding
-                        lhs_expr=MatchInstr(lhs_expr=inp_height,eq_expr=MatchLtExpr(),rhs_expr=MatchPrimitiveExpr(name="zero",dtype="int32",const=True,val=0)),
+                        lhs_expr=MatchInstr(lhs_expr=MatchDimIdxExpr(name="inp_height_val",dim=inp_height_dim),eq_expr=MatchLtExpr(),rhs_expr=MatchPrimitiveExpr(name="zero",dtype="int32",const=True,val=0)),
                         eq_expr=MatchOrExpr(),
                         # if greater or equal than the input height it means that its padding
                         rhs_expr=MatchInstr(
-                            lhs_expr=MatchInstr(lhs_expr=inp_height,eq_expr=MatchGteExpr(),rhs_expr=MatchPrimitiveExpr(name="inp_height_val",dtype="int32",const=True,val=inp_height_dim.size)),
+                            lhs_expr=MatchInstr(lhs_expr=MatchDimIdxExpr(name="inp_height_val",dim=inp_height_dim),eq_expr=MatchGteExpr(),rhs_expr=MatchPrimitiveExpr(name="inp_height_val",dtype="int32",const=True,val=inp_height_dim.size)),
                             eq_expr=MatchOrExpr(),
                             # if less than 0 it means that its padding
                             rhs_expr=MatchInstr(
-                                lhs_expr=MatchInstr(lhs_expr=inp_width,eq_expr=MatchLtExpr(),rhs_expr=MatchPrimitiveExpr(name="zero",dtype="int32",const=True,val=0)),
+                                lhs_expr=MatchInstr(lhs_expr=MatchDimIdxExpr(name="inp_width_val",dim=inp_width_dim),eq_expr=MatchLtExpr(),rhs_expr=MatchPrimitiveExpr(name="zero",dtype="int32",const=True,val=0)),
                                 eq_expr=MatchOrExpr(),
                                 # if greater or equal than the input width it means that its padding
-                                rhs_expr=MatchInstr(lhs_expr=inp_width,eq_expr=MatchGteExpr(),rhs_expr=MatchPrimitiveExpr(name="inp_width_val",dtype="int32",const=True,val=inp_width_dim.size)),
+                                rhs_expr=MatchInstr(lhs_expr=MatchDimIdxExpr(name="inp_width_val",dim=inp_width_dim),eq_expr=MatchGteExpr(),rhs_expr=MatchPrimitiveExpr(name="inp_width_val",dtype="int32",const=True,val=inp_width_dim.size)),
                             )
                         )   
                     ),
                     then_expr=MatchContinueExpr(),
                 ))
-        ]),instr=[])
+        ],instrs=[]))
         loops.append(MatchLoop(dim=inp_chs_dim,size=inp_chs_dim.size,name="inp_ch", instrs=[
                         # do actual convolution
                         MatchInstr(lhs_expr=conv2d_sum,eq_expr=MatchPlusEqExpr(),rhs_expr=MatchInstr(
                             lhs_expr=MatchTensorExpr(tensor=activations),eq_expr=MatchMulExpr(),rhs_expr=MatchTensorExpr(tensor=weights))
                         )
-                    ]),init_instrs=[])
+                    ],init_instrs=[]))
         basic_conv2d = MatchSchedule(
             blocks = [MatchBlock(loops=loops)]
         )

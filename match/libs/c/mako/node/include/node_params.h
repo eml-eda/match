@@ -6,82 +6,101 @@
 #include <${target.name}.h>
 #include <${exec_module.name}/${exec_module.name}.h>
 #include <nodes/${model_name}/${name}_data.h>
-// loops iters counters
-% for block_idx,block in enumerate(schedule.blocks):
-% for loop_idx in range(len(block.loops)):
-extern int loop_${block.loops[loop_idx].name}_iter;
-% endfor
-% endfor
 
 // DIMS
-extern const char* ${name}_dims_names_[];
+extern const char* dims_names_[];
 % if len(match_node.dims)>0:
-extern MatchDim ${name}_dims_[${len(match_node.dims)}];
+extern MatchDim dims_[${len(match_node.dims)}];
 % else:
-extern MatchDim *${name}_dims_;
+extern MatchDim *dims_;
 % endif
 % for idx,dim in enumerate(match_node.dims.values()):
-extern MatchDim* ${name}_${dim.name}_dim;
+extern MatchDim* ${dim.name};
 % endfor
-extern MatchDims ${name}_dims_cnt_;
+extern MatchDims dims_cnt_;
 
 // TILES
 % for t_tensor_name,t_tensor_tiles in schedule.tensor_tiles.items():
-extern MatchTensorTile ${name}_${t_tensor_name}_tiles_[${len(t_tensor_tiles)}][${t_tensor_tiles[0].tensor.num_dims}];
-extern MatchTensorTile** ${name}_${t_tensor_name}_tiles;
+extern MatchTensorTile ${t_tensor_name}_tiles_[${len(t_tensor_tiles)}][${t_tensor_tiles[0].tensor.num_dims}];
+extern MatchTensorTile** ${t_tensor_name}_tiles;
 % endfor
-// VARS
-extern const char* ${name}_vars_names_[];
-% if len(match_node.var_tensors)>0:
-extern MatchVarTensor ${name}_vars_[${len(match_node.var_tensors)}];
-% else:
-extern MatchVarTensor *${name}_vars_;
-% endif
-% for idx,var in enumerate(match_node.var_tensors.values()):
-extern MatchVarTensor* ${name}_${var.name}_var;
-% endfor
-extern MatchVars ${name}_vars_cnt_;
 
-// CONSTS
-extern const char* ${name}_consts_names_[];
-% if len(match_node.const_tensors)>0:
-extern MatchConstTensor ${name}_consts_[${len(match_node.const_tensors)}];
-% else:
-extern MatchConstTensor *${name}_consts_;
-% endif
-% for idx,const_ in enumerate(match_node.const_tensors.values()):
-extern MatchConstTensor* ${name}_${const_.name}_const;
+extern const char* tensors_names_[];
+extern MatchTensor tensors_[${len(schedule.tensors)}];
+% for idx,tensor in enumerate(schedule.tensors.values()):
+extern MatchTensor* ${tensor.name};
 % endfor
-extern MatchConsts ${name}_consts_cnt_;
-
-// OUTPUTS
-extern const char* ${name}_outputs_names_[];
-% if len(match_node.output_tensors)>0:
-extern MatchOutputTensor ${name}_outputs_[${len(match_node.output_tensors)}];
-% else:
-extern MatchOutputTensor *${name}_outputs_;
-% endif
-% for idx,out in enumerate(match_node.output_tensors.values()):
-extern MatchOutputTensor* ${name}_${out.name}_out;
-% endfor
-extern MatchOutputs ${name}_outputs_cnt_;
+extern MatchTensors tensors_cnt_;
 
 // ops
-extern const char* ${name}_ops_names_[];
+extern const char* ops_names_[];
 % if len(match_node.ops)>0:
-extern MatchOp ${name}_ops_[${len(match_node.ops)}];
+extern MatchOp ops_[${len(match_node.ops)}];
 % else:
-extern MatchOp *${name}_ops_;
+extern MatchOp *ops_;
 % endif
 % for idx,(op_name,op) in enumerate(match_node.ops.items()):
-extern Match${op.op}Attrs ${name}_op_${op_name}_attrs_;
-extern Match${op.op}Attrs* ${name}_${op_name}_attrs;
-extern MatchOp* ${name}_${op_name}_op;
+extern Match${op.op}Attrs op_${op_name}_attrs_;
+extern Match${op.op}Attrs* ${op_name}_attrs;
+extern MatchOp* ${op_name}_op;
 % endfor
-extern MatchOps ${name}_ops_cnt_;
+extern MatchOps ops_cnt_;
 
 extern MatchCtx ${name}_ctx_;
 
 extern MatchCtx* ${name}_ctx;
+
+% for dep_dim in match_node.dependent_dims:
+inline void update_${dep_dim.name}(){
+    ${dep_dim.name}->global_idx = 
+    % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.dependencies.items()):
+    ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else ind_dim.name+"->global_idx"})
+    % endfor
+    ;
+}
+inline void set_${dep_dim.name}(){
+    ${dep_dim.name}->curr_size = 
+    % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.dependencies.items()):
+    ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else ind_dim.name+"->curr_size"})
+    % endfor
+    ;
+}
+% endfor
+
+
+// loops iters counters
+% for block_idx,block in enumerate(schedule.blocks):
+% for loop_idx,lp in enumerate(block.loops):
+extern int block_${block_idx}_loop_${block.loops[loop_idx].name}_iter;
+
+inline void block_${block_idx}_loop_${lp.name}_set(){
+    block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
+    ${lp.dim.name}->curr_size = ${lp.step*lp.size};
+    % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
+    set_${dep_dim}();
+    % endfor
+}
+inline int block_${block_idx}_loop_${lp.name}_reset(){
+    // block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
+    ${lp.dim.name}->global_idx -= ${lp.step*lp.size};
+    return 0;
+    % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
+    set_${dep_dim}();
+    update_${dep_dim}();
+    % endfor
+}
+inline void block_${block_idx}_loop_${lp.name}_update(){
+    block_${block_idx}_loop_${block.loops[loop_idx].name}_iter += 1;
+    ${lp.dim.name}->global_idx += ${lp.step};
+    % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
+    update_${dep_dim}();
+    % endfor
+}
+inline int block_${block_idx}_loop_${lp.name}_end(){
+    return block_${block_idx}_loop_${block.loops[loop_idx].name}_iter >= ${lp.size} ? block_${block_idx}_loop_${lp.name}_reset() : 1;
+}
+
+% endfor
+% endfor
 
 #endif

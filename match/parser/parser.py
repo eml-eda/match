@@ -251,8 +251,12 @@ class MatchParser:
         # save vars
         self.match_node.var_tensors = self.node_vars
         self.match_node.const_tensors = self.node_consts
-        self.match_node.output_tensors = {t_name:t_value for t_name,t_value in self.calls_tensors.items() if t_value.tensor_type=="output"}
-        self.match_node.intermediate_tensors = {t_name:t_value for t_name,t_value in self.calls_tensors.items() if t_value.tensor_type=="intermediate"}
+        # add out to name of call tensors
+        for call_tensor in self.calls_tensors.values():
+            call_tensor.name = call_tensor.name + "_out"
+        
+        self.match_node.output_tensors = {t_name+"_out":t_value for t_name,t_value in self.calls_tensors.items() if t_value.tensor_type=="output"}
+        self.match_node.intermediate_tensors = {t_name+"_out":t_value for t_name,t_value in self.calls_tensors.items() if t_value.tensor_type=="intermediate"}
         # remove useless dims
         # Find duplicate dims with different names but same properties     
         # Replace dims in tensors with duplicates removed

@@ -15,12 +15,12 @@ class MatchOpBiasAdd(MatchOp):
         output, activations, biases = self.outs[0], self.vars[0], self.consts[0]
         loops = []
         for dim in output.dims:
-            loops.append(MatchLoop(dim=dim, size=dim.size, name=dim.name))
+            loops.append(MatchLoop(dim=dim, size=dim.size, name=dim.name, init_instrs=[], instrs=[]))
         bias_val = MatchPrimitiveExpr(name="bias_val",dtype=output.dtype, const=False, init_expr=MatchTensorExpr(tensor=biases))
         axis = -1
         if self.axis >= 0:
             axis = self.axis
-        loops[axis].instrs.append(MatchInstr(lhs_expr=bias_val))
+        loops[axis].init_instrs.append(MatchInstr(lhs_expr=bias_val))
         loops[-1].instrs.append(MatchInstr(lhs_expr=MatchTensorExpr(tensor=output),eq_expr=MatchAssignExpr(),
                                            rhs_expr=MatchInstr(lhs_expr=MatchTensorExpr(tensor=activations),eq_expr=MatchAddExpr(),
                                                                 rhs_expr=bias_val)))

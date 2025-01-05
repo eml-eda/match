@@ -19,8 +19,17 @@ class MatchOp:
             if isinstance(value, (list, tuple)):
                 return f"{{{', '.join(map(str, value))}}}"
             return value
-        return {k: v if not isinstance(v, (list, tuple, bool)) else int(v) if isinstance(v,bool) else _convert_to_c_array(v)
-                for k, v in self.attrs.items() if isinstance(v, (int, float, str, bool, list, tuple))}
+        def _convert_to_c(value):
+            if isinstance(value,str):
+                return '"'+value+'"'
+            if isinstance(value,bool):
+                return int(value)
+            if isinstance(value,(int,float)):
+                return value
+            if isinstance(value,(list,tuple)):
+                return _convert_to_c_array(value)
+            return value
+        return {k: _convert_to_c(v) for k, v in self.attrs.items() if isinstance(v, (int, float, str, bool, list, tuple))}
     
     def basic_schedules(self):
         return []

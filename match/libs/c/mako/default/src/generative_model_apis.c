@@ -1,4 +1,4 @@
-#include <match/model_gen_apis.h>
+#include <match/generative_model_apis.h>
 
 int token_id = 1;
 

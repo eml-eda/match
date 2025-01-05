@@ -196,18 +196,18 @@ class MatchRelayParser(MatchParser):
             o_h_dim = MatchDim(name=name+"_out_h",size=o_h)
             self.node_all_dims[o_h_dim.name] = o_h_dim
             if i_h_dim.name==i_h_dim.original_name:
-                i_h_dim.dim_dependency = DimDependency(dependencies={o_h_dim:strides[0],w_ksh_dim:dilations[0]})
+                i_h_dim.dim_dependency = DimDependency(dependencies={o_h_dim:strides[0],w_ksh_dim:dilations[0],padding[0]:-1})
             else:
-                self.node_all_dims[i_h_dim.name].dependencies = DimDependency(dependencies={w_cout_dim:strides[0],w_ksh_dim:dilations[0]})
+                self.node_all_dims[i_h_dim.name].dependencies = DimDependency(dependencies={w_cout_dim:strides[0],w_ksh_dim:dilations[0],padding[0]:-1})
         else:
             o_h_dim = i_h_dim
         if strides[1]!=1 or dilations[1]!=1:
             o_w_dim = MatchDim(name=name+"_out_w",size=o_w)
             self.node_all_dims[o_w_dim.name] = o_w_dim
             if i_w_dim.name==i_w_dim.original_name:
-                i_w_dim.dim_dependency = DimDependency(dependencies={o_w_dim:strides[1],w_ksw_dim:dilations[1]})
+                i_w_dim.dim_dependency = DimDependency(dependencies={o_w_dim:strides[1],w_ksw_dim:dilations[1],padding[1]:-1})
             else:
-                self.node_all_dims[i_w_dim.name].dependencies = DimDependency(dependencies={w_cout_dim:strides[1],w_ksw_dim:dilations[1]})
+                self.node_all_dims[i_w_dim.name].dependencies = DimDependency(dependencies={w_cout_dim:strides[1],w_ksw_dim:dilations[1],padding[1]:-1})
         else:
             o_w_dim = i_w_dim
         if not depthwise:

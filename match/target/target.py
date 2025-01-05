@@ -93,14 +93,13 @@ class MatchTarget(ABC):
         self.exec_modules_dict=dict()
         self.disabled_exec_modules=[]
         self.optimize_param="energy" if optimize_param=="energy" else "latency"
-        self.tvm_runtime_path=os.path.dirname(__file__)+"/../libs/c/static/default/include/tvm_runtime.h"
+        self.tvm_runtime_include_path=os.path.dirname(__file__)+"/../libs/c/static/default/include/tvm_runtime.h"
+        self.tvm_runtime_src_path=os.path.dirname(__file__)+"/../libs/c/static/default/src/tvm_runtime.h"
         self.crt_config_path=os.path.dirname(__file__)+"/../libs/c/static/default/include/crt_config.h"
         self.makefile_path=os.path.dirname(__file__)+"/../libs/c/static/default/Makefile"
         self.main_template_path=os.path.dirname(__file__)+"/../libs/c/mako/default/src/main.c"
-        self.model_generative_apis_src_path=os.path.dirname(__file__)+"/../libs/c/mako/default/src/match_model_gen_apis_template.c"
-        self.model_generative_apis_include_path=os.path.dirname(__file__)+"/../libs/c/mako/deafult/include/match_model_gen_apis_template.h"
-        self.runtime_src_path=os.path.dirname(__file__)+"/../libs/c/mako/match/src/runtime.c"
-        self.runtime_include_path=os.path.dirname(__file__)+"/../libs/c/mako/match/include/runtime.h"
+        self.model_generative_apis_src_path=os.path.dirname(__file__)+"/../libs/c/mako/default/src/generative_model_apis.c"
+        self.model_generative_apis_include_path=os.path.dirname(__file__)+"/../libs/c/mako/default/include/generative_model_apis.h"
         self.default_inputs_src_path=os.path.dirname(__file__)+"/../libs/c/mako/match/src/default_inputs.c"
         self.default_inputs_include_path=os.path.dirname(__file__)+"/../libs/c/mako/match/include/default_inputs.h"
         self.clean_funcs=[]
@@ -126,7 +125,8 @@ class MatchTarget(ABC):
 
     def gen_libs_and_main(self,match_inputs,match_outputs,dynamic_dims,runtime,out_path):
         abs_out_path = str(Path(out_path).absolute())
-        subprocess.getoutput(f"cp {self.tvm_runtime_path} {abs_out_path}/include/tvm_runtime.h")
+        subprocess.getoutput(f"cp {self.tvm_runtime_include_path} {abs_out_path}/include/tvm_runtime.h")
+        subprocess.getoutput(f"cp {self.tvm_runtime_src_path} {abs_out_path}/src/tvm_runtime.h")
         subprocess.getoutput(f"cp {self.crt_config_path} {abs_out_path}/include/crt_config.h")
         subprocess.getoutput(f"cp {self.makefile_path} {abs_out_path}/Makefile")
         templates_data = {

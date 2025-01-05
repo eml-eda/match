@@ -14,13 +14,13 @@ class MatchOpReLU(MatchOp):
         output, activations = self.outs[0], self.vars[0]
         loops = []
         for dim in output.dims:
-            loops.append(MatchLoop(dim=dim, size=dim.size, name=dim.name))
+            loops.append(MatchLoop(dim=dim, size=dim.size, name=dim.name, init_instrs=[], instrs=[]))
         loops[-1].instrs.append(MatchInstr(lhs_expr=MatchTensorExpr(tensor=output),eq_expr=MatchAssignExpr(),
                                            rhs_expr=MatchTernaryExpr(
                                                if_expr=MatchInstr(lhs_expr=MatchTensorExpr(tensor=activations),
                                                                   eq_expr=MatchGtExpr(),rhs_expr=MatchPrimitiveExpr(name="zero",dtype=output.dtype,const=True,val=0)),
-                                                  else_expr=MatchTensorExpr(tensor=activations),
-                                                  then_expr=MatchPrimitiveExpr(name="zero",dtype=output.dtype,const=True,val=0),
+                                                  then_expr=MatchTensorExpr(tensor=activations),
+                                                  else_expr=MatchPrimitiveExpr(name="zero",dtype=output.dtype,const=True,val=0),
                                            )))
         basic_relu_schedule = MatchSchedule(
             blocks=[

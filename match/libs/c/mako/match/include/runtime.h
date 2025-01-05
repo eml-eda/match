@@ -4,9 +4,9 @@
 #include <stdlib.h>
 #include <time.h>
 #include <tvm_runtime.h>  // Include TVM runtime API
-#include <match_model_gen_apis.h>
-#include <match_default_inputs.h>
-#include <match_target_params.h>
+#include <match/generative_model_apis.h>
+#include <match/default_inputs.h>
+#include <${target.name}.h>
 % for gen_model in generative_models.keys():
 #include <tvmgen_${gen_model}.h>
 % endfor

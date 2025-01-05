@@ -28,7 +28,8 @@ class TemplateWriter:
     def get_template_data(self):
         self.template_data["c_dtype"]=numpy_dtype_to_c_type
         self.template_data["c_np_array"]=c_friendly_npvalue
-        self.template_data["pattern_name"]=self.exec_module.specific_pattern
+        #self.template_data["pattern_name"]=self.exec_module.specific_pattern
+        self.template_data["pattern_name"]=self.pattern_name
         self.template_data["c_ident"]=lambda x: "\t"*x
         self.template_data["pattern_family"]=self.pattern_name
         self.template_data["latency"]=self.latency
