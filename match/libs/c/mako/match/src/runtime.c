@@ -1,18 +1,58 @@
 ## This is a Mako template for generating a dynamic runtime in C for a static LLM model with multiple inputs and outputs.
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <time.h>
-#include <match_runtime.h>
-#include <tvm_runtime.h>  // Include TVM runtime API
-% if runtime=="generative":
-#include <match_model_gen_apis.h>
+#include <match/runtime.h>
 
 % for dim_name,dim in dynamic_dims.items():
 int dyn_dim_${dim_name}_size = ${dim.min};
 int dyn_dim_${dim_name}_size_pad = ${dim.min};
 int dyn_dim_${dim_name}_padded_sizes[${len(generative_models)}] = {${str([dyn_model.dynamic_sizes[dim_name] for dyn_model_name,dyn_model in models.items()])[1:-1]}};
 % endfor
+
+% for gen_model_name in generative_models.keys()-"default":
+struct tvmgen_${gen_model_name}_inputs model_inps_${gen_model_name.upper()};
+struct tvmgen_${gen_model_name}_outputs model_outs_${gen_model_name.upper()};
+% endfor
+struct tvmgen_default_inputs model_inps_default;
+struct tvmgen_default_outputs model_outs_default;
+
+% if golden_cpu_model:
+% for model_name in generative_models.keys()-"golden_cpu_model":
+int check_${model_name}_differences_with_cpu(struct tvmgen_golden_cpu_model_inputs* cpu_inps,struct tvmgen_golden_cpu_model_outputs* cpu_outs,
+                        struct tvmgen_${model_name}_inputs* model_inps,struct tvmgen_${model_name}_outputs* model_outs){
+    tvmgen_golden_cpu_model_run(cpu_inps,cpu_outs);tvmgen_${model_name}_run(model_inps,model_outs);
+    int diffs = 0;
+    % for out_name,out in outputs.items():
+    for(int i=0;i<${out["prod_shape"]};i++)
+        if(((${out["c_type"]}*)cpu_outs->output)[i]!=((${out["c_type"]}*)model_outs->output)[i]){
+            printf("CPU and Default outputs DO NOT match at i %d CPU: %d ${model_name}: %d diff: %d\n"
+                i,((${out["c_type"]}*)cpu_outs->output)[i],((${out["c_type"]}*)model_outs->output)[i]
+                ,((int*)cpu_outs->output)[h_idx*16+w_idx]-((${out["c_type"]}*)model_outs->output)[i]
+            );
+            diffs++;
+        }
+    % endfor
+    return diffs;
+}
+% endfor
+% endif
+% if benchmarking:
+% for model_name in generative_models.keys():
+void benchmark_${model_name}_model(int iterations, struct tvmgen_${model_name}_inputs* model_inps, struct tvmgen_${model_name}_outputs* model_outs){
+    int status = 0;
+    int fails = 0;
+    clock_t start, end;
+    start = clock();
+    for(int i=0;i<iterations;i++){
+        status=tvmgen_${model_name}_run(model_inps,model_outs);
+        if(status) fails++;
+    }
+    end = clock();
+
+    double time_elapsed_ms = ((double)(end - start))/CLOCKS_PER_SEC * 1000;
+    printf("[${model_name}_BENCH] time %fms; time per iterations %fms; fails %d\n",
+        time_elapsed_ms, time_elapsed_ms/iterations, fails);
+}
+% endfor
+% endif
 
 % for gen_model_name,gen_model in generative_models.items():
 int calc_padding_for_gen_model_${gen_model_name}(){
@@ -79,7 +119,7 @@ void store_inp_${inp_name}_for_${gen_model_name}(${inp["c_type"]}* buffer_inp_pt
 % for inp_name in inputs.keys():
 void store_inp_${inp_name}_for_gen_model(${inp["c_type"]}* buffer_inp_pt,${inp["c_type"]}* model_inp_pt,int model_idx){
     switch(model_idx){
-        % for gen_model in generative_models.keys():
+        % for gen_model in generative_models.keys()-"default":
         case MATCH_GEN_MODEL_${gen_model.upper()}:
             store_inp_${inp_name}_for_${gen_model_name}(buffer_inp_pt,model_inp_pt);
             break;
@@ -209,27 +249,29 @@ void match_generative_runtime(
         }
         switch(model_idx){
         % for idx_model,(gen_model_name,gen_model) in enumerate(generative_models.items()):
+            % if gen_model_name!="default":
             case ${idx_model}:
-                struct tvmgen_${gen_model_name}_inputs model_inps_${gen_model_name.upper()} = {
+                model_inps_${gen_model_name.upper()} = (struct tvmgen_${gen_model_name}_inputs){
                     % for inp_name in inputs.keys():
                     .${inp_name} = ${inp_name}_inp,
                     % endfor
                 };
-                struct tvmgen_${gen_model_name}_outputs model_outs_${gen_model_name.upper()} = {
+                model_outs_${gen_model_name.upper()} = (struct tvmgen_${gen_model_name}_outputs){
                     % for out_name in outputs.keys():
                     .${out_name} = ${out_name}_out,
                     % endfor
                 };
                 match_ctx->status = tvmgen_${gen_model_name}_run(&model_inps_${gen_model_name.upper()},&model_outs_${gen_model_name.upper()});
                 break;
+            % endif
         % endfor
             default:
-                struct tvmgen_default_inputs model_inps_default = {
+                model_inps_default = (struct tvmgen_default_inputs){
                     % for inp_name in inputs.keys():
                     .${inp_name} = ${inp_name}_inp,
                     % endfor
                 };
-                struct tvmgen_default_outputs model_outs_default = {
+                model_outs_default = (struct tvmgen_default_outputs){
                     % for out_name in outputs.keys():
                     .${out_name} = ${out_name}_out,
                     % endfor
@@ -272,24 +314,41 @@ void match_generative_runtime(
     #endif
 }
 
-% else:
-#include <match_default_inputs.h>
+void match_basic_runtime(
+    % for inp_name,inp in inputs.items():
+    ${inp["c_type"]}* ${inp_name}_pt,
+    % endfor
+    % for out_name,out in outputs.items():
+    ${out["c_type"]}* ${out_name}_pt,
+    % endfor
+    match_runtime_ctx* match_ctx){
+    model_inps_default = (struct tvmgen_default_inputs){
+        % for inp_name in inputs.keys():
+        .${inp_name} = ${inp_name}_pt,
+        % endfor
+    };
+    model_outs_default = (struct tvmgen_default_outputs){
+        % for out_name in outputs.keys():
+        .${out_name} = ${out_name}_pt,
+        % endfor
+    };
+    match_ctx->status = tvmgen_default_run(&model_inps_default,&model_outs_default);
+}
 
 void match_default_runtime(
     % for out_name,out in outputs.items():
     ${out["c_type"]}* ${out_name}_pt,
     % endfor
     match_runtime_ctx* match_ctx){
-    struct tvmgen_default_inputs model_inps = {
+    model_inps_default = (struct tvmgen_default_inputs){
         % for inp_name in inputs.keys():
         .${inp_name} = ${inp_name}_default,
         % endfor
     };
-    struct tvmgen_default_outputs model_outs = {
+    model_outs_default = (struct tvmgen_default_outputs){
         % for out_name in outputs.keys():
         .${out_name} = ${out_name}_pt,
         % endfor
     };
-    match_ctx->status = tvmgen_default_run(&model_inps,&model_outs);
+    match_ctx->status = tvmgen_default_run(&model_inps_default,&model_outs_default);
 }
-% endif

@@ -21,5 +21,8 @@ class MatchOp:
             return value
         return {k: v if not isinstance(v, (list, tuple, bool)) else int(v) if isinstance(v,bool) else _convert_to_c_array(v)
                 for k, v in self.attrs.items() if isinstance(v, (int, float, str, bool, list, tuple))}
+    
+    def basic_schedules(self):
+        return []
 
         

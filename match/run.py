@@ -9,9 +9,11 @@ from match.target.get_target import get_target, reset_target, set_target
 import argparse
 from match.relay.get_relay import get_relay_from
 from match.utils.utils import set_output_path
+import tvm
 
 
 def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
+          relay_mod: tvm.ir.IRModule=None, relay_params=None,
           filename=None, params_filename=None,
           target=None, target_name=None,
           dynamic_dims:Dict[str,DynamicDim]={},
@@ -24,6 +26,8 @@ def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
     # make the build folder again
     Path(output_path).absolute().mkdir(parents=True)
     set_output_path(str(Path(output_path).absolute()))
+    if relay_mod is not None:
+        models_to_compile = [MatchModel(relay_mod=relay_mod,relay_params=relay_params)]
     if len(models_to_compile)==0:    
         models_to_compile,match_inputs,match_outputs,dynamic_dims = get_relay_from(input_type,filename,params_filename)
     #add_save_relay(prefix="start",mod=relay_mod,params=relay_params)
@@ -37,6 +41,12 @@ def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
         model_to_compile.compile_model(target=target,out_path=output_path)
         model_to_compile.move_static_app_to(out_path=output_path)
         results[model_to_compile.name] = CompiledModule.result
+        static_model_result = CompiledModule.result
+        static_model_result.match_inputs,static_model_result.match_outputs = get_match_inputs_and_outputs(model_to_compile)
+        if match_inputs is not None:
+            static_model_result.match_inputs = match_inputs
+        if match_outputs is not None:
+            static_model_result.match_outputs = match_outputs
         if golden_default_cpu_model and model_to_compile.name=="default":
             model_cpu_to_compile = MatchModel(relay_mod=model_to_compile.relay_mod,relay_params=model_to_compile.relay_params,
                                               dynamic=False)
@@ -49,19 +59,20 @@ def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
             model_cpu_to_compile.compile_model(target=target,out_path=output_path)
             model_cpu_to_compile.move_static_app_to(out_path=output_path)
             results[model_cpu_to_compile.name] = CompiledModule.result
+            results[model_cpu_to_compile.name].match_inputs, results[model_cpu_to_compile.name].match_outputs = results["default"].match_inputs,results["default"].match_outputs
             target.disabled_exec_modules = target_disabled_modules
             models_compiled_added.append(model_cpu_to_compile)
     
-    model_to_compile+=models_compiled_added
+    models_to_compile+=models_compiled_added
     
     runtime="default"
     if len(dynamic_dims)>0:
         runtime="generative"
     
     if match_inputs is None or match_outputs is None:
-        match_inputs,match_outputs=get_match_inputs_and_outputs(models_to_compile)
-    
-    build_runtime(models_to_compile,dynamic_dims,match_inputs,match_outputs,runtime,output_path)
+        match_inputs,match_outputs=results["default"].match_inputs,results["default"].match_outputs
+    build_runtime(target=target,static_models=models_to_compile,dynamic_dims=dynamic_dims,
+                  match_inputs=match_inputs,match_outputs=match_outputs,runtime=runtime,out_path=output_path)
     
     target.gen_libs_and_main(match_inputs=match_inputs,match_outputs=match_outputs,dynamic_dims=dynamic_dims,runtime=runtime,out_path=output_path)
     return results

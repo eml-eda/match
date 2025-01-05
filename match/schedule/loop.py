@@ -7,7 +7,8 @@ from match.schedule.mem_transfer import MatchMemTransfer
 
 class MatchLoop:
     def __init__(self, dim: MatchDim, size: int=0, name: str="width",
-                 mem_transfers: List[MatchMemTransfer]=[], instrs: List[MatchInstr]=[]) -> None:
+                 mem_transfers: List[MatchMemTransfer]=[], init_instrs: List[MatchInstr]=[],
+                 instrs: List[MatchInstr]=[],) -> None:
         self.name = ""
         self.size = size
         self.name = name
@@ -15,4 +16,5 @@ class MatchLoop:
         self.mem_transfers = mem_transfers
         # TODO: fix the step calculation
         self.step = size
+        self.init_instrs = init_instrs
         self.instrs = instrs

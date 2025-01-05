@@ -308,6 +308,8 @@ def create_build_dir(build_path: str = "./build",
         
     for base_dir in ["src", "include"]:
         template_dir = match_lib_path / "mako" / "create" / base_dir
+        if not template_dir.is_dir():
+            continue
         for filename in os.listdir(template_dir):
             filename_without_dots = filename.split(".")
             filename_without_ext = ".".join(filename_without_dots[:-1])

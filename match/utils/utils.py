@@ -37,7 +37,7 @@ def c_friendly_npvalue(arr):
     # params: arr is expected to be a numpy version of the value, it should be an array but it may be also just a single value
     if len(arr.shape)>0:
         # this is actually an array and not a single value
-        arr=arr.reshape([arr.shape[0]]).astype(np.uint8)
+        arr=arr.reshape([arr.shape[0]])
         return f'{{{str(list(arr))[1:len(str(list(arr)))-1]}}}'
     else:
         return str(arr)

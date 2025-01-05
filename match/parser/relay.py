@@ -236,5 +236,8 @@ class MatchRelayParser(MatchParser):
             groups= groups,
             kernel_size=(w_ksh,w_ksw),
             depthwise= depthwise,
+            data_layout= attrs.data_layout,
+            kernel_layout= attrs.kernel_layout,
+            out_dtype= np.dtype(attrs.out_dtype),
         )
         self.update_match_node(op=op,call=call,name=name)

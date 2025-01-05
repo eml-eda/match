@@ -1,3 +1,4 @@
+from math import prod
 from typing import Dict, List
 import onnx
 from match.model import DynamicDim, get_cutoff_combinations
@@ -7,11 +8,26 @@ import tvm.relay as relay
 from match.relay.onnx.onnx_utils import get_onnx_static_model, sanitize_onnx_plinio,sanitize_onnx_only_remove
 from match.model import MatchModel
 
-
-
-def get_dynamic_inputs_outputs(onnx_model: onnx.ModelProto):
-    match_inputs = {inp.name:{"name":inp.name,"c_type":numpy_dtype_to_c_type(onnx.helper.tensor_dtype_to_np_dtype(inp.type.tensor_type.elem_type)),"dims":[dim.dim_value if dim.dim_param=="" else dim.dim_param for dim in inp.type.tensor_type.shape.dim]} for inp in onnx_model.graph.input}
-    match_outputs = {f"output{idx if len(onnx_model.graph.output)>1 else ''}":{"name":f"output{idx if len(onnx_model.graph.output)>1 else ''}","c_type":numpy_dtype_to_c_type(onnx.helper.tensor_dtype_to_np_dtype(out.type.tensor_type.elem_type)),"dims":[dim.dim_value if dim.dim_param=="" else dim.dim_param for dim in out.type.tensor_type.shape.dim]} for idx,out in enumerate(onnx_model.graph.output)}
+def get_inputs_outputs(onnx_model: onnx.ModelProto,dynamic_dims:Dict[str,DynamicDim]={}):
+    match_inputs = {inp.name:{
+        "name":inp.name,
+        "c_type":numpy_dtype_to_c_type(onnx.helper.tensor_dtype_to_np_dtype(inp.type.tensor_type.elem_type)),
+        "dims":[dim.dim_value if dim.dim_param=="" else dim.dim_param for dim in inp.type.tensor_type.shape.dim],
+        "dynamic":all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]),
+        "prod_shape":int(prod([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim])) if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else 1000,
+        "shape":[dim.dim_value for dim in inp.type.tensor_type.shape.dim],
+        "c_arr_size":int(prod([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim])*onnx.helper.tensor_dtype_to_np_dtype(inp.type.tensor_type.elem_type).itemsize) if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else 1000,
+        "c_arr_values":"{"+str([1 for _ in range(int(prod([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim])))])[1:-1]+"}" if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else "{"+str([1 for _ in range(1000)])[1:-1]+"}",
+        } for inp in onnx_model.graph.input}
+    match_outputs = {f"output{idx if len(onnx_model.graph.output)>1 else ''}":{
+        "name":f"output{idx if len(onnx_model.graph.output)>1 else ''}",
+        "c_type":numpy_dtype_to_c_type(onnx.helper.tensor_dtype_to_np_dtype(out.type.tensor_type.elem_type)),
+        "dims":[dim.dim_value if dim.dim_param=="" else dim.dim_param for dim in out.type.tensor_type.shape.dim],
+        "dynamic":all([dim.dim_param=="" for dim in out.type.tensor_type.shape.dim]),
+        "prod_shape":int(prod([int(dim.dim_value) for dim in out.type.tensor_type.shape.dim])) if all([dim.dim_param=="" for dim in out.type.tensor_type.shape.dim]) else 1000,
+        "shape":[dim.dim_value for dim in out.type.tensor_type.shape.dim],
+        "c_arr_size":int(prod([int(dim.dim_value) for dim in out.type.tensor_type.shape.dim])*onnx.helper.tensor_dtype_to_np_dtype(out.type.tensor_type.elem_type).itemsize) if all([dim.dim_param=="" for dim in out.type.tensor_type.shape.dim]) else 1000,
+        } for idx,out in enumerate(onnx_model.graph.output)}
     return match_inputs,match_outputs
 
 def onnx_to_relay(onnx_filename,dynamic_dims:Dict[str,DynamicDim]={}):
@@ -21,7 +37,7 @@ def onnx_to_relay(onnx_filename,dynamic_dims:Dict[str,DynamicDim]={}):
     except Exception as e:
         sanitize_onnx_plinio(onnx_model=onnx_model)
         #sanitize_onnx_only_remove(onnx_model=onnx_model)
-    match_inputs, match_outputs = get_dynamic_inputs_outputs(onnx_model)
+    match_inputs, match_outputs = get_inputs_outputs(onnx_model,dynamic_dims=dynamic_dims)
     models_to_compile = []
     if len(dynamic_dims)>0:
         relay_mod,relay_params = relay.frontend.from_onnx(onnx_model,freeze_params=False)

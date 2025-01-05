@@ -1,5 +1,5 @@
 % if runtime=="default":
-#include <match_default_inputs.h>
+#include <match/default_inputs.h>
 % for include in target.include_list:
 #include <${include}.h>
 % endfor

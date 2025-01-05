@@ -205,7 +205,9 @@ def run_model(conv_ex:bool=False,output_path:str="./model_build"):
     save_model_and_params(mod=mod,params=params)
     #define HW Target inside match
     target=BasicCpuTarget()
-    match.match(models_to_compile=[MatchModel(relay_mod=mod,relay_params=params)],target=target,output_path=output_path)
+    match.match(relay_mod=mod,relay_params=params,
+                target=target,output_path=output_path,
+                golden_default_cpu_model=True)
 
 def run_relay_saved_model_at(mod_file,params_file,output_path):
     #define HW Target inside match

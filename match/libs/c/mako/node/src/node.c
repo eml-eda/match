@@ -31,13 +31,20 @@ void block_${block_idx}_compute(match_context_t* ctx){
     ${c_ident(loop_idx)}for(loop_${lp.name}_set(0);
         ${c_ident(loop_idx)}loop_${lp.name}_iter<${lp.size};
         ${c_ident(loop_idx)}loop_${lp.name}_set(++loop_${lp.name}_iter)){
-        % for instr in lp.instrs:
+        % for instr in lp.init_instrs:
         ${c_ident(loop_idx)}${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr};
         % endfor
     % endfor
     ## close braces and save output
-    % for loop_idx_ in range(brackets_cnt-1,-1,-1):
-    ${c_ident(loop_idx_)}}
+    % for loop_idx_ in range(loop_idx,-1,-1):
+        % for instr in schedule.blocks[block_idx].loops[loop_idx_+1].instrs:
+        ${c_ident(brackets_cnt-1)}${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr}; // loop ${loop_idx_+1} ${block.loops[loop_idx_+1].name}
+        % endfor
+    ${c_ident(brackets_cnt-1)}}
+    <% brackets_cnt -= 1 %>
+    % if brackets_cnt<0:
+    <% break %>
+    % endif
     % endfor
 }
 % endfor

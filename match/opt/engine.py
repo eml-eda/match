@@ -7,10 +7,9 @@ class ScheduleEngine(ABC):
     """
     Abstract base class for a temporal engine
     """
-    def __init__(self,exec_module:ExecModule=None,pattern_name:str="",pattern_inst=None,match_node=None):
+    def __init__(self,exec_module:ExecModule=None,pattern_name:str="",match_node=None):
         self.exec_module = exec_module
         self.pattern_name = pattern_name
-        self.pattern_inst = pattern_inst
         self.match_node = match_node
         self.schedule=None
         self.energy=0

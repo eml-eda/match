@@ -93,14 +93,16 @@ class MatchTarget(ABC):
         self.exec_modules_dict=dict()
         self.disabled_exec_modules=[]
         self.optimize_param="energy" if optimize_param=="energy" else "latency"
-        self.tvm_runtime_path=os.path.dirname(__file__)+"/default_lib/include/tvm_runtime.h"
-        self.crt_config_path=os.path.dirname(__file__)+"/default_lib/include/crt_config.h"
-        self.makefile_path=os.path.dirname(__file__)+"/default_lib/Makefile"
-        self.match_default_inputs_include_template_path=os.path.dirname(__file__)+"/default_lib/include/match_default_inputs_template.h"
-        self.match_default_inputs_src_template_path=os.path.dirname(__file__)+"/default_lib/src/match_default_inputs_template.c"
-        self.main_template_path=os.path.dirname(__file__)+"/default_lib/src/main_template.c"
-        self.model_generative_apis_src_template_path=os.path.dirname(__file__)+"/default_lib/src/match_model_gen_apis_template.c"
-        self.model_generative_apis_include_template_path=os.path.dirname(__file__)+"/default_lib/include/match_model_gen_apis_template.h"
+        self.tvm_runtime_path=os.path.dirname(__file__)+"/../libs/c/static/default/include/tvm_runtime.h"
+        self.crt_config_path=os.path.dirname(__file__)+"/../libs/c/static/default/include/crt_config.h"
+        self.makefile_path=os.path.dirname(__file__)+"/../libs/c/static/default/Makefile"
+        self.main_template_path=os.path.dirname(__file__)+"/../libs/c/mako/default/src/main.c"
+        self.model_generative_apis_src_path=os.path.dirname(__file__)+"/../libs/c/mako/default/src/match_model_gen_apis_template.c"
+        self.model_generative_apis_include_path=os.path.dirname(__file__)+"/../libs/c/mako/deafult/include/match_model_gen_apis_template.h"
+        self.runtime_src_path=os.path.dirname(__file__)+"/../libs/c/mako/match/src/runtime.c"
+        self.runtime_include_path=os.path.dirname(__file__)+"/../libs/c/mako/match/include/runtime.h"
+        self.default_inputs_src_path=os.path.dirname(__file__)+"/../libs/c/mako/match/src/default_inputs.c"
+        self.default_inputs_include_path=os.path.dirname(__file__)+"/../libs/c/mako/match/include/default_inputs.h"
         self.clean_funcs=[]
         self.init_funcs=[]
         self.include_list=[]
@@ -133,18 +135,18 @@ class MatchTarget(ABC):
             "match_outputs":match_outputs,
             "runtime":runtime,
             "dynamic_dims":dynamic_dims,
-            "app":"textgen_logits_only",
+            "app":"match",
         }
-        with open(abs_out_path+"/include/match_default_inputs.h","w") as inp_file:
-            inp_file.write(mako.template.Template(filename=self.match_default_inputs_include_template_path).render(**templates_data))
-        with open(abs_out_path+"/src/match_default_inputs.c","w") as inp_file:
-            inp_file.write(mako.template.Template(filename=self.match_default_inputs_src_template_path).render(**templates_data))
+        with open(abs_out_path+"/include/match/default_inputs.h","w") as inp_file:
+            inp_file.write(mako.template.Template(filename=self.default_inputs_include_path).render(**templates_data))
+        with open(abs_out_path+"/src/match/default_inputs.c","w") as inp_file:
+            inp_file.write(mako.template.Template(filename=self.default_inputs_src_path).render(**templates_data))
         with open(abs_out_path+"/src/main.c","w") as main_file:
             main_file.write(mako.template.Template(filename=self.main_template_path).render(**templates_data))
-        with open(abs_out_path+"/src/match_model_gen_apis.c","w") as model_api_file:
-            model_api_file.write(mako.template.Template(filename=self.model_generative_apis_src_template_path).render(**templates_data))
-        with open(abs_out_path+"/include/match_model_gen_apis.h","w") as model_api_file:
-            model_api_file.write(mako.template.Template(filename=self.model_generative_apis_include_template_path).render(**templates_data))
+        with open(abs_out_path+"/src/match/generative_model_apis.c","w") as model_api_file:
+            model_api_file.write(mako.template.Template(filename=self.model_generative_apis_src_path).render(**templates_data))
+        with open(abs_out_path+"/include/match/generative_model_apis.h","w") as model_api_file:
+            model_api_file.write(mako.template.Template(filename=self.model_generative_apis_include_path).render(**templates_data))
 
     def get_match_pattern_from_pattern_name(self,pattern_name:str="conv2d"):
         for pt in self.match_patterns:

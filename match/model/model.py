@@ -97,7 +97,8 @@ class MatchModel:
 
 
 
-def build_runtime(static_models:List[MatchModel]=[],dynamic_dims:Dict[str,DynamicDim]={},match_inputs=None,match_outputs=None,runtime:str="default",out_path:str="/build"):
+def build_runtime(target=None,static_models:List[MatchModel]=[],dynamic_dims:Dict[str,DynamicDim]={},
+                  match_inputs=None,match_outputs=None,runtime:str="default",out_path:str="/build"):
     abs_out_path = str(Path(out_path).absolute())
     temp_args = {
         "generative_models":{model.name:model for model in static_models},
@@ -106,17 +107,36 @@ def build_runtime(static_models:List[MatchModel]=[],dynamic_dims:Dict[str,Dynami
         "outputs":match_outputs,
         "inputs":match_inputs,
         "runtime":runtime,
+        "target":target,
     }
     with open(abs_out_path+"/src/match_runtime.c","w") as run_file:
-        run_file.write(Template(filename=os.path.dirname(__file__)+"/../codegen/template/lib/match_runtime_template.c").render(**temp_args))
+        run_file.write(Template(filename=os.path.dirname(__file__)+"/../libs/c/mako/match/src/runtime.c").render(**temp_args))
     with open(abs_out_path+"/include/match_runtime.h","w") as run_file:
-        run_file.write(Template(filename=os.path.dirname(__file__)+"/../codegen/template/lib/match_runtime_template.h").render(**temp_args))
+        run_file.write(Template(filename=os.path.dirname(__file__)+"/../libs/c/mako/match/include/runtime.h").render(**temp_args))
 
-def get_match_inputs_and_outputs(static_models:List[MatchModel]=[]):
-    mod_checked_types = tvm.relay.transform.InferType()(static_models[0].relay_mod)
+def get_match_inputs_and_outputs(static_model:MatchModel=None):
+    mod_checked_types = tvm.relay.transform.InferType()(static_model.relay_mod)
     func=mod_checked_types["main"]
     relay_inputs=func.params
-    relay_out_types=func.checked_type.arg_types[1:]
-    match_inputs={inp_.name_hint:{"name":inp_.name_hint,"c_arr_size":int(prod(inp_.type_annotation.shape)*np.dtype(inp_.type_annotation.dtype).itemsize),"c_type":numpy_dtype_to_c_type(inp_.type_annotation.dtype),"prod_shape":int(prod(inp_.type_annotation.shape)),"shape":[int(sh) for sh in inp_.type_annotation.shape], "c_arr_values":"{"+str([1 for _ in range(int(prod(inp_.type_annotation.shape)))])[1:-1]+"}"} for inp_ in relay_inputs}
-    match_outputs = {f"output{idx if len(relay_out_types)>1 else ''}":{"name":f"output{idx if len(relay_out_types)>1 else ''}","c_arr_size":int(prod(out.shape)*np.dtype(out.dtype).itemsize),"c_type":numpy_dtype_to_c_type(out.dtype),"prod_shape":int(prod(out.shape)),"shape":[int(sh) for sh in out.shape],} for idx,out in enumerate(relay_out_types)}
+    if isinstance(func.checked_type.ret_type,tvm.relay.TupleType):
+        relay_out_types = [ret_type for ret_type in func.checked_type.ret_type.fields]
+    else:
+        relay_out_types=[func.checked_type.ret_type]
+    match_inputs={inp_.name_hint:{
+        "name":inp_.name_hint,
+        "c_arr_size":int(prod(inp_.type_annotation.shape)*np.dtype(inp_.type_annotation.dtype).itemsize),
+        "c_type":numpy_dtype_to_c_type(inp_.type_annotation.dtype),
+        "prod_shape":int(prod(inp_.type_annotation.shape)),
+        "shape":[int(sh) for sh in inp_.type_annotation.shape],
+        "dims":[int(sh) for sh in inp_.type_annotation.shape],
+        "c_arr_values":"{"+str([1 for _ in range(int(prod(inp_.type_annotation.shape)))])[1:-1]+"}"
+    } for inp_ in relay_inputs}
+    match_outputs = {f"output{idx if len(relay_out_types)>1 else ''}":{
+        "name":f"output{idx if len(relay_out_types)>1 else ''}",
+        "c_arr_size":int(prod(out.shape)*np.dtype(out.dtype).itemsize),
+        "c_type":numpy_dtype_to_c_type(out.dtype),
+        "prod_shape":int(prod(out.shape)),
+        "shape":[int(sh) for sh in out.shape],
+        "dims":[int(sh) for sh in out.shape],
+    } for idx,out in enumerate(relay_out_types)}
     return match_inputs,match_outputs

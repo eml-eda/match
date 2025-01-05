@@ -17,10 +17,12 @@ INCLUDES = -I${STANDALONE_CRT_PATH}/include \
 			 -I ./include/
 
 # Source files
-SRC =  $(foreach model, $(MODEL_DIRS), $(wildcard $(model)/src/*.c)) $(wildcard $(abspath $(BUILD_DIR))/src/*.c) $(STANDALONE_CRT_PATH)/src/runtime/crt/common/crt_backend_api.c $(STANDALONE_CRT_PATH)/src/runtime/crt/memory/stack_allocator.c $(CODEGEN_SRCS)
+SRC =  $(foreach model, $(MODEL_DIRS), $(wildcard $(model)/src/*.c)) $(shell find $(abspath $(BUILD_DIR)) -name '*.c')  $(STANDALONE_CRT_PATH)/src/runtime/crt/common/crt_backend_api.c $(STANDALONE_CRT_PATH)/src/runtime/crt/memory/stack_allocator.c
 
 
 CFLAGS = -Wall -Wextra -O3 -g $(INCLUDES)
+# -pg -g
+CFLAGS += -ffast-math -funroll-loops -fomit-frame-pointer -fno-strict-aliasing -fno-common -fno-builtin -fno-stack-protector -fno-exceptions -fno-rtti -fno-threadsafe-statics -fno-strict-overflow
 # Object files (derived from source files)
 OBJ = $(SRC:.c=.o)
 

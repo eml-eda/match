@@ -1,5 +1,5 @@
-#include <match_default_inputs.h>
-#include <match_runtime.h>
+#include <match/default_inputs.h>
+#include <match/runtime.h>
 
 // target specific inlcudes
 % for inc_h in target.include_list:
