@@ -1,6 +1,7 @@
 import numpy as np
 from match.node.node import MatchNode
 from match.opt.basic import BasicEngine
+from match.opt.basic_plus import BasicPlusEngine
 from match.parser.relay import MatchRelayParser
 from match.parser.workload import MatchWorkloadParser
 # TVM imports
@@ -19,6 +20,7 @@ from match.opt.engine import ScheduleEngine
 SCHEDULE_ENGINE_MAP={
     "zigzag":ZigZagEngine,
     "basic":BasicEngine,
+    "basic_plus":BasicPlusEngine,
 }
 
 def get_schedule_engine(engine_name:str=""):
@@ -30,7 +32,7 @@ def get_schedule_engine(engine_name:str=""):
 
 
 class ScheduleGenerator:
-    def __init__(self,node:tvm.ir.IRModule,args_list:List=[],exec_module:ExecModule=None,pattern_name:str="",partitioned:bool=False,pattern_inst=None,schedule_engine:str="basic"):
+    def __init__(self,node:tvm.ir.IRModule,args_list:List=[],exec_module:ExecModule=None,pattern_name:str="",partitioned:bool=False,pattern_inst=None,schedule_engine:str="basic_plus"):
         self.node=node
         self.args_list=args_list
         self.exec_module=exec_module

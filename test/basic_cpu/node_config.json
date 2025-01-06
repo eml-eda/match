@@ -1,0 +1,6 @@
+{
+    "strides":[2,2],
+    "padding":[1,1,1,1],
+    "fil_shape":[3,3],
+    "out_features":1
+}

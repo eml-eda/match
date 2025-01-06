@@ -42,6 +42,15 @@ def c_friendly_npvalue(arr):
     else:
         return str(arr)
 
+def get_random_np_array(dtype, shape):
+    if np.issubdtype(dtype, np.floating):
+        return np.random.rand(*shape).astype(dtype)
+    elif np.issubdtype(dtype, np.integer):
+        info = np.iinfo(dtype)
+        return np.random.randint(info.min, info.max, size=shape, dtype=dtype)
+    else:
+        raise ValueError(f"Unsupported dtype: {dtype}")
+
 class RelaySave:
     def __init__(self,prefix,mod,params):
         self.prefix=prefix

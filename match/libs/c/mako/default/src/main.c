@@ -5,6 +5,9 @@
 % for inc_h in target.include_list:
 #include <${inc_h}.h>
 % endfor
+% if golden_cpu_model:
+#define GOLDEN_CHECK_BENCH_ITERATIONS 1000
+% endif
 
 int main(int argc,char** argv){
     // target specific inits
@@ -23,7 +26,7 @@ int main(int argc,char** argv){
     ${out["c_type"]} ${out_name} = 0;
     % endfor
     
-    match_${runtime}_runtime(
+    match_generative_runtime(
         % for inp_name in match_inputs.keys():
         &${inp_name},
         % endfor
@@ -39,16 +42,28 @@ int main(int argc,char** argv){
     % else:
     % for out_name,out in match_outputs.items():
     ${out["c_type"]}* ${out_name}_pt = malloc(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+    % if golden_cpu_model:
+    ${out["c_type"]}* golden_check_${out_name}_pt = malloc(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+    % endif
     % endfor
 
-    match_default_runtime(
+    match_${"golden_check_" if golden_cpu_model else ""}${runtime}_runtime(
         % for out_name in match_outputs.keys():
         ${out_name}_pt,
         % endfor
+        % if golden_cpu_model:
+        % for out_name in match_outputs.keys():
+        golden_check_${out_name}_pt,
+        % endfor
+        GOLDEN_CHECK_BENCH_ITERATIONS,
+        % endif
         &match_ctx);
     % endif
     
     % for out_name in match_outputs.keys():
+    % if golden_cpu_model:
+    free(golden_check_${out_name}_pt);
+    % endif
     free(${out_name}_pt);
     % endfor
     // target specific cleaning functions

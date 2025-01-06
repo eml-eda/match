@@ -25,8 +25,12 @@ class MatchOpReLU(MatchOp):
         basic_relu_schedule = MatchSchedule(
             blocks=[
                 MatchBlock(
-                    loops=loops
+                    loops=loops,
+                    init_instrs=[],
+                    instrs=[],
                 )
-            ]
+            ],
+            init_instrs=[],
+            instrs=[],
         )
         return [basic_relu_schedule]

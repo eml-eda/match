@@ -18,7 +18,7 @@ class BasicEngine(ScheduleEngine):
         for op in self.match_node.ops.values():
             schedule_blocks += op.basic_schedules()[0].blocks
         # breakpoint()
-        self.schedule = MatchSchedule(blocks=schedule_blocks,tensors=self.match_node.tensors)
+        self.schedule = MatchSchedule(blocks=schedule_blocks,tensors=self.match_node.tensors,init_instrs=[],instrs=[])
 
     def transform_schedule_for_engine(self):
         pass

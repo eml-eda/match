@@ -34,12 +34,10 @@ extern int dyn_dim_${dim_name}_size_pad;
 extern int dyn_dim_${dim_name}_padded_sizes[${len(generative_models)}];
 % endfor
 
-% for gen_model_name in generative_models.keys()-"default":
+% for gen_model_name in generative_models.keys():
 extern struct tvmgen_${gen_model_name}_inputs model_inps_${gen_model_name.upper()};
 extern struct tvmgen_${gen_model_name}_outputs model_outs_${gen_model_name.upper()};
 % endfor
-extern struct tvmgen_default_inputs model_inps_default;
-extern struct tvmgen_default_outputs model_outs_default;
 
 typedef struct match_runtime_ctx_t{
     int status;

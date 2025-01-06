@@ -2,7 +2,7 @@ from math import prod
 from typing import Dict, List
 import onnx
 from match.model import DynamicDim, get_cutoff_combinations
-from match.utils.utils import add_save_relay, get_output_path, numpy_dtype_to_c_type
+from match.utils.utils import add_save_relay, c_friendly_npvalue, get_output_path, get_random_np_array, numpy_dtype_to_c_type
 import tvm
 import tvm.relay as relay
 from match.relay.onnx.onnx_utils import get_onnx_static_model, sanitize_onnx_plinio,sanitize_onnx_only_remove
@@ -17,7 +17,7 @@ def get_inputs_outputs(onnx_model: onnx.ModelProto,dynamic_dims:Dict[str,Dynamic
         "prod_shape":int(prod([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim])) if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else 1000,
         "shape":[dim.dim_value for dim in inp.type.tensor_type.shape.dim],
         "c_arr_size":int(prod([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim])*onnx.helper.tensor_dtype_to_np_dtype(inp.type.tensor_type.elem_type).itemsize) if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else 1000,
-        "c_arr_values":"{"+str([1 for _ in range(int(prod([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim])))])[1:-1]+"}" if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else "{"+str([1 for _ in range(1000)])[1:-1]+"}",
+        "c_arr_values":c_friendly_npvalue(get_random_np_array(dtype=onnx.helper.tensor_dtype_to_np_dtype(inp.type.tensor_type.elem_type),shape=tuple([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim]))) if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else "{"+str([1 for _ in range(1000)])[1:-1]+"}",
         } for inp in onnx_model.graph.input}
     match_outputs = {f"output{idx if len(onnx_model.graph.output)>1 else ''}":{
         "name":f"output{idx if len(onnx_model.graph.output)>1 else ''}",

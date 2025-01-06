@@ -94,7 +94,7 @@ class MatchTarget(ABC):
         self.disabled_exec_modules=[]
         self.optimize_param="energy" if optimize_param=="energy" else "latency"
         self.tvm_runtime_include_path=os.path.dirname(__file__)+"/../libs/c/static/default/include/tvm_runtime.h"
-        self.tvm_runtime_src_path=os.path.dirname(__file__)+"/../libs/c/static/default/src/tvm_runtime.h"
+        self.tvm_runtime_src_path=os.path.dirname(__file__)+"/../libs/c/static/default/src/tvm_runtime.c"
         self.crt_config_path=os.path.dirname(__file__)+"/../libs/c/static/default/include/crt_config.h"
         self.makefile_path=os.path.dirname(__file__)+"/../libs/c/static/default/Makefile"
         self.main_template_path=os.path.dirname(__file__)+"/../libs/c/mako/default/src/main.c"
@@ -123,18 +123,22 @@ class MatchTarget(ABC):
             class_._instance = object.__new__(class_, *args, **kwargs)
         return class_._instance
 
-    def gen_libs_and_main(self,match_inputs,match_outputs,dynamic_dims,runtime,out_path):
+    def gen_libs_and_main(self,match_inputs,match_outputs,static_models,dynamic_dims,runtime,out_path,benchmarking):
         abs_out_path = str(Path(out_path).absolute())
         subprocess.getoutput(f"cp {self.tvm_runtime_include_path} {abs_out_path}/include/tvm_runtime.h")
-        subprocess.getoutput(f"cp {self.tvm_runtime_src_path} {abs_out_path}/src/tvm_runtime.h")
+        subprocess.getoutput(f"cp {self.tvm_runtime_src_path} {abs_out_path}/src/tvm_runtime.c")
         subprocess.getoutput(f"cp {self.crt_config_path} {abs_out_path}/include/crt_config.h")
         subprocess.getoutput(f"cp {self.makefile_path} {abs_out_path}/Makefile")
+        models_ = {model.name:model for model in static_models}
         templates_data = {
             "target":self,
             "match_inputs":match_inputs,
             "match_outputs":match_outputs,
             "runtime":runtime,
             "dynamic_dims":dynamic_dims,
+            "models":models_,
+            "benchmarking":benchmarking,
+            "golden_cpu_model":"golden_cpu_model" in models_,
             "app":"match",
         }
         with open(abs_out_path+"/include/match/default_inputs.h","w") as inp_file:

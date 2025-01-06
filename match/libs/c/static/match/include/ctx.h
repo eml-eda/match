@@ -33,8 +33,8 @@ typedef struct{
 
 typedef struct{
     MatchTensorTile** tiles;
-    unsigned int base_pt;
-    unsigned int* pts;
+    void* base_pt;
+    void** pts;
     int num_tiles;
     int curr_tile;
     int num_dims;
@@ -60,6 +60,12 @@ typedef struct{
     const char* data_layout;
     const char* kernel_layout;
 }MatchConv2DAttrs;
+
+typedef struct{
+    int idx;
+    int inp_features;
+    int out_features;
+}MatchDenseAttrs;
 
 typedef struct{
     int idx;

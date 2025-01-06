@@ -7,52 +7,10 @@ int dyn_dim_${dim_name}_size_pad = ${dim.min};
 int dyn_dim_${dim_name}_padded_sizes[${len(generative_models)}] = {${str([dyn_model.dynamic_sizes[dim_name] for dyn_model_name,dyn_model in models.items()])[1:-1]}};
 % endfor
 
-% for gen_model_name in generative_models.keys()-"default":
+% for gen_model_name in generative_models.keys():
 struct tvmgen_${gen_model_name}_inputs model_inps_${gen_model_name.upper()};
 struct tvmgen_${gen_model_name}_outputs model_outs_${gen_model_name.upper()};
 % endfor
-struct tvmgen_default_inputs model_inps_default;
-struct tvmgen_default_outputs model_outs_default;
-
-% if golden_cpu_model:
-% for model_name in generative_models.keys()-"golden_cpu_model":
-int check_${model_name}_differences_with_cpu(struct tvmgen_golden_cpu_model_inputs* cpu_inps,struct tvmgen_golden_cpu_model_outputs* cpu_outs,
-                        struct tvmgen_${model_name}_inputs* model_inps,struct tvmgen_${model_name}_outputs* model_outs){
-    tvmgen_golden_cpu_model_run(cpu_inps,cpu_outs);tvmgen_${model_name}_run(model_inps,model_outs);
-    int diffs = 0;
-    % for out_name,out in outputs.items():
-    for(int i=0;i<${out["prod_shape"]};i++)
-        if(((${out["c_type"]}*)cpu_outs->output)[i]!=((${out["c_type"]}*)model_outs->output)[i]){
-            printf("CPU and Default outputs DO NOT match at i %d CPU: %d ${model_name}: %d diff: %d\n"
-                i,((${out["c_type"]}*)cpu_outs->output)[i],((${out["c_type"]}*)model_outs->output)[i]
-                ,((int*)cpu_outs->output)[h_idx*16+w_idx]-((${out["c_type"]}*)model_outs->output)[i]
-            );
-            diffs++;
-        }
-    % endfor
-    return diffs;
-}
-% endfor
-% endif
-% if benchmarking:
-% for model_name in generative_models.keys():
-void benchmark_${model_name}_model(int iterations, struct tvmgen_${model_name}_inputs* model_inps, struct tvmgen_${model_name}_outputs* model_outs){
-    int status = 0;
-    int fails = 0;
-    clock_t start, end;
-    start = clock();
-    for(int i=0;i<iterations;i++){
-        status=tvmgen_${model_name}_run(model_inps,model_outs);
-        if(status) fails++;
-    }
-    end = clock();
-
-    double time_elapsed_ms = ((double)(end - start))/CLOCKS_PER_SEC * 1000;
-    printf("[${model_name}_BENCH] time %fms; time per iterations %fms; fails %d\n",
-        time_elapsed_ms, time_elapsed_ms/iterations, fails);
-}
-% endfor
-% endif
 
 % for gen_model_name,gen_model in generative_models.items():
 int calc_padding_for_gen_model_${gen_model_name}(){
@@ -119,9 +77,9 @@ void store_inp_${inp_name}_for_${gen_model_name}(${inp["c_type"]}* buffer_inp_pt
 % for inp_name in inputs.keys():
 void store_inp_${inp_name}_for_gen_model(${inp["c_type"]}* buffer_inp_pt,${inp["c_type"]}* model_inp_pt,int model_idx){
     switch(model_idx){
-        % for gen_model in generative_models.keys()-"default":
+        % for gen_model in set(generative_models.keys())-{"default"}:
         case MATCH_GEN_MODEL_${gen_model.upper()}:
-            store_inp_${inp_name}_for_${gen_model_name}(buffer_inp_pt,model_inp_pt);
+            store_inp_${inp_name}_for_${gen_model}(buffer_inp_pt,model_inp_pt);
             break;
         % endfor
         default:
@@ -163,7 +121,7 @@ void match_generative_runtime(
     //setting input data
     #ifdef MATCH_DEBUG_LOG
     FILE *debug_file=fopen("match_debug.log", "w");
-    fprintf(debug_file, "[MATCH] startup...\n");
+    fprintf(debug_file, "[MATCH RUNTIME] startup...\n");
     #endif
     int prev_model_idx = -1;
     // Generation process (e.g., LLM token generation)
@@ -196,18 +154,18 @@ void match_generative_runtime(
     while (!generation_done) {
 
         #ifdef MATCH_DEBUG_LOG
-        fprintf(debug_file, "[MATCH] generating...\n");
+        fprintf(debug_file, "[MATCH RUNTIME] generating...\n");
         #endif
 
         // Pad each input to match the nearest static model size
         int model_idx = get_closest_model_idx();
         #ifdef MATCH_DEBUG_LOG
-        fprintf(debug_file, "[MATCH] model #%d\n",model_idx);
+        fprintf(debug_file, "[MATCH RUNTIME] model #%d\n",model_idx);
         #endif
         // Pad inputs to match the nearest model size
         % for inp_name, inp in inputs.items():
         #ifdef MATCH_DEBUG_LOG
-        fprintf(debug_file, "[MATCH] setting inp ${inp_name}\n");
+        fprintf(debug_file, "[MATCH RUNTIME] setting inp ${inp_name}\n");
         #endif
         if(freed_${inp_name}){
             int size_${inp_name} = 1;
@@ -221,7 +179,7 @@ void match_generative_runtime(
             if(size_${inp_name} != prev_size_${inp_name})   ${inp_name}_inp = malloc(sizeof(${inp["c_type"]}) * size_${inp_name});
             prev_size_${inp_name} = size_${inp_name};
             #ifdef MATCH_DEBUG_LOG
-            fprintf(debug_file, "[MATCH] storing inp ${inp_name}\n");
+            fprintf(debug_file, "[MATCH RUNTIME] storing inp ${inp_name}\n");
             #endif
             store_inp_${inp_name}_for_gen_model(${inp_name}_prev_pt,${inp_name}_inp,model_idx);
             if(prev_model_idx!=-1)  free(${inp_name}_prev_pt); 
@@ -229,7 +187,7 @@ void match_generative_runtime(
         % endfor
 
         #ifdef MATCH_DEBUG_LOG
-        fprintf(debug_file, "[MATCH] setting outputs\n");
+        fprintf(debug_file, "[MATCH RUNTIME] setting outputs\n");
         #endif
         if(model_idx != prev_model_idx){
             % for out_name,out in outputs.items():
@@ -266,17 +224,17 @@ void match_generative_runtime(
             % endif
         % endfor
             default:
-                model_inps_default = (struct tvmgen_default_inputs){
+                model_inps_DEFAULT = (struct tvmgen_default_inputs){
                     % for inp_name in inputs.keys():
                     .${inp_name} = ${inp_name}_inp,
                     % endfor
                 };
-                model_outs_default = (struct tvmgen_default_outputs){
+                model_outs_DEFAULT = (struct tvmgen_default_outputs){
                     % for out_name in outputs.keys():
                     .${out_name} = ${out_name}_out,
                     % endfor
                 };
-                match_ctx->status = tvmgen_default_run(&model_inps_default,&model_outs_default);
+                match_ctx->status = tvmgen_default_run(&model_inps_DEFAULT,&model_outs_DEFAULT);
                 break;
         }
         
@@ -305,14 +263,99 @@ void match_generative_runtime(
             prev_model_idx
         );
         #ifdef MATCH_DEBUG_LOG
-        fprintf(debug_file, "[MATCH] finished generation with generation status %d\n",generation_done);
+        fprintf(debug_file, "[MATCH RUNTIME] finished generation with generation status %d\n",generation_done);
         #endif
     }
     #ifdef MATCH_DEBUG_LOG
-    fprintf(debug_file, "[MATCH] finished generation\n");
+    fprintf(debug_file, "[MATCH RUNTIME] finished generation\n");
     fclose(debug_file);
     #endif
 }
+
+% if golden_cpu_model:
+% for model_name in set(generative_models.keys())-{"golden_cpu_model"}:
+int check_${model_name}_differences_with_golden_model(){
+    tvmgen_golden_cpu_model_run(&model_inps_GOLDEN_CPU_MODEL,&model_outs_GOLDEN_CPU_MODEL);
+    tvmgen_${model_name}_run(&model_inps_${model_name.upper()},&model_outs_${model_name.upper()});
+    int diffs = 0;
+    % for out_name,out in outputs.items():
+    for(int i=0;i<${out["prod_shape"]};i++)
+        if(((${out["c_type"]}*)model_outs_GOLDEN_CPU_MODEL.output)[i]!=((${out["c_type"]}*)model_outs_${model_name.upper()}.output)[i]){
+            printf("[MATCH RUNTIME] golden cpu model and ${model_name} outputs DO NOT match at i %d golden cpu model: %d ${model_name}: %d diff: %d\n",
+                i,((${out["c_type"]}*)model_outs_GOLDEN_CPU_MODEL.output)[i],((${out["c_type"]}*)model_outs_${model_name.upper()}.output)[i]
+                ,((${out["c_type"]}*)model_outs_GOLDEN_CPU_MODEL.output)[i]-((${out["c_type"]}*)model_outs_${model_name.upper()}.output)[i]
+            );
+            diffs++;
+        }
+    % endfor
+    return diffs;
+}
+% endfor
+% endif
+% if benchmarking:
+% for model_name in generative_models.keys():
+double benchmark_${model_name}_model(int iterations){
+    int status = 0;
+    int fails = 0;
+    clock_t start, end;
+    start = clock();
+    for(int i=0;i<iterations;i++){
+        status=tvmgen_${model_name}_run(&model_inps_${model_name.upper()},&model_outs_${model_name.upper()});
+        if(status) fails++;
+    }
+    end = clock();
+
+    double time_elapsed_ms = ((double)(end - start))/CLOCKS_PER_SEC * 1000;
+    printf("[MATCH RUNTIME] [${model_name}_BENCH] time %fms; time per iterations %fms; fails %d\n",
+        time_elapsed_ms, time_elapsed_ms/iterations, fails);
+    return time_elapsed_ms/iterations;
+}
+% endfor
+% endif
+
+% if golden_cpu_model:
+% for model_name in set(generative_models.keys())-{"golden_cpu_model"}:
+void match_golden_check_${model_name}_runtime(
+    % for out_name,out in outputs.items():
+    ${out["c_type"]}* ${out_name}_pt,
+    % endfor
+    % for out_name,out in outputs.items():
+    ${out["c_type"]}* ${out_name}_golden_pt,
+    % endfor
+    int benchmark_iterations,
+    match_runtime_ctx* match_ctx){
+    model_inps_${model_name.upper()} = (struct tvmgen_${model_name}_inputs){
+        % for inp_name in inputs.keys():
+        .${inp_name} = ${inp_name}_default,
+        % endfor
+    };
+    model_outs_${model_name.upper()} = (struct tvmgen_${model_name}_outputs){
+        % for out_name in outputs.keys():
+        .${out_name} = ${out_name}_pt,
+        % endfor
+    };
+    model_inps_GOLDEN_CPU_MODEL = (struct tvmgen_golden_cpu_model_inputs){
+        % for inp_name in inputs.keys():
+        .${inp_name} = ${inp_name}_default,
+        % endfor
+    };
+    model_outs_GOLDEN_CPU_MODEL = (struct tvmgen_golden_cpu_model_outputs){
+        % for out_name in outputs.keys():
+        .${out_name} = ${out_name}_pt,
+        % endfor
+    };
+    int diffs = check_${model_name}_differences_with_golden_model();
+    if(diffs)   printf("[MATCH RUNTIME] Golden check: check failed ❌ %d differences between golden cpu model and ${model_name}\n",diffs);
+    else    printf("[MATCH RUNTIME] Golden check: check passed ✅ no differences between golden cpu model and ${model_name}\n");
+    % if benchmarking:
+    double golden_cpu_model_time_per_iter = benchmark_golden_cpu_model_model(benchmark_iterations);
+    double ${model_name}_time_per_iter = benchmark_${model_name}_model(benchmark_iterations);
+    printf("[MATCH RUNTIME] ${model_name}/golden_cpu_model ms per iteration: %f golden_cpu_model/${model_name} ms per iteration %f\n",
+    ${model_name}_time_per_iter/golden_cpu_model_time_per_iter,golden_cpu_model_time_per_iter/${model_name}_time_per_iter);
+    % endif
+}
+% endfor
+% endif
 
 void match_basic_runtime(
     % for inp_name,inp in inputs.items():
@@ -322,17 +365,17 @@ void match_basic_runtime(
     ${out["c_type"]}* ${out_name}_pt,
     % endfor
     match_runtime_ctx* match_ctx){
-    model_inps_default = (struct tvmgen_default_inputs){
+    model_inps_DEFAULT = (struct tvmgen_default_inputs){
         % for inp_name in inputs.keys():
         .${inp_name} = ${inp_name}_pt,
         % endfor
     };
-    model_outs_default = (struct tvmgen_default_outputs){
+    model_outs_DEFAULT = (struct tvmgen_default_outputs){
         % for out_name in outputs.keys():
         .${out_name} = ${out_name}_pt,
         % endfor
     };
-    match_ctx->status = tvmgen_default_run(&model_inps_default,&model_outs_default);
+    match_ctx->status = tvmgen_default_run(&model_inps_DEFAULT,&model_outs_DEFAULT);
 }
 
 void match_default_runtime(
@@ -340,15 +383,15 @@ void match_default_runtime(
     ${out["c_type"]}* ${out_name}_pt,
     % endfor
     match_runtime_ctx* match_ctx){
-    model_inps_default = (struct tvmgen_default_inputs){
+    model_inps_DEFAULT = (struct tvmgen_default_inputs){
         % for inp_name in inputs.keys():
         .${inp_name} = ${inp_name}_default,
         % endfor
     };
-    model_outs_default = (struct tvmgen_default_outputs){
+    model_outs_DEFAULT = (struct tvmgen_default_outputs){
         % for out_name in outputs.keys():
         .${out_name} = ${out_name}_pt,
         % endfor
     };
-    match_ctx->status = tvmgen_default_run(&model_inps_default,&model_outs_default);
+    match_ctx->status = tvmgen_default_run(&model_inps_DEFAULT,&model_outs_DEFAULT);
 }

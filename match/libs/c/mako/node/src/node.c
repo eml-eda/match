@@ -22,6 +22,9 @@
 <% brackets_cnt = 0 %>
 
 void block_${block_idx}_computation(MatchCtx* ctx){
+    % for instr in block.init_instrs:
+    ${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr};
+    % endfor
     % for loop_idx,lp in enumerate(block.loops[block.loop_idx_end_sw_controlled_loads:]):
     % if not exec_module.backend_constraints_check(match_node,schedule,block,lp):
     <% continue %>
@@ -45,6 +48,9 @@ void block_${block_idx}_computation(MatchCtx* ctx){
     % if brackets_cnt<0:
     <% break %>
     % endif
+    % endfor
+    % for instr in block.instrs:
+    ${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr};
     % endfor
 }
 % endfor
@@ -88,6 +94,9 @@ int __attribute__ ((noinline)) ${node_fullname}(
     % endif
     % endfor
 
+    % for instr in schedule.init_instrs:
+    ${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr};
+    % endfor
     % for block_idx,block in enumerate(schedule.blocks):
     // block ${block_idx}
     % for loop_idx,lp in enumerate(block.loops):
@@ -149,11 +158,18 @@ int __attribute__ ((noinline)) ${node_fullname}(
     % endfor
 
     % endfor
+    % for instr in schedule.instrs:
+    ${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr};
+    % endfor
 
     % for mem_level in mem_levels:
     % if mem_level.sw_controlled:
     ${mem_apis.free_mem_levels[mem_level.name]}(ctx);
     % endif
+    % endfor
+    
+    % for intermediate_tensor in match_node.intermediate_tensors.values():
+    free(${intermediate_tensor.name}->base_pt);
     % endfor
 
     return 0;

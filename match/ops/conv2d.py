@@ -1,4 +1,5 @@
 import numpy as np
+from numpy import typing as npt
 from match.ops.op import MatchOp
 from typing import List,Tuple
 
@@ -12,7 +13,7 @@ class MatchOpConv2D(MatchOp):
     def __init__(self, out_arr: List=[], var_arr: List=[], const_arr: List=[],
                  padding: Tuple[int]=(0,0,0,0), strides: Tuple[int]=(1,1), dilation: Tuple[int]=(1,1),
                  groups: int=1, kernel_size: Tuple[int]=(1,1),
-                 data_layout: str="NCHW", kernel_layout: str="OIHW", out_dtype: str="int8",
+                 data_layout: str="NCHW", kernel_layout: str="OIHW", out_dtype: npt.DTypeLike=np.dtype("int8"),
                  depthwise: bool=False, **kwargs) -> None:
         super().__init__(out_arr, var_arr, const_arr, op="Conv2D", **kwargs)
         self.padding = padding
@@ -84,6 +85,14 @@ class MatchOpConv2D(MatchOp):
                         )
                     ],init_instrs=[]))
         basic_conv2d = MatchSchedule(
-            blocks = [MatchBlock(loops=loops)]
+            blocks = [
+                MatchBlock(
+                    loops=loops,
+                    init_instrs=[],
+                    instrs=[],
+                )
+            ],
+            init_instrs=[],
+            instrs=[],
         )
         return [basic_conv2d]

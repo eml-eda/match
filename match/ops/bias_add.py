@@ -27,8 +27,12 @@ class MatchOpBiasAdd(MatchOp):
         basic_bias_add_schedule = MatchSchedule(
             blocks=[
                 MatchBlock(
-                    loops=loops
+                    loops=loops,
+                    init_instrs=[],
+                    instrs=[],
                 )
-            ]
+            ],
+            init_instrs=[],
+            instrs=[],
         )
         return [basic_bias_add_schedule]

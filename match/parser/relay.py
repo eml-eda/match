@@ -122,11 +122,11 @@ class MatchRelayParser(MatchParser):
         odtype = call.checked_type.dtype
         if ishape[1] != wshape[1]:
             raise NotImplementedError(f"[PARSER]: The weights shape in the dense operation are not correct")
-        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call.args[0],0,name)
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
         # well consider the case where the multiplied dimension is the last one
-        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call.args[1],1,name)
+        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call.args[1],1)
         if w_name in self.name_to_calls:
             w_tensor.tensor_type = "intermediate"
         self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[-1].name,new_dim_name=inp_tensor.dims[-1].name)
@@ -139,6 +139,7 @@ class MatchRelayParser(MatchParser):
             const_arr=[w_tensor],
             inp_features=inp_features,
             out_features=out_features,
+            out_dtype=np.dtype(attrs.out_dtype)
         )
         self.update_match_node(op=op,call=call,name=name)
 

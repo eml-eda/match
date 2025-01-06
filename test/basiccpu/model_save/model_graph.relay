@@ -1,6 +1,0 @@
-#[version = "0.0.5"]
-def @main(%input_0: Tensor[(1, 3, 32, 32), int8], %vec_conv_weights: Tensor[(1, 3, 3, 3), int8], %vec_conv_bias: Tensor[(1), int32]) {
-  %0 = nn.conv2d(%input_0, %vec_conv_weights, strides=[2, 2], padding=[1, 1, 1, 1], kernel_size=[3, 3], out_dtype="int32");
-  %1 = nn.bias_add(%0, %vec_conv_bias, axis=0);
-  nn.relu(%1)
-}

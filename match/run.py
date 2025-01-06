@@ -19,7 +19,9 @@ def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
           dynamic_dims:Dict[str,DynamicDim]={},
           match_inputs=None,match_outputs=None,
           output_path="./match_output",
-          golden_default_cpu_model: bool=False):
+          golden_default_cpu_model: bool=False,
+          benchmarking: bool=True,
+          ):
     if Path(output_path).absolute().is_dir():
         # remove build folder and all contents
         shutil.rmtree(Path(output_path).absolute())
@@ -71,10 +73,14 @@ def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
     
     if match_inputs is None or match_outputs is None:
         match_inputs,match_outputs=results["default"].match_inputs,results["default"].match_outputs
-    build_runtime(target=target,static_models=models_to_compile,dynamic_dims=dynamic_dims,
-                  match_inputs=match_inputs,match_outputs=match_outputs,runtime=runtime,out_path=output_path)
+    build_runtime(target=target,static_models=models_to_compile,
+                  dynamic_dims=dynamic_dims,runtime=runtime,
+                  match_inputs=match_inputs,match_outputs=match_outputs,
+                  benchmarking=benchmarking,out_path=output_path)
     
-    target.gen_libs_and_main(match_inputs=match_inputs,match_outputs=match_outputs,dynamic_dims=dynamic_dims,runtime=runtime,out_path=output_path)
+    target.gen_libs_and_main(match_inputs=match_inputs,match_outputs=match_outputs,
+                             static_models=models_to_compile,dynamic_dims=dynamic_dims,
+                             runtime=runtime,out_path=output_path,benchmarking=benchmarking)
     return results
 
 # from match.relay.utils.utils import create_build_dir

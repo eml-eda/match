@@ -13,7 +13,7 @@ from match.utils import save_all_relay,add_save_relay,reset_relay_list,reset_out
 from match.compile.c_aot import MatchCompilerCAoT
 from mako.template import Template
 
-from match.utils.utils import numpy_dtype_to_c_type
+from match.utils.utils import c_friendly_npvalue, get_random_np_array, numpy_dtype_to_c_type
 import tvm
 
 class MatchModel:
@@ -98,14 +98,17 @@ class MatchModel:
 
 
 def build_runtime(target=None,static_models:List[MatchModel]=[],dynamic_dims:Dict[str,DynamicDim]={},
-                  match_inputs=None,match_outputs=None,runtime:str="default",out_path:str="/build"):
+                  match_inputs=None,match_outputs=None,runtime:str="default",out_path:str="/build",benchmarking:bool=True):
     abs_out_path = str(Path(out_path).absolute())
+    models_ = {model.name:model for model in static_models}
     temp_args = {
-        "generative_models":{model.name:model for model in static_models},
-        "models":{model.name:model for model in static_models},
+        "generative_models":models_,
+        "models":models_,
         "dynamic_dims":dynamic_dims,
         "outputs":match_outputs,
         "inputs":match_inputs,
+        "benchmarking":benchmarking,
+        "golden_cpu_model":"golden_cpu_model" in models_,
         "runtime":runtime,
         "target":target,
     }
@@ -122,6 +125,7 @@ def get_match_inputs_and_outputs(static_model:MatchModel=None):
         relay_out_types = [ret_type for ret_type in func.checked_type.ret_type.fields]
     else:
         relay_out_types=[func.checked_type.ret_type]
+    np.random.seed(0)
     match_inputs={inp_.name_hint:{
         "name":inp_.name_hint,
         "c_arr_size":int(prod(inp_.type_annotation.shape)*np.dtype(inp_.type_annotation.dtype).itemsize),
@@ -129,7 +133,7 @@ def get_match_inputs_and_outputs(static_model:MatchModel=None):
         "prod_shape":int(prod(inp_.type_annotation.shape)),
         "shape":[int(sh) for sh in inp_.type_annotation.shape],
         "dims":[int(sh) for sh in inp_.type_annotation.shape],
-        "c_arr_values":"{"+str([1 for _ in range(int(prod(inp_.type_annotation.shape)))])[1:-1]+"}"
+        "c_arr_values":c_friendly_npvalue(get_random_np_array(dtype=inp_.type_annotation.dtype,shape=tuple([int(v) for v in inp_.type_annotation.shape]))),
     } for inp_ in relay_inputs}
     match_outputs = {f"output{idx if len(relay_out_types)>1 else ''}":{
         "name":f"output{idx if len(relay_out_types)>1 else ''}",
