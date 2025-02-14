@@ -30,21 +30,44 @@ class ZigZagEngine(ScheduleEngine):
 
     def transform_schedule_for_engine(self):
         # TODO: get this params correctly
+        o_intermediate_prec,o_prec,first_inp_prec,second_inp_prec = 32,8,8,8
+        # with ZigZag no intermediate tensor should be used...
+        # self.match_node.intermediate_tensors = dict()
+        conv = "conv1d" in self.match_node.ops_occurrences or "conv2d" in self.match_node.ops_occurrences
         conv2d = "conv2d" in self.match_node.ops_occurrences
         conv2d_is_dw = conv2d and self.match_node.ops["conv2d"].depthwise
+        conv1d_is_dw = conv and (not conv2d) and self.match_node.ops["conv1d"].depthwise
         add = (not conv2d) and ("add" in self.match_node.ops_occurrences)
-        o_intermediate_prec,o_prec,first_inp_prec,second_inp_prec = 32,8,8,8
-        strides = (1,1) if not conv2d else self.match_node.ops["conv2d"].strides
-        dilations = (1,1) if not conv2d else self.match_node.ops["conv2d"].dilation
-        padding = (0,0,0,0) if not conv2d else self.match_node.ops["conv2d"].padding
+        if conv:
+            if conv2d:
+                strides = self.match_node.ops["conv2d"].strides
+                dilations = self.match_node.ops["conv2d"].dilations
+                padding = self.match_node.ops["conv2d"].padding
+                k_size = self.match_node.ops["conv2d"].kernel_size
+            else:
+                # get data
+                strides = self.match_node.ops["conv1d"].strides
+                dilations = self.match_node.ops["conv1d"].dilations
+                padding = self.match_node.ops["conv1d"].padding
+                k_size = self.match_node.ops["conv1d"].kernel_size
+                # transform it like conv2d
+                strides = strides + (1,)
+                dilations = dilations + (1,)
+                # as if it was height only
+                padding = (padding[0], 0, padding[1], 0)
+                k_size = k_size + (1,)
+        else:
+            strides = (1,1)
+            dilations = (1,1)
+            padding = (0,0,0,0)
+            k_size = (1,1)
         padding = {"IY":(padding[0],padding[2]),"IX":(padding[1],padding[3])}
         inp_tensors_names = [n for n in self.match_node.var_tensors.keys()]
         out_tensors_names = [n for n in self.match_node.output_tensors.keys()]
         inp_dims = [d.size for d in self.match_node.var_tensors[inp_tensors_names[0]].dims]
         out_dims = [d.size for d in self.match_node.output_tensors[out_tensors_names[0]].dims]
-        k_size = (1,1) if conv2d is None else self.match_node.ops["conv2d"].kernel_size
-        o_n,o_c,o_h,o_w = (inp_dims[0],out_dims[1]) + ((out_dims[2],out_dims[3]) if len(out_dims)>2 else (1,1))
-        i_h,i_w = (inp_dims[2],inp_dims[3]) if len(inp_dims)>2 else (1,1)
+        o_n,o_c,o_h,o_w = (inp_dims[0],out_dims[1]) + ((out_dims[2],out_dims[3]) if len(out_dims)>3 else (out_dims[2],) if len(out_dims)>2 else (1,1))
+        i_h,i_w = (inp_dims[2],inp_dims[3]) if len(inp_dims)>3 else (inp_dims[2],) if len(inp_dims)>2 else (1,1)
         w_cin, w_ks_h, w_ks_w = inp_dims[1], k_size[0], k_size[1]
         kernel_size = (w_ks_h, w_ks_w)
         dimension_relations = [
@@ -74,7 +97,7 @@ class ZigZagEngine(ScheduleEngine):
             "X": {"IX": "OX", "IY": "OY", "C": "K"},
             "Y": {"IX": "OX", "IY": "OY", "C": "K"},
         }
-        if conv2d and conv2d_is_dw:
+        if conv2d_is_dw or conv1d_is_dw:
             operand_source_dimension_mapping["I"]["C"]="K"
         self.workload={
             1: {
@@ -85,6 +108,7 @@ class ZigZagEngine(ScheduleEngine):
                 "operand_precision": operand_precision,
                 "pr_loop_dim_size": pr_loop_dim_size,
                 "padding": padding,
+                "strides": strides,
                 "operand_source": operand_source,
                 "constant_operands": constant_operands,
                 'operand_source_dimension_mapping': operand_source_dimension_mapping,
@@ -118,7 +142,7 @@ class ZigZagEngine(ScheduleEngine):
                     r_port=floor(plat_mem.r_ports),
                     w_port=floor(plat_mem.w_ports),
                     rw_port=floor(plat_mem.rw_ports),
-                    latency=1, # TODO: Non usato dentro Zigzag, dovrebbe essere > 1
+                    latency=1, # TODO: Unused in ZigZag, should be > 1
                     double_buffering_support=plat_mem.double_buffering_support
                 )
                 port_alloc=tuple([
@@ -321,6 +345,7 @@ class ZigZagEngine(ScheduleEngine):
                                 "index": nameidx,
                                 "fullname": fullname,
                                 "size": loop_size,
+                                "new_size": loop_size,
                                 f"mem_{layer_op}": mem_name[layer_op][idx],
                             }
                         )
@@ -342,6 +367,7 @@ class ZigZagEngine(ScheduleEngine):
                 "name": spatial_dim,
                 "fullname": spatial_dim,
                 "size": spatial_val,
+                "new_size": spatial_val,
                 "index": 0,
             }
             for operand in self.zigzag_operands:
@@ -354,7 +380,26 @@ class ZigZagEngine(ScheduleEngine):
                 if self.temporal_mapping[idx][f"mem_{op}"]!=mem_name[op][0] and self.temporal_mapping[idx]["mem_O"]==mem_name["O"][0]:
                     self.temporal_mapping[idx]["mem_O"]=mem_name["O"][1 if len(mem_name["O"])>1 else 0]
                     break
+        new_temporal_mapping = []
+        dim_step = self.workload[1]["loop_dim_size"]
+        for idx,t_map in enumerate(self.temporal_mapping):
+            dim_step[t_map["name"]] /= t_map["size"]
+            t_map["step"] = dim_step[t_map["name"]]
+            if t_map["size"] > 1 or idx==0:
+                if idx>0:
+                    curr_t_map = {k: v for k, v in t_map.items() if k not in ("fullname","index","step","new_size")}
+                    last_t_map = {k: v for k, v in new_temporal_mapping[-1].items() if k not in ("fullname","index","step","new_size")}
+                    if curr_t_map == last_t_map:
+                        t_map["new_size"] *= new_temporal_mapping[-1]["new_size"]
+                        new_temporal_mapping[-1] = t_map
+                    else:
+                        new_temporal_mapping.append(t_map)
+                else:
+                    new_temporal_mapping.append(t_map)
+        self.temporal_mapping = new_temporal_mapping
         self.top_memories = {op:mem_name[op][-1] for op in self.zigzag_operands}
+        mem_hierarchy = self.exec_module.mem_hierarchy
+        mem_hierarchy_dict = {mem.name:mem for mem in set([mem_ for k,v in self.exec_module.mem_hierarchy.items() for mem_ in v])}
         self.schedule = MatchSchedule(
             [
                 MatchBlock(
@@ -362,16 +407,30 @@ class ZigZagEngine(ScheduleEngine):
                         MatchLoop(
                             name=tm["fullname"],
                             dim=self.get_dim_name_by_name(tm["name"]),
-                            size=tm["size"],
+                            size=tm["new_size"],
+                            step=tm["step"],
                             mem_transfers=[
                                 MatchMemTransfer(
                                     tensor= self.zigzag_operands_to_tensors[op_type],
+                                    top_mem=self.top_memories[op_type] if idx==0 else self.temporal_mapping[idx-1][f"mem_{op_type}"],
+                                    mem=tm[f"mem_{op_type}"],
+                                    sw_controlled=mem_hierarchy_dict[tm[f"mem_{op_type}"]],
                                 )
                                 for op_type in self.zigzag_operands
                                 if (idx==0 and tm[f"mem_{op_type}"]!=self.top_memories[op_type]) or (idx>0 and tm[f"mem_{op_type}"]!=self.temporal_mapping[idx-1][f"mem_{op_type}"]) 
                             ],
-                        ) for idx,tm in enumerate(self.temporal_mapping) if tm["size"]>1
-                    ]
+                        ) for idx,tm in enumerate(self.temporal_mapping)
+                    ],
+                    backend="ZigZag"
                 )
             ]
         )
+        # ZigZag expects all the constants to be loaded immediately to the inner memory of weights...
+        for const_tensor in self.match_node.const_tensors.values():
+            if const_tensor!=self.w_tensor:
+                self.schedule.blocks[0].loops[0].mem_transfers.append(
+                    MatchMemTransfer(tensor=const_tensor,
+                                     top_mem=mem_hierarchy["const"][-1].name,mem=mem_hierarchy["const"][0].name,
+                                     sw_controlled=mem_hierarchy["const"][0].sw_controlled)
+                )
+        breakpoint()

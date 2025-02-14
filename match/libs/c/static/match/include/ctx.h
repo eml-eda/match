@@ -69,6 +69,21 @@ typedef struct{
 
 typedef struct{
     int idx;
+    int right_shift;
+}MatchRightShiftAttrs;
+
+typedef struct{
+    int idx;
+    int clip_min;
+    int clip_max;
+}MatchClipAttrs;
+
+typedef struct{
+    int idx;
+}MatchCastAttrs;
+
+typedef struct{
+    int idx;
     int axis;
 }MatchBiasAddAttrs;
 

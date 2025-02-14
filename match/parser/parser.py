@@ -50,14 +50,14 @@ class MatchParser:
             self.node=InferType()(mod.from_expr(pattern_inst.pattern().partition(node)))
             self.node=self.node["main"].body.op.body
 
-    def get_name_and_tensor_of_arg(self,arg,arg_idx:int=0):
+    def get_name_and_tensor_of_arg(self,call,arg,arg_idx:int=0):
         if isinstance(arg, tvm.relay.Var):
             if arg.name_hint in self.node_vars:
                 return arg.name_hint, self.node_vars[arg.name_hint],"var"
             else:
                 return arg.name_hint, self.node_consts[arg.name_hint],"const"
         elif isinstance(arg, tvm.relay.Constant):
-            return f"{self.op_name(arg)}_arg_{arg_idx}", self.node_consts[f"{self.op_name(arg)}_arg_{arg_idx}"],"var"
+            return f"{self.calls_to_name[call]}_arg_{arg_idx}", self.node_consts[f"{self.calls_to_name[call]}_arg_{arg_idx}"],"var"
         else:
             return self.calls_to_name[arg], self.calls_tensors[self.calls_to_name[arg]],"call"
 
@@ -74,6 +74,9 @@ class MatchParser:
     def op_name(self,call):
         return "_".join([n for n in call.op.name.split(".") if n not in {"nn","op","relay"}])
 
+    def adjust_name(self,name):
+        return "_".join([n for n in name.split(".") if n not in {"nn","op","relay"}])
+
     def get_unique_name_and_update_occs(self,call):
         unique_name=self.op_name(call)
         if unique_name in self.occurrences:
@@ -84,35 +87,43 @@ class MatchParser:
         return unique_name
 
     def get_io_from_layout(self,layout, data, dims):
-        if layout=="NHWC":
-            # layout is nhwc
-            n = (int(data[0]), dims[0])
-            c = (int(data[3]), dims[3])
-            h = (int(data[1]), dims[1])
-            w = (int(data[2]), dims[2])
-        elif layout=="HWIO":
-            n = (int(data[3]), dims[3])
-            c = (int(data[2]), dims[2])
-            h = (int(data[0]), dims[0])
-            w = (int(data[1]), dims[1])
-        elif layout=="NCHW" or layout=="OIHW":
+        # conv2d and other 4 dims operators
+        if len(data)==4:
+            if layout=="NHWC":
+                # layout is nhwc
+                n = (int(data[0]), dims[0])
+                c = (int(data[3]), dims[3])
+                h = (int(data[1]), dims[1])
+                w = (int(data[2]), dims[2])
+            elif layout=="HWIO":
+                n = (int(data[3]), dims[3])
+                c = (int(data[2]), dims[2])
+                h = (int(data[0]), dims[0])
+                w = (int(data[1]), dims[1])
+            elif layout=="NCHW" or layout=="OIHW":
+                n = (int(data[0]), dims[0])
+                c = (int(data[1]), dims[1])
+                h = (int(data[2]), dims[2])
+                w = (int(data[3]), dims[3])
+            elif layout=="OIHW":
+                n = (int(data[0]), dims[0])
+                c = (int(data[1]), dims[1])
+                h = (int(data[2]), dims[2])
+                w = (int(data[3]), dims[3])
+            else:
+                print(f"[PARSER]: Warning, layout {layout} not recognized, interpreting as NCHW")
+                #layout is nchw
+                n = (int(data[0]), dims[0])
+                c = (int(data[1]), dims[1])
+                h = (int(data[2]), dims[2])
+                w = (int(data[3]), dims[3])
+            return n, c, h, w
+        # conv1d and other 3 dims operators
+        elif len(data)==3:
             n = (int(data[0]), dims[0])
             c = (int(data[1]), dims[1])
-            h = (int(data[2]), dims[2])
-            w = (int(data[3]), dims[3])
-        elif layout=="OIHW":
-            n = (int(data[0]), dims[0])
-            c = (int(data[1]), dims[1])
-            h = (int(data[2]), dims[2])
-            w = (int(data[3]), dims[3])
-        else:
-            print(f"[PARSER]: Warning, layout {layout} not recognized, interpreting as NCHW")
-            #layout is nchw
-            n = (int(data[0]), dims[0])
-            c = (int(data[1]), dims[1])
-            h = (int(data[2]), dims[2])
-            w = (int(data[3]), dims[3])
-        return n, c, h, w
+            spat = (int(data[2]), dims[2])
+            return n, c, spat
 
     def get_dim_arr_from_layout_and_nchw_arr(self,layout,nchw_arr):
         if layout=="NHWC":
@@ -161,6 +172,8 @@ class MatchParser:
             self.visit_calls_with_depth(arg_,depth_limit=depth_limit[idx_arg_])
     
     def visit_calls(self,call):
+        if isinstance(call,tvm.relay.Function):
+            return self.visit_calls(call.body)
         if not isinstance(call, tvm.relay.Call):
             return
         # the call is just a function pre partitioned
@@ -179,6 +192,7 @@ class MatchParser:
         var_and_consts_not_unrolled = dict()
         var_and_consts_unrolled = dict()
         for c in self.calllist:
+            unique_name=self.get_unique_name_and_update_occs(c)
             # fit variables and constants
             for idx_arg,a in enumerate(c.args):
                 if isinstance(a, tvm.relay.Var):
@@ -187,7 +201,8 @@ class MatchParser:
                         if isinstance(
                             self.args_list[len(var_and_consts_not_unrolled)], tvm.relay.Var
                         ):
-                            var_and_consts_not_unrolled[a.name_hint] = self.args_list[
+                            v_name = self.adjust_name(a.name_hint)
+                            var_and_consts_not_unrolled[v_name] = self.args_list[
                                 len(var_and_consts_not_unrolled)
                             ]
                             var_ = self.args_list[
@@ -195,15 +210,15 @@ class MatchParser:
                             ]
                             shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in var_.checked_type.shape]
                             dtype = var_.checked_type.dtype
-                            var_dims=[MatchDim(name=a.name_hint+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
+                            var_dims=[MatchDim(name=v_name+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
                             for dim in var_dims:
                                 self.node_all_dims[dim.name]=dim
-                            self.node_vars[a.name_hint] = MatchTensor(name=a.name_hint,
+                            self.node_vars[v_name] = MatchTensor(name=v_name,
                                                                 dims=var_dims,
                                                                 dtype=np.dtype(dtype),tensor_type="var")
                         else:
                             old_idx = sum([c.op.name in k for k in var_and_consts_not_unrolled.keys()])
-                            v_name=a.name_hint
+                            v_name=self.adjust_name(a.name_hint)
                             var_and_consts_not_unrolled[v_name] = self.args_list[len(var_and_consts_not_unrolled)]
                             const_  = self.args_list[len(var_and_consts_not_unrolled)-1]
                             shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in const_.checked_type.shape]
@@ -216,33 +231,30 @@ class MatchParser:
                                                                 dtype=np.dtype(dtype),tensor_type="const",
                                                                 data = const_.data.numpy())
                     else:
-                        var_and_consts_not_unrolled[
-                            a.name_hint
-                        ] = a
+                        v_name = self.adjust_name(a.name_hint)
+                        var_and_consts_not_unrolled[v_name] = a
                         shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in a.checked_type.shape]
                         dtype = a.checked_type.dtype
-                        var_dims=[MatchDim(name=a.name_hint+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
+                        var_dims=[MatchDim(name=v_name+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
                         for dim in var_dims:
                             self.node_all_dims[dim.name]=dim
-                        self.node_vars[a.name_hint] = MatchTensor(name=a.name_hint,
+                        self.node_vars[v_name] = MatchTensor(name=v_name,
                                                                 dims=var_dims,
                                                                 dtype=np.dtype(dtype),tensor_type="var")
                 elif isinstance(a, tvm.relay.Constant):
-                    old_idx = sum([c.op.name in k for k in var_and_consts_not_unrolled.keys()])
-                    v_name=c.op.name+ f"_arg_{idx_arg}"
+                    v_name=unique_name + f"_arg_{idx_arg}"
                     var_and_consts_unrolled[v_name] = a
                     shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in a.checked_type.shape]
                     dtype = a.checked_type.dtype
                     const_dims=[MatchDim(name=v_name+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
                     for dim in const_dims:
                         self.node_all_dims[dim.name]=dim
-                    self.node_consts[a.name_hint] = MatchTensor(name=v_name,
+                    self.node_consts[v_name] = MatchTensor(name=v_name,
                                                             dims=const_dims,
                                                             dtype=np.dtype(dtype),tensor_type="const",
                                                             data = a.data.numpy())
             self.index += 1
             #self.ops_names.append(c.op.name)
-            unique_name=self.get_unique_name_and_update_occs(c)
             self.calls_to_name[c] = unique_name
             self.visit_call(c,unique_name)
             self.name_to_calls[unique_name] = c

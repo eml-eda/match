@@ -37,7 +37,8 @@ class TemplateWriter:
         self.template_data["exec_module"]=self.exec_module
         self.template_data["target"]=self.target
         self.template_data["schedule"]=self.schedule
-        self.template_data["mem_levels"]=[]
+        self.template_data["memory_hierarchy"]=self.exec_module.mem_hierarchy
+        breakpoint()
         self.template_data["match_node"]=self.match_node
         self.template_data["mod"] = self.mod
         self.template_data["model_name"] = self.mod.attrs.global_symbol.split("_")[1]
@@ -49,10 +50,10 @@ class TemplateWriter:
         self.template_data["async_computation"] = False
         self.template_data["top_level_memory_vars"] = "L2_CACHE"
         self.template_data["top_level_memory_out"] = "L2_CACHE"
-        self.template_data["mem_apis"] = MemoryApis()
-        self.template_data["sync_apis"] = SyncApis()
-        self.template_data["platform_apis"] = PlatformApis()
-        self.template_data["comp_apis"] = ComputationalApis()
+        self.template_data["mem_apis"] = self.exec_module.match_mem_apis(self.pattern_name)
+        self.template_data["sync_apis"] = self.exec_module.match_sync_apis(self.pattern_name)
+        self.template_data["platform_apis"] = self.exec_module.match_platform_apis(self.pattern_name)
+        self.template_data["comp_apis"] = self.exec_module.match_comp_apis(self.pattern_name)
 
     def write_layer_files(self):
         # write layer files

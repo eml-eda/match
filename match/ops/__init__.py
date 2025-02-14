@@ -4,3 +4,7 @@ from .relu import MatchOpReLU
 from .add import MatchOpAdd
 from .bias_add import MatchOpBiasAdd
 from .conv2d import MatchOpConv2D
+from .conv1d import MatchOpConv1D
+from .cast import MatchOpCast
+from .clip import MatchOpClip
+from .right_shift import MatchOpRightShift

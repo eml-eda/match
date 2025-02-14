@@ -25,8 +25,7 @@ class MatchOpDense(MatchOp):
         loops = []
         dense_sum = MatchPrimitiveExpr(name="dense_sum",dtype=self.out_dtype, const=False,
                                     init_expr=MatchPrimitiveExpr(name="zero",dtype=self.out_dtype,const=True,val=0))
-        if batch_size_dim.size > 1:
-            loops.append(MatchLoop(dim=batch_size_dim, size=batch_size_dim.size, name="batch",instrs=[],init_instrs=[]))
+        loops.append(MatchLoop(dim=batch_size_dim, size=batch_size_dim.size, name="batch",instrs=[],init_instrs=[]))
         loops.append(MatchLoop(dim=out_chs_dim, size=out_chs_dim.size, name="out_ch",init_instrs=[
             MatchInstr(lhs_expr=dense_sum)
         ], instrs=[

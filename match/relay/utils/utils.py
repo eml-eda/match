@@ -235,8 +235,8 @@ def create_random_array(shape: Tuple[int, ...], dtype: str) -> tvm.nd.array:
             dtype_max = np.iinfo(dtype).max
         except ValueError:
             range_map = {
-                'int4': (-8, 7),
-                'int2': (-1, 1)     # technically this should be (-2, 1), but we prefer to not use -2
+                "int4": (-8, 7),
+                "int2": (-1, 1),     # technically this should be (-2, 1), but we prefer to not use -2
             }
             try:
                 dtype_min, dtype_max = range_map[dtype]

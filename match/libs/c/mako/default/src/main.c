@@ -6,7 +6,7 @@
 #include <${inc_h}.h>
 % endfor
 % if golden_cpu_model:
-#define GOLDEN_CHECK_BENCH_ITERATIONS 1000
+#define GOLDEN_CHECK_BENCH_ITERATIONS 100
 % endif
 
 int main(int argc,char** argv){
@@ -41,9 +41,9 @@ int main(int argc,char** argv){
 
     % else:
     % for out_name,out in match_outputs.items():
-    ${out["c_type"]}* ${out_name}_pt = malloc(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+    ${out["c_type"]}* ${out_name}_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
     % if golden_cpu_model:
-    ${out["c_type"]}* golden_check_${out_name}_pt = malloc(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+    ${out["c_type"]}* golden_check_${out_name}_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
     % endif
     % endfor
 
@@ -62,9 +62,9 @@ int main(int argc,char** argv){
     
     % for out_name in match_outputs.keys():
     % if golden_cpu_model:
-    free(golden_check_${out_name}_pt);
+    ${target.free_fn}(golden_check_${out_name}_pt);
     % endif
-    free(${out_name}_pt);
+    ${target.free_fn}(${out_name}_pt);
     % endfor
     // target specific cleaning functions
     % for clean_func in target.clean_funcs:

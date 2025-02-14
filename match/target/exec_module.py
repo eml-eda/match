@@ -14,18 +14,24 @@ class MemoryApis:
     """All the memory APIs that are used by MATCH on the templates
     """
     def __init__(self, pattern_name="conv2d",layout_per_operand={"O":"NCHW","I":"NCHW","W":"NCHW","X":"NCHW","Y":"NCHW"}):
+        self.get_size_of_fused_tensor = ""
+        self.get_pt_of_fused_tensor = ""
+        self.mem_transfer = ""
+        self.free_memory = dict()
+        self.init_memory = dict()
+        DEFAULT_LAYOUT = {"O":"NCHW","I":"NCHW","W":"NCHW","X":"NCHW","Y":"NCHW"}
         self.startup_memory="match_startup_memory"
         self.shutdown_mem="match_shutdown_mem"
         self.copy_out_curr_computation="match_copy_out_curr_computation"
         self.copy_out_prev_computation="match_copy_out_prev_computation"
         self.pointer_offset={
-            "O":f"match_pointer_offset_{layout_per_operand['O']}_O",
-            "W":f"match_pointer_offset_{layout_per_operand['W']}_W",
-            "I":f"match_pointer_offset_{layout_per_operand['I']}_I",
-            "X":f"match_pointer_offset_{layout_per_operand['X']}_X",
-            "Y":f"match_pointer_offset_{layout_per_operand['Y']}_Y",
+            "O":f"match_pointer_offset_{layout_per_operand['O'] if 'O' in layout_per_operand else DEFAULT_LAYOUT['O']}_O",
+            "W":f"match_pointer_offset_{layout_per_operand['W'] if 'W' in layout_per_operand else DEFAULT_LAYOUT['W']}_W",
+            "I":f"match_pointer_offset_{layout_per_operand['I'] if 'I' in layout_per_operand else DEFAULT_LAYOUT['I']}_I",
+            "X":f"match_pointer_offset_{layout_per_operand['X'] if 'X' in layout_per_operand else DEFAULT_LAYOUT['X']}_X",
+            "Y":f"match_pointer_offset_{layout_per_operand['Y'] if 'Y' in layout_per_operand else DEFAULT_LAYOUT['Y']}_Y",
         }
-        self.mem_transfer={
+        self.mem_transfer_old={
             "O":"match_mem_transfer_O",
             "W":"match_mem_transfer_W",
             "I":"match_mem_transfer_I",
@@ -56,7 +62,9 @@ class PlatformApis:
     """All the APIs for the management of the platform that are used by templates of MATCH
     """
     def __init__(self, pattern_name="conv2d"):
-        self.init_platform="match_init_platform"
+        self.init_platform=""
+        self.parallelize_task = ""
+        self.get_task_id = ""
         self.init_platform_need_kernel_data=False
         self.set_task_id="match_task_id"
 
@@ -67,6 +75,16 @@ class SyncApis:
     """All the APIs for the synchronization that are used by templates of MATCH
     """
     def __init__(self, pattern_name="conv2d"):
+        self.must_sync_after_load = False
+        self.must_sync_after_store = False
+        self.must_sync_after_computation = False
+        self.wait_parallel_tasks = ""
+        self.wait_tile_computation = ""
+        self.wait_load = ""
+        self.wait_store = ""
+        self.wait_buffer_parallel_tasks = ""
+        self.wait_buffer_tile_computation = ""
+        # old ones...
         self.async_transfers="match_async_transfers"
         self.prev_computation="match_prev_computation"
         self.curr_computation="match_curr_computation"
@@ -115,7 +133,13 @@ class ExecModule(ABC):
         self.module_options=dict()
         self.backend = "MATCH"
 
-    def backend_constraints_check(self,match_node,schedule,block,lp):
+    def backend_constraints_check(self,match_node,schedule,block,lp,lp_idx):
+        # if any([mt.sw_controlled for mt in lp.mem_transfers]):
+            # return False
+        # else:
+        for lp_after in block.loops[lp_idx+1:]:
+            if any([mt.sw_controlled for mt in lp_after.mem_transfers]):
+                return False
         return True
 
 
@@ -167,9 +191,22 @@ class ExecModule(ABC):
             MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
         ]
 
+    @property
+    def mem_hierarchy(self):
+        memories_ = self.get_all_memories()
+        return {
+            "out":memories_,
+            "var":memories_,
+            "const":memories_,
+            "inter":memories_,
+        }
+
     def get_all_memories_names(self):
         return [m.name for m in self.memories_def(pattern_name="conv2d",operands=["O","I","W"])]
-
+    
+    def get_all_memories(self):
+        return [m for m in self.memories_def(pattern_name="conv2d",operands=["O","I","W"])]
+    
     @property
     def memories(self):
         return self.get_all_memories_names()

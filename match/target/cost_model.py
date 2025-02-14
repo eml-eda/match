@@ -61,6 +61,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.spatial_sizes = self.spatial_mapping.spatial_loop_dim_size
         self.pattern_name = self.layer.layer_attrs["operator_type"]
         self.match_node = self.layer.layer_attrs["match_node"]
+        self.specific_pattern = self.match_node.specific_pattern
 
     def def_innermost_loops_cost(self):
         """This function computes the cost of each single iteration of the kernel
@@ -90,7 +91,9 @@ class ZigZagMatchCostModel(CostModelEvaluation):
     def calc_relevancy_map(self):
         dense = "dense" in self.match_node.ops_occurrences
         conv2d = "conv2d" in self.match_node.ops_occurrences
+        conv1d = "conv1d" in self.match_node.ops_occurrences
         conv2d_dw = conv2d and self.match_node.ops["conv2d"].depthwise
+        conv1d_dw = conv1d and self.match_node.ops["conv1d"].depthwise
         add = (not dense) and (not conv2d) and "add" in self.match_node.ops_occurrences
         if dense:
             ordered_relevant_loops = {
@@ -98,9 +101,9 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                 "O": ["K", "OY", "OX"],
                 "W": ["K", "C", "FY", "FX"],
             }
-        elif conv2d:
+        elif conv2d or conv1d:
             ordered_relevant_loops = {
-                "I": [['OY','OX','C'],[("C" if not conv2d_dw else "K"), "OY", "OX"]][1],
+                "I": [['OY','OX','C'],[("C" if not (conv2d_dw or conv1d_dw) else "K"), "OY", "OX"]][1],
                 "O": [['OY','OX','K'],["K", "OY", "OX"]][1],
                 "W": [['K','C','FY','FX'],["K", "C", "FY", "FX"]][1],
             }
@@ -117,7 +120,14 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.relevancy_map = ordered_relevant_loops
 
     def calc_sizes_per_mem_level(self):
-        strides = self.match_node.ops["conv2d"].strides if "conv2d" in self.match_node.ops_occurrences else (1,1)
+        conv2d = "conv2d" in self.match_node.ops_occurrences
+        conv1d = "conv1d" in self.match_node.ops_occurrences
+        if conv2d:
+            strides = self.match_node.ops["conv2d"].strides
+        elif conv1d:
+            strides = self.match_node.ops["conv1d"].strides + (1,)
+        else:
+            strides = (1,1)
         self.size_per_mem_level = {
             operand: {
                 reldim: [prod(

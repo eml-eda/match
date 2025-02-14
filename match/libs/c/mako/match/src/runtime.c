@@ -176,13 +176,13 @@ void match_generative_runtime(
             size_${inp_name} *= ${dim};
             % endif
             % endfor
-            if(size_${inp_name} != prev_size_${inp_name})   ${inp_name}_inp = malloc(sizeof(${inp["c_type"]}) * size_${inp_name});
+            if(size_${inp_name} != prev_size_${inp_name})   ${inp_name}_inp = ${target.alloc_fn}(sizeof(${inp["c_type"]}) * size_${inp_name});
             prev_size_${inp_name} = size_${inp_name};
             #ifdef MATCH_DEBUG_LOG
             fprintf(debug_file, "[MATCH RUNTIME] storing inp ${inp_name}\n");
             #endif
             store_inp_${inp_name}_for_gen_model(${inp_name}_prev_pt,${inp_name}_inp,model_idx);
-            if(prev_model_idx!=-1)  free(${inp_name}_prev_pt); 
+            if(prev_model_idx!=-1)  ${target.free_fn}(${inp_name}_prev_pt); 
         }
         % endfor
 
@@ -200,8 +200,8 @@ void match_generative_runtime(
             % endif
             % endfor
             if(size_${out_name} != prev_size_${out_name}){
-                if(prev_model_idx!=-1)  free(${out_name}_prev_pt);
-                ${out_name}_out = malloc(sizeof(${out["c_type"]}) * size_${out_name});
+                if(prev_model_idx!=-1)  ${target.free_fn}(${out_name}_prev_pt);
+                ${out_name}_out = ${target.alloc_fn}(sizeof(${out["c_type"]}) * size_${out_name});
             }
             % endfor
         }
@@ -297,15 +297,15 @@ int check_${model_name}_differences_with_golden_model(){
 double benchmark_${model_name}_model(int iterations){
     int status = 0;
     int fails = 0;
-    clock_t start, end;
-    start = clock();
+    ${target.timestamp_type} start,end;
+    start = ${target.start_get_timestamp_api}();
     for(int i=0;i<iterations;i++){
         status=tvmgen_${model_name}_run(&model_inps_${model_name.upper()},&model_outs_${model_name.upper()});
         if(status) fails++;
     }
-    end = clock();
+    end = ${target.end_get_timestamp_api}();
 
-    double time_elapsed_ms = ((double)(end - start))/CLOCKS_PER_SEC * 1000;
+    double time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
     printf("[MATCH RUNTIME] [${model_name}_BENCH] time %fms; time per iterations %fms; fails %d\n",
         time_elapsed_ms, time_elapsed_ms/iterations, fails);
     return time_elapsed_ms/iterations;
@@ -393,5 +393,12 @@ void match_default_runtime(
         .${out_name} = ${out_name}_pt,
         % endfor
     };
+    ${target.timestamp_type} start,end;
+    start = ${target.start_get_timestamp_api}();
     match_ctx->status = tvmgen_default_run(&model_inps_DEFAULT,&model_outs_DEFAULT);
+    end = ${target.end_get_timestamp_api}();
+
+    double time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
+    printf("[MATCH RUNTIME] [${model_name}] time %fms\n",time_elapsed_ms);
+    return;
 }

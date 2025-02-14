@@ -102,6 +102,12 @@ class MatchTarget(ABC):
         self.model_generative_apis_include_path=os.path.dirname(__file__)+"/../libs/c/mako/default/include/generative_model_apis.h"
         self.default_inputs_src_path=os.path.dirname(__file__)+"/../libs/c/mako/match/src/default_inputs.c"
         self.default_inputs_include_path=os.path.dirname(__file__)+"/../libs/c/mako/match/include/default_inputs.h"
+        self.start_get_timestamp_api = "clock"
+        self.end_get_timestamp_api = "clock"
+        self.timestamp_type = "clock_t"
+        self.timestamp_to_ms = "* CLOCKS_PER_SEC/1000"
+        self.alloc_fn = "malloc"
+        self.free_fn = "free"
         self.clean_funcs=[]
         self.init_funcs=[]
         self.include_list=[]

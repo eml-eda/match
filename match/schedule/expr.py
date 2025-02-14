@@ -70,6 +70,8 @@ class MatchMinusEqExpr(MatchExpr):
     def __init__(self):
         super().__init__("-=")
 
+MATCH_ASSIGN_EXPRS_CLS = (MatchAssignExpr,MatchPlusEqExpr,MatchMinusEqExpr)
+
 class MatchSubExpr(MatchExpr):
     def __init__(self):
         super().__init__("-")

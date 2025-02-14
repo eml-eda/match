@@ -16,7 +16,7 @@ def get_inputs_outputs(onnx_model: onnx.ModelProto,dynamic_dims:Dict[str,Dynamic
         "dynamic":all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]),
         "prod_shape":int(prod([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim])) if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else 1000,
         "shape":[dim.dim_value for dim in inp.type.tensor_type.shape.dim],
-        "c_arr_size":int(prod([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim])*onnx.helper.tensor_dtype_to_np_dtype(inp.type.tensor_type.elem_type).itemsize) if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else 1000,
+        "c_arr_size":int(prod([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim])) if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else 1000,
         "c_arr_values":c_friendly_npvalue(get_random_np_array(dtype=onnx.helper.tensor_dtype_to_np_dtype(inp.type.tensor_type.elem_type),shape=tuple([int(dim.dim_value) for dim in inp.type.tensor_type.shape.dim]))) if all([dim.dim_param=="" for dim in inp.type.tensor_type.shape.dim]) else "{"+str([1 for _ in range(1000)])[1:-1]+"}",
         } for inp in onnx_model.graph.input}
     match_outputs = {f"output{idx if len(onnx_model.graph.output)>1 else ''}":{
@@ -26,7 +26,7 @@ def get_inputs_outputs(onnx_model: onnx.ModelProto,dynamic_dims:Dict[str,Dynamic
         "dynamic":all([dim.dim_param=="" for dim in out.type.tensor_type.shape.dim]),
         "prod_shape":int(prod([int(dim.dim_value) for dim in out.type.tensor_type.shape.dim])) if all([dim.dim_param=="" for dim in out.type.tensor_type.shape.dim]) else 1000,
         "shape":[dim.dim_value for dim in out.type.tensor_type.shape.dim],
-        "c_arr_size":int(prod([int(dim.dim_value) for dim in out.type.tensor_type.shape.dim])*onnx.helper.tensor_dtype_to_np_dtype(out.type.tensor_type.elem_type).itemsize) if all([dim.dim_param=="" for dim in out.type.tensor_type.shape.dim]) else 1000,
+        "c_arr_size":int(prod([int(dim.dim_value) for dim in out.type.tensor_type.shape.dim])) if all([dim.dim_param=="" for dim in out.type.tensor_type.shape.dim]) else 1000,
         } for idx,out in enumerate(onnx_model.graph.output)}
     return match_inputs,match_outputs
 

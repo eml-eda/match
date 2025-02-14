@@ -1,0 +1,12 @@
+{
+    "strides":[1,1],
+    "padding":[0,0,0,0],
+    "fil_shape":[1,1],
+    "inp_shape":[24,16],
+    "inp_ch":3,
+    "out_ch":16,
+    "right_shift":4,
+    "inp_features":1152,
+    "out_features":512,
+    "activation":false
+}

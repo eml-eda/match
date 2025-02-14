@@ -12,10 +12,11 @@ class MatchRelayParser(MatchParser):
     def __init__(self, node, args_list = ..., exec_module = None, pattern_name = "", partitioned = False, pattern_inst=None, match_node = None):
         super().__init__(node, args_list, exec_module, pattern_name, partitioned, pattern_inst, match_node)
         self.visit_router = {
+            "nn.conv1d": self.visit_conv_1d,
             "nn.conv2d": self.visit_conv_2d,
-            # "cast": self.visit_cast,
-            # "right_shift": self.visit_right_shift,
-            # "clip": self.visit_clip,
+            "cast": self.visit_cast,
+            "right_shift": self.visit_right_shift,
+            "clip": self.visit_clip,
             "nn.bias_add": self.visit_bias_add,
             "nn.dense": self.visit_dense,
             # "add": self.visit_add,
@@ -24,7 +25,7 @@ class MatchRelayParser(MatchParser):
         }
     
     def visit_relu(self, call, attrs, name):
-        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call.args[0],0)
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
         out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output")
@@ -35,53 +36,55 @@ class MatchRelayParser(MatchParser):
         )
         self.update_match_node(op=op,call=call,name=name)
 
-    # def visit_cast(self, call, attrs, name):
-    #     otype = [int(v) for v in call.checked_type.shape]
-    #     odtype = call.checked_type.dtype
-    #     otype_dim = [Dim(name=name+f"_dim_{idx}",size=otype[idx]) for idx in range(len(otype)) if otype[idx]!=1]
-    #     out = MatchOutputTensor(name,dims=otype_dim,dtype=odtype)
-    #     op = ops.Cast(
-    #         outs=[out],
-    #         prec= self.get_bits(attrs.dtype),
-    #         type= self.get_type(attrs.dtype),
-    #     )
-    #     self.match_node.ops[name]=op
-    #     self.match_node.calls[name]=call
-
-    # def visit_right_shift(self, call, attrs, name):
-    #     # nothing to do actually, right shift has no attrs and the arg is already saved before
-    #     otype = [int(v) for v in call.checked_type.shape]
-    #     odtype = call.checked_type.dtype
-    #     otype_dim = [Dim(name=name+f"_dim_{idx}",size=otype[idx]) for idx in range(len(otype)) if otype[idx]!=1]
-    #     out = MatchOutputTensor(name,dims=otype_dim,dtype=odtype)
-    #     op = ops.RightShift(
-    #         outs=[out],
-    #         prec= self.get_bits(call.checked_type.dtype),
-    #         type= self.get_type(call.checked_type.dtype),
-    #     )
-    #     self.match_node.ops[name]=op
-    #     self.match_node.calls[name]=call
-
-    # def visit_clip(self, call, attrs, name):
-    #     otype = [int(v) for v in call.checked_type.shape]
-    #     odtype = call.checked_type.dtype
-    #     otype_dim = [Dim(name=name+f"_dim_{idx}",size=otype[idx]) for idx in range(len(otype)) if otype[idx]!=1]
-    #     out = MatchOutputTensor(name,dims=otype_dim,dtype=odtype)
-    #     op = ops.Clip(
-    #         outs=[out],
-    #         min=int(attrs.a_min),
-    #         max=int(attrs.a_max),
-    #     )
-    #     self.match_node.ops[name]=op
-    #     self.match_node.calls[name]=call
-
-    def visit_bias_add(self, call, attrs, name):
-        axis = int(attrs.axis) if hasattr(attrs,"axis") else 0
-        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call.args[0],0)
+    def visit_cast(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
         out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output")
-        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call.args[1],1)
+        self.calls_tensors[name]=out_tensor
+        op = ops.MatchOpCast(
+            var_arr=[inp_tensor],
+            out_arr=[out_tensor],
+            cast_dtype=np.dtype(attrs.dtype)
+        )
+        self.update_match_node(op=op,call=call,name=name)
+
+    def visit_right_shift(self, call, attrs, name):
+        # nothing to do actually, right shift has no attrs and the arg is already saved before
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
+        if inp_name in self.name_to_calls:
+            inp_tensor.tensor_type = "intermediate"
+        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output")
+        self.calls_tensors[name]=out_tensor
+        op = ops.MatchOpRightShift(
+            var_arr=[inp_tensor],
+            out_arr=[out_tensor],
+            right_shift=int(call.args[1].data.numpy()),
+        )
+        self.update_match_node(op=op,call=call,name=name)
+
+    def visit_clip(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
+        if inp_name in self.name_to_calls:
+            inp_tensor.tensor_type = "intermediate"
+        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output")
+        self.calls_tensors[name]=out_tensor
+        op = ops.MatchOpClip(
+            var_arr=[inp_tensor],
+            out_arr=[out_tensor],
+            clip_max=int(attrs.a_max),
+            clip_min=int(attrs.a_min)
+        )
+        self.update_match_node(op=op,call=call,name=name)
+
+
+    def visit_bias_add(self, call, attrs, name):
+        axis = int(attrs.axis) if hasattr(attrs,"axis") else 0
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
+        if inp_name in self.name_to_calls:
+            inp_tensor.tensor_type = "intermediate"
+        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output")
+        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
         if w_name in self.name_to_calls:
             w_tensor.tensor_type = "intermediate"
         for w_dim in w_tensor.dims:
@@ -122,11 +125,11 @@ class MatchRelayParser(MatchParser):
         odtype = call.checked_type.dtype
         if ishape[1] != wshape[1]:
             raise NotImplementedError(f"[PARSER]: The weights shape in the dense operation are not correct")
-        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call.args[0],0)
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
         # well consider the case where the multiplied dimension is the last one
-        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call.args[1],1)
+        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
         if w_name in self.name_to_calls:
             w_tensor.tensor_type = "intermediate"
         self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[-1].name,new_dim_name=inp_tensor.dims[-1].name)
@@ -171,10 +174,10 @@ class MatchRelayParser(MatchParser):
     #     self.match_node.calls[name]=call
 
     def visit_conv_2d(self, call, attrs, name):
-        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call.args[0],0)
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
-        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call.args[1],1)
+        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
         if w_name in self.name_to_calls:
             w_tensor.tensor_type = "intermediate"
         # shapes etc.
@@ -236,6 +239,70 @@ class MatchRelayParser(MatchParser):
             dilation= dilations,
             groups= groups,
             kernel_size=(w_ksh,w_ksw),
+            depthwise= depthwise,
+            data_layout= attrs.data_layout,
+            kernel_layout= attrs.kernel_layout,
+            out_dtype= np.dtype(attrs.out_dtype),
+        )
+        self.update_match_node(op=op,call=call,name=name)
+
+    def visit_conv_1d(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
+        if inp_name in self.name_to_calls:
+            inp_tensor.tensor_type = "intermediate"
+        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
+        if w_name in self.name_to_calls:
+            w_tensor.tensor_type = "intermediate"
+        # shapes etc.
+        ishape = [int(v) for v in call.args[0].checked_type.shape]
+        wshape = [int(v) for v in call.args[1].checked_type.shape]
+        oshape = [int(v) for v in call.checked_type.shape]
+        odtype = call.checked_type.dtype
+        (i_n,i_n_dim), (i_c,i_c_dim), (i_spatial,i_spatial_dim)= self.get_io_from_layout(attrs.data_layout, ishape, inp_tensor.dims)
+        (w_cout,w_cout_dim), (w_cin,w_cin_dim), (w_kernel,w_kernel_dim) = self.get_io_from_layout(attrs.data_layout, wshape, w_tensor.dims)
+        padding = [int(a_p) for a_p in attrs.padding]
+        strides = [int(v) for v in attrs.strides]
+        dilations = [int(a_d) for a_d in attrs.dilation]
+        groups = int(attrs.groups)
+        depthwise = groups != 1 and groups==i_c
+        (o_n,o_n_dim), (o_c,o_c_dim), (o_spatial,o_spatial_dim) = self.get_io_from_layout(
+            attrs.out_layout if attrs.out_layout != "" else attrs.data_layout, oshape, [None,None,None,None]
+        )
+        # manage dimensions dependencies
+        if strides[0]!=1 or dilations[0]!=1:
+            o_spatial_dim = MatchDim(name=name+"_out_spatial",size=o_spatial)
+            self.node_all_dims[o_spatial_dim.name] = o_h_dim
+            if i_spatial_dim.name==i_spatial_dim.original_name:
+                i_spatial_dim.dim_dependency = DimDependency(dependencies={o_spatial_dim:strides[0],w_kernel_dim:dilations[0],padding[0]:-1})
+            else:
+                self.node_all_dims[i_spatial_dim.name].dependencies = DimDependency(dependencies={w_cout_dim:strides[0],w_kernel_dim:dilations[0],padding[0]:-1})
+        else:
+            o_spatial_dim = i_spatial_dim
+        if not depthwise:
+            self.update_all_dim_names_occurrences_with(old_dim_name=w_cin_dim.name,new_dim_name=i_c_dim.name)
+        
+        o_tensor = MatchTensor(name=name,dims=self.get_dim_arr_from_layout_and_nchw_arr(
+            layout=attrs.out_layout if attrs.out_layout != "" else attrs.data_layout,
+            nchw_arr=[i_n_dim,w_cout_dim,o_spatial_dim]
+        ),dtype=np.dtype(odtype),tensor_type="output")
+        self.calls_tensors[name]=o_tensor
+        if i_n != o_n:
+            raise NotImplementedError(
+                f"Input batch size is {i_n}, while output batch size is {o_n}"
+            )
+        if not depthwise and groups>1:
+            raise NotImplementedError(
+                f"Grouped convolutions which are not completely depthwise aren't supported yet, groups set to {groups}"
+            )
+        op = ops.MatchOpConv1D(
+            out_arr=[o_tensor],
+            var_arr=[inp_tensor],
+            const_arr=[w_tensor],
+            padding= padding,
+            strides= strides,
+            dilation= dilations,
+            groups= groups,
+            kernel_size=(w_kernel),
             depthwise= depthwise,
             data_layout= attrs.data_layout,
             kernel_layout= attrs.kernel_layout,

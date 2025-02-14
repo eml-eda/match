@@ -20,7 +20,7 @@ def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
           match_inputs=None,match_outputs=None,
           output_path="./match_output",
           golden_default_cpu_model: bool=False,
-          benchmarking: bool=True,
+          benchmarking: bool=True, executor: str="aot"
           ):
     if Path(output_path).absolute().is_dir():
         # remove build folder and all contents
@@ -40,8 +40,8 @@ def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
     results = {}
     models_compiled_added = []
     for model_to_compile in models_to_compile:
-        model_to_compile.compile_model(target=target,out_path=output_path)
-        model_to_compile.move_static_app_to(out_path=output_path)
+        model_to_compile.compile_model(target=target,out_path=output_path,executor=executor)
+        model_to_compile.move_static_app_to(target=target,out_path=output_path,executor=executor)
         results[model_to_compile.name] = CompiledModule.result
         static_model_result = CompiledModule.result
         static_model_result.match_inputs,static_model_result.match_outputs = get_match_inputs_and_outputs(model_to_compile)
@@ -58,8 +58,8 @@ def match(input_type="onnx", models_to_compile:List[MatchModel]=[],
             for ex_mod in target.exec_modules_dict:
                 new_disabled_modules.append(ex_mod)
             target.disabled_exec_modules = new_disabled_modules
-            model_cpu_to_compile.compile_model(target=target,out_path=output_path)
-            model_cpu_to_compile.move_static_app_to(out_path=output_path)
+            model_cpu_to_compile.compile_model(target=target,out_path=output_path,executor=executor)
+            model_cpu_to_compile.move_static_app_to(target=target,out_path=output_path,executor=executor)
             results[model_cpu_to_compile.name] = CompiledModule.result
             results[model_cpu_to_compile.name].match_inputs, results[model_cpu_to_compile.name].match_outputs = results["default"].match_inputs,results["default"].match_outputs
             target.disabled_exec_modules = target_disabled_modules
