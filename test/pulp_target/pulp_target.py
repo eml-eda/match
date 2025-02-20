@@ -11,7 +11,7 @@ from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
 import tvm
 from tvm import relay
-from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant, is_var, is_expr
+from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant, is_var, is_expr, DFPatternCallback, rewrite
 from match.partition.partitioning_pattern import PartitioningPattern
 from pathlib import Path
 import numpy as np
@@ -73,7 +73,7 @@ class PulpTarget(ExecModule):
             conv2d = is_op("nn.conv2d")(
                 wildcard(), wildcard()
             )
-            bias_add = is_op("nn.bias_add")(conv2d, wildcard())
+            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(is_op("multiply")(conv2d, wildcard()), wildcard())
             right_shift = is_op("right_shift")(bias_add, is_constant())
             clip = is_op("clip")(right_shift)
             cast = is_op("cast")(clip)
@@ -93,7 +93,7 @@ class PulpTarget(ExecModule):
             dense = is_op("nn.dense")(
                 wildcard(), wildcard()
             )
-            bias_add = is_op("nn.bias_add")(dense, wildcard())
+            bias_add = is_op("nn.bias_add")(dense, wildcard()) | is_op("add")(is_op("multiply")(is_op("cast")(dense), wildcard()), wildcard())
             right_shift = is_op("right_shift")(bias_add, is_constant())
             clip = is_op("clip")(right_shift)
             cast = is_op("cast")(clip)
@@ -102,13 +102,12 @@ class PulpTarget(ExecModule):
         def match_everything():
             return wildcard()
 
-
         return [
             # PartitioningPattern(name="wildcard_pt",pattern=match_everything),
             PartitioningPattern(name="vec_dense",pattern=vec_dense_pt),
             # PartitioningPattern(name="vec_conv",pattern=vec_conv_pt),
-            # PartitioningPattern(name="vec_dense_requant",pattern=vec_dense_pt_requant),
-            # PartitioningPattern(name="vec_conv_requant",pattern=vec_conv_pt_requant),
+            PartitioningPattern(name="vec_dense_requant",pattern=vec_dense_pt_requant),
+            PartitioningPattern(name="vec_conv_requant",pattern=vec_conv_pt_requant),
         ]
 
     def memories_def(self, pattern_name, operands):
@@ -141,6 +140,68 @@ class PulpPlatform(MatchTarget):
         self.include_list = ["pulp_target/pulp_rt_profiler_wrapper","pmsis","pulp_target/gap9_cluster","pulp_target/dory_dma"]
         self.alloc_fn = "malloc_wrapper"
         self.free_fn = "free_wrapper"
+
+def create_dense_conv_dense_ex(inp_features:int=256,out_features:int=128,
+                            inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
+                            padding:Tuple=(0,0,0,0),strides:Tuple=(1,1),
+                            groups:int=1,requant_pattern:bool=False,
+                            right_shift:int=1,**kwargs):
+    np.random.seed(0)
+    # Using input_0 to be used with create_demo_file
+    x = relay.var("input_0", relay.TensorType((1,inp_features), "uint8"))
+    # Get or generate weight_values
+    weights_1 = create_random_array((out_features*math.prod(inp_shape),inp_features),"int8")
+    weights_2 = create_random_array((inp_features,out_features)+fil_shape,"int8")
+    weights_3 = create_random_array((out_features,inp_features*math.prod([int(inp_shape[idx]/strides[idx]) for idx in range(len(inp_shape))])), "int8")
+    # Get or generate bias values
+    bias_1 = create_random_array((out_features*math.prod(inp_shape),), "int32")
+    bias_2 = create_random_array((inp_features,), "int32")
+    bias_3 = create_random_array((out_features,), "int32")
+    # Generate the conv2d call
+    # define weights and bias variables
+    weights_1_name = "dense_1_weights"
+    bias_1_name = "dense_1_bias"
+    weights_2_name = "conv_weights"
+    bias_2_name = "conv_bias"
+    weights_3_name = "dense_2_weights"
+    bias_3_name = "dense_2_bias"
+
+    # define relay input vars
+    w_1 = relay.var(weights_1_name, relay.TensorType(weights_1.shape, weights_1.dtype))
+    w_2 = relay.var(weights_2_name, relay.TensorType(weights_2.shape, weights_2.dtype))
+    w_3 = relay.var(weights_3_name, relay.TensorType(weights_3.shape, weights_3.dtype))
+    b_1 = relay.var(bias_1_name, relay.TensorType(bias_1.shape, bias_1.dtype))
+    b_2 = relay.var(bias_2_name, relay.TensorType(bias_2.shape, bias_2.dtype))
+    b_3 = relay.var(bias_3_name, relay.TensorType(bias_3.shape, bias_3.dtype))
+
+    # define weights and bias values in params
+    params = {weights_1_name: weights_1, bias_1_name: bias_1,
+              weights_2_name: weights_2, bias_2_name: bias_2,
+              weights_3_name: weights_3, bias_3_name: bias_3}
+
+    # define operations
+    x = relay.op.nn.dense(x, w_1, out_dtype=bias_1.dtype)
+    x = relay.op.nn.bias_add(x, b_1, axis=-1)
+    x = relay.op.nn.relu(x)
+    x = relay.op.cast(x, "uint8")
+    x = relay.op.reshape(x, (1, out_features)+inp_shape)
+    x = relay.op.nn.conv2d(x, w_2,
+                           strides=strides,
+                           padding=padding,
+                           groups=groups,
+                           kernel_size=fil_shape,
+                           out_dtype="int32",
+                           )
+    x = relay.op.nn.bias_add(x, b_2, axis=1)
+    x = relay.op.nn.relu(x)
+    x = relay.op.reshape(x, (1, inp_features*math.prod([int(inp_shape[idx]/strides[idx]) for idx in range(len(inp_shape))])))
+    x = relay.op.nn.dense(x, w_3, out_dtype=bias_3.dtype)
+    x = relay.op.nn.bias_add(x, b_3, axis=-1)
+    x = relay.op.nn.relu(x)
+    # create an IR module from the relay expression
+    mod = tvm.ir.IRModule()
+    mod = mod.from_expr(x)
+    return mod, params
 
 def create_vec_conv_ex(inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
                        padding:Tuple=(0,0,0,0),strides:Tuple=(1,1),
@@ -366,6 +427,7 @@ def run_model(model:str="keyword_spotting",output_path:str="./builds/last_build"
 MICROBENCH_MAPPER = {
     "conv":create_vec_conv_ex,
     "dense":create_vec_dense_ex,
+    "dense_conv_dense":create_dense_conv_dense_ex,
 }
 
 def run_microbench(microbench:str="conv",output_path:str="./builds/last_build"):

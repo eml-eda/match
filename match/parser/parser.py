@@ -4,6 +4,7 @@ from match.dim.dim import MatchDim
 from match.node.node import MatchNode
 from match.tensor.tensor import MatchTensor
 import tvm
+import tvm.relay
 from tvm.relay.transform import InferType
 # utils imports
 from typing import List
@@ -44,18 +45,32 @@ class MatchParser:
         self.calls_tensors = dict()
         self.node_all_dims = dict()
         self.visit_router = dict()
+        self.tensor_name_mapping = dict()
+        self.original_node = node
         # partition graph and infer type
         if not partitioned:
             mod = tvm.ir.IRModule()
             self.node=InferType()(mod.from_expr(pattern_inst.pattern().partition(node)))
+            self.args_list = self.node["main"].body.args
+            params_ = self.node["main"].body.op.params
+            new_args = []
+            for idx,arg in enumerate(self.args_list):
+                new_arg = arg
+                while isinstance(new_arg, tvm.relay.Call):
+                    new_arg = new_arg.args[0]
+                if new_arg!=arg and isinstance(new_arg, tvm.relay.Var):
+                    new_arg = params_[idx]
+                new_args.append(new_arg)
+            self.args_list = new_args
             self.node=self.node["main"].body.op.body
+            breakpoint()
 
     def get_name_and_tensor_of_arg(self,call,arg,arg_idx:int=0):
         if isinstance(arg, tvm.relay.Var):
-            if arg.name_hint in self.node_vars:
-                return arg.name_hint, self.node_vars[arg.name_hint],"var"
+            if self.tensor_name_mapping[arg.name_hint] in self.node_vars:
+                return arg.name_hint, self.node_vars[self.tensor_name_mapping[arg.name_hint]],"var"
             else:
-                return arg.name_hint, self.node_consts[arg.name_hint],"const"
+                return arg.name_hint, self.node_consts[self.tensor_name_mapping[arg.name_hint]],"const"
         elif isinstance(arg, tvm.relay.Constant):
             return f"{self.calls_to_name[call]}_arg_{arg_idx}", self.node_consts[f"{self.calls_to_name[call]}_arg_{arg_idx}"],"var"
         else:
@@ -201,7 +216,8 @@ class MatchParser:
                         if isinstance(
                             self.args_list[len(var_and_consts_not_unrolled)], tvm.relay.Var
                         ):
-                            v_name = self.adjust_name(a.name_hint)
+                            v_name = "input_"+str(len(self.node_vars))
+                            self.tensor_name_mapping[a.name_hint] = v_name
                             var_and_consts_not_unrolled[v_name] = self.args_list[
                                 len(var_and_consts_not_unrolled)
                             ]
@@ -217,8 +233,8 @@ class MatchParser:
                                                                 dims=var_dims,
                                                                 dtype=np.dtype(dtype),tensor_type="var")
                         else:
-                            old_idx = sum([c.op.name in k for k in var_and_consts_not_unrolled.keys()])
-                            v_name=self.adjust_name(a.name_hint)
+                            v_name=unique_name + f"_arg_{idx_arg}"
+                            self.tensor_name_mapping[a.name_hint] = v_name
                             var_and_consts_not_unrolled[v_name] = self.args_list[len(var_and_consts_not_unrolled)]
                             const_  = self.args_list[len(var_and_consts_not_unrolled)-1]
                             shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in const_.checked_type.shape]
@@ -231,7 +247,8 @@ class MatchParser:
                                                                 dtype=np.dtype(dtype),tensor_type="const",
                                                                 data = const_.data.numpy())
                     else:
-                        v_name = self.adjust_name(a.name_hint)
+                        v_name = "input_"+str(len(self.node_vars))
+                        self.tensor_name_mapping[a.name_hint] = v_name
                         var_and_consts_not_unrolled[v_name] = a
                         shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in a.checked_type.shape]
                         dtype = a.checked_type.dtype
@@ -243,6 +260,7 @@ class MatchParser:
                                                                 dtype=np.dtype(dtype),tensor_type="var")
                 elif isinstance(a, tvm.relay.Constant):
                     v_name=unique_name + f"_arg_{idx_arg}"
+                    self.tensor_name_mapping[v_name] = v_name
                     var_and_consts_unrolled[v_name] = a
                     shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in a.checked_type.shape]
                     dtype = a.checked_type.dtype

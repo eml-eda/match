@@ -1,7 +1,7 @@
 from math import floor
 from typing import Any, Dict, List
 
-from match.dim.dim import MatchDim
+from match.dim.dim import MatchDim, MatchTiledDim
 from match.node.node import MatchNode
 from match.opt.engine import ScheduleEngine
 from match.schedule.block import MatchBlock
@@ -11,6 +11,7 @@ from match.schedule.schedule import MatchSchedule
 from match.target.exec_module import ExecModule
 from match.target.memory_inst import MemoryInst, PortConnection
 # zigzag imports
+from match.tensor.tensor import MatchTensorTile
 from zigzag import api
 from zigzag.visualization.results.print_mapping import print_mapping
 from zigzag.classes.hardware.architecture.memory_hierarchy import MemoryHierarchy
@@ -31,8 +32,6 @@ class ZigZagEngine(ScheduleEngine):
     def transform_schedule_for_engine(self):
         # TODO: get this params correctly
         o_intermediate_prec,o_prec,first_inp_prec,second_inp_prec = 32,8,8,8
-        # with ZigZag no intermediate tensor should be used...
-        # self.match_node.intermediate_tensors = dict()
         conv = "conv1d" in self.match_node.ops_occurrences or "conv2d" in self.match_node.ops_occurrences
         conv2d = "conv2d" in self.match_node.ops_occurrences
         conv2d_is_dw = conv2d and self.match_node.ops["conv2d"].depthwise
@@ -423,7 +422,9 @@ class ZigZagEngine(ScheduleEngine):
                     ],
                     backend="ZigZag"
                 )
-            ]
+            ],
+            # ZigZag schedule shouldnt use intermediate tensors
+            tensors={tens_name:tens for tens_name,tens in self.match_node.tensors.items() if tens.tensor_type!="intermediate"},
         )
         # ZigZag expects all the constants to be loaded immediately to the inner memory of weights...
         for const_tensor in self.match_node.const_tensors.values():
@@ -433,4 +434,24 @@ class ZigZagEngine(ScheduleEngine):
                                      top_mem=mem_hierarchy["const"][-1].name,mem=mem_hierarchy["const"][0].name,
                                      sw_controlled=mem_hierarchy["const"][0].sw_controlled)
                 )
+        memories = self.exec_module.get_all_memories()
+        for tensor in self.schedule.tensors.values():
+            self.schedule.tensor_tiles[tensor.name] = [MatchTensorTile(tensor=tensor,
+                                            tiled_dims=[MatchTiledDim(dim=dim,size=dim.size) for dim in tensor.dims]) for mem in mem_hierarchy_dict]
+            for mem_idx,mem_name in enumerate(memories):
+                # is a memory of the tensor and its not the top memory so we can get the tiling size of it
+                t_type = "out" if tensor.tensor_type=="output" else "const" if tensor.tensor_type=="constant" else "var"
+                if mem_name in mem_hierarchy[t_type] and mem_name!=mem_hierarchy[t_type][-1]:
+                    steps = {dim.name:dim.size for dim in tensor.dims}
+                    for loop in self.schedule.blocks[0].loops:
+                        steps[loop.dim.name] = loop.step
+                        if any([mem_trans.tensor==tensor and mem_trans.mem==mem_name for mem_trans in loop.mem_transfers]):
+                            for dim_idx,dim in enumerate(tensor.dims):
+                                if dim.dim_dependency:
+                                    new_size = 0
+                                    for ind_dim,mult in dim.dim_dependency.dependencies.items():
+                                        new_size = (mult*(ind_dim if not hasattr(ind_dim,"name") else steps[ind_dim.size]))
+                                    self.schedule.tensor_tiles[tensor.name][mem_idx][dim_idx] = new_size
+                                else:
+                                    self.schedule.tensor_tiles[tensor.name][mem_idx][dim_idx] = steps[dim.name]
         breakpoint()

@@ -98,9 +98,11 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % endfor
 
     #ifndef __MATCH_TEST_NODE_WITH_HELPER__
-    % for intermediate_tensor in match_node.intermediate_tensors.values():
+    % for intermediate_tensor in schedule.tensors.values():
+    % if intermediate_tensor.tensor_type=="intermediate":
     ${intermediate_tensor.name}->base_pt = ${target.alloc_fn}(${intermediate_tensor.prod_shape}*sizeof(${c_dtype(intermediate_tensor.dtype)}));
     ${intermediate_tensor.name}->pts[${memory_hierarchy["inter"][-1].name}] = ${intermediate_tensor.name}->base_pt;
+    % endif
     % endfor
 
     % for mem_level in set([mem_ for k,v in memory_hierarchy.items() for mem_ in v]):
@@ -229,7 +231,9 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % endfor
     
     % for intermediate_tensor in match_node.intermediate_tensors.values():
+    % if intermediate_tensor.tensor_type=="intermediate":
     ${target.free_fn}(${intermediate_tensor.name}->base_pt);
+    % endif
     % endfor
     #endif
     #ifdef __MATCH_TEST_NODE_WITH_HELPER__
