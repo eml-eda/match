@@ -10,3 +10,4 @@ dist
 .eggs
 gap9_results
 net_output
+venv

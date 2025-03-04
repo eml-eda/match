@@ -58,7 +58,8 @@ def onnx_to_relay(onnx_filename,dynamic_dims:Dict[str,DynamicDim]={}):
                 )
             )
     else:
-        relay_mod,relay_params = relay.frontend.from_onnx(onnx_model,freeze_params=False)
+        # FD: Changed to True to avoid freezing parameters (weird behavior with pad)
+        relay_mod,relay_params = relay.frontend.from_onnx(onnx_model,freeze_params=True)
         models_to_compile.append(
             MatchModel(
                 relay_mod=relay_mod,

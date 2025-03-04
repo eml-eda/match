@@ -1,0 +1,1 @@
+from .maupiti import MaupitiTarget
