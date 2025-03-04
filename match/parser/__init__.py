@@ -1,1 +1,1 @@
-from .parser import MatchParser
+from .tvm_parser import MatchTVMParser

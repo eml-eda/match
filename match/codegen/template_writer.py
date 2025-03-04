@@ -38,7 +38,6 @@ class TemplateWriter:
         self.template_data["target"]=self.target
         self.template_data["schedule"]=self.schedule
         self.template_data["memory_hierarchy"]=self.exec_module.mem_hierarchy
-        breakpoint()
         self.template_data["match_node"]=self.match_node
         self.template_data["mod"] = self.mod
         self.template_data["model_name"] = self.mod.attrs.global_symbol.split("_")[1]
@@ -66,11 +65,14 @@ class TemplateWriter:
         Path(out_path+"/include").mkdir(parents=True,exist_ok=True)
         Path(out_path+"/include/nodes").mkdir(parents=True,exist_ok=True)
         Path(out_path+"/include/"+node_path).mkdir(parents=True,exist_ok=True)
+        print(f"[TEMPLATE WRITER] Generating node {self.template_data['node_name']}")
         node_code = "#include <stdio.h>\n"
         for base_dir in ["src", "include", "metadata"]:
             template_dir = os.path.dirname(__file__) + "/../libs/c/mako/node/" + base_dir
             node_base_path = "" if base_dir=="metadata" else base_dir+"/"+node_path
             for filename in os.listdir(template_dir):
+                if filename.startswith("old_"):
+                    continue
                 filename_without_dots = filename.split(".")
                 filename_without_ext = ".".join(filename_without_dots[:-1])
                 ext = filename_without_dots[-1]

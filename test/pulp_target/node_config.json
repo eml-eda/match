@@ -8,5 +8,6 @@
     "right_shift":4,
     "inp_features":16,
     "out_features":8,
-    "activation":false
+    "activation":true,
+    "requant_pattern":true
 }

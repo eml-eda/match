@@ -16,13 +16,10 @@
 """
 Operations to support the SOMA accelerator.
 """
-
-from typing import Any, List
-from match.partition.network_transformations import MatchOnnxBiasAdd,MatchOnnxBiasAddRemoveFromMain, MatchSaveModule, MatchAddCastInMain, MatchSaveRelay
+from match.transform.save import MatchSaveModule, MatchSaveRelay
+from match.utils.utils import get_model_name
 import tvm
 import logging
-from functools import partial
-from tvm import relay
 
 from tvm.relay import transform
 from tvm.relay.build_module import bind_params_by_name
@@ -69,30 +66,28 @@ def partition(mod, params, dpu, opts):
     target=get_target()
 
     pipeline = []
-    pipeline.append(MatchSaveRelay("hw_independent"))
-    pipeline.append(transform.InferType())
-    pipeline.append(MatchOnnxBiasAdd())
+    pipeline.append(MatchSaveRelay("start"))
     pipeline.append(transform.InferType())
 
-    pipeline.append(MatchSaveRelay("pre_hw_dependent"))
-    pipeline+=target.network_transformations(opts)
+    for net_transform_name, net_transform in target.network_transformations(opts):
+        pipeline.append(net_transform)
+        pipeline.append(MatchSaveRelay(net_transform_name))
+        pipeline.append(transform.InferType())
 
-    pipeline.append(transform.InferType())
-    pipeline.append(MatchSaveRelay("hw_dependent"))
+    pipeline.append(MatchSaveRelay("transformed"))
     pipeline.append(transform.MergeComposite(pattern_table(target=target)))
     pipeline.append(transform.AnnotateTarget(["match"]))
     pipeline.append(MatchSaveRelay("merged"))
-    pipeline+=target.adjust_network(opts)
-    pipeline.append(MatchSaveRelay("hw_adjust"))
-    pipeline.append(transform.InferType())
-    pipeline.append(transform.PartitionGraph())
+
+    for net_transform_name, net_transform in target.adjust_network(opts):
+        pipeline.append(net_transform)
+        pipeline.append(MatchSaveRelay(net_transform_name))
+        pipeline.append(transform.InferType())
+
+    pipeline.append(MatchSaveRelay("adjusted"))
+    pipeline.append(transform.PartitionGraph(get_model_name()))
     pipeline.append(transform.InferType())
     pipeline.append(MatchSaveRelay("partitioned"))
-
-    pipeline.append(MatchOnnxBiasAddRemoveFromMain())
-    pipeline.append(MatchAddCastInMain())
-    pipeline.append(MatchSaveRelay("fixes"))
-    pipeline.append(transform.InferType())
     
     pipeline.append(MatchSaveModule())
     seq = tvm.transform.Sequential(pipeline)
@@ -101,7 +96,7 @@ def partition(mod, params, dpu, opts):
             fused = seq(mod)
             return fused
         except Exception as err:
-            #breakpoint()
+            breakpoint()
             raise Exception(
                 "Error converting layout to {0}".format(str(err))
             )

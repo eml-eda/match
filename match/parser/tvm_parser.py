@@ -20,7 +20,7 @@ def get_depth_arr_pattern(pattern_inst_):
     else:
         return 0
     
-class MatchParser:
+class MatchTVMParser:
     def __init__(self, node:tvm.ir.IRModule, args_list:List=[],
                  exec_module:ExecModule=None, pattern_name:str="",
                  partitioned:bool=False, pattern_inst=None,
@@ -63,7 +63,6 @@ class MatchParser:
                 new_args.append(new_arg)
             self.args_list = new_args
             self.node=self.node["main"].body.op.body
-            breakpoint()
 
     def get_name_and_tensor_of_arg(self,call,arg,arg_idx:int=0):
         if isinstance(arg, tvm.relay.Var):
@@ -308,13 +307,13 @@ class MatchParser:
             if dim_name!=self.node_all_dims[dim_name].name:
                 del self.node_all_dims[dim_name]
         
-        # breakpoint()
         self.match_node.dims = self.node_all_dims
+        self.exec_module.update_constants(self.match_node, self.pattern_name)
 
     def visit_call(self, call, unique_name):
         if call.op.name not in self.visit_router:
             # skip if not supported for testing purposes
-            print("[PARSER] The operator",call.op.name,"is not supported yet")
+            print("[MATCH TVM PARSER] The operator",call.op.name,"is not supported yet")
             raise NotImplementedError(
                 f"Currently the operator {call.op.name} is not supported."
             )

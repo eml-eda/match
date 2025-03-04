@@ -58,6 +58,7 @@ class RelaySave:
         self.params=params
         
 output_path=None
+model_name = "default"
 relay_list=[]
 schedules=[]
 searched_schedules=[]
@@ -83,6 +84,14 @@ def set_output_path(path):
 def get_output_path():
     global output_path
     return output_path
+
+def set_model_name(mod_name):
+    global model_name
+    model_name = mod_name
+
+def get_model_name():
+    global model_name
+    return model_name
 
 def mock_func(*args):
     return None

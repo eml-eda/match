@@ -1,8 +1,8 @@
-#ifndef __MATCH_DEFAULT_INPUTS_H__
-#define __MATCH_DEFAULT_INPUTS_H__
+#ifndef __MATCH_${default_model}_DEFAULT_INPUTS_H__
+#define __MATCH_${default_model}_DEFAULT_INPUTS_H__
 
 #include <match/types.h>
-% if runtime=="default":
+% if len(match_inputs)>0:
 % for include in target.include_list:
 #include <${include}.h>
 % endfor

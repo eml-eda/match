@@ -92,6 +92,11 @@ class MatchTarget(ABC):
         self.exec_modules=[]
         self.exec_modules_dict=dict()
         self.disabled_exec_modules=[]
+        self.soc_memory_bytes = 1024
+        self.load_to_ext_mem_fn = "load_file"
+        self.free_external_mem = "free_ext_mem"
+        self.allocate_ext_mem = "load_ext_mem"
+        self.load_from_ext_mem_fn = "memcpy_ext"
         self.optimize_param="energy" if optimize_param=="energy" else "latency"
         self.tvm_runtime_include_path=os.path.dirname(__file__)+"/../libs/c/static/default/include/tvm_runtime.h"
         self.tvm_runtime_src_path=os.path.dirname(__file__)+"/../libs/c/static/default/src/tvm_runtime.c"
@@ -129,34 +134,35 @@ class MatchTarget(ABC):
             class_._instance = object.__new__(class_, *args, **kwargs)
         return class_._instance
 
-    def gen_libs_and_main(self,match_inputs,match_outputs,static_models,dynamic_dims,runtime,out_path,benchmarking):
+    def gen_libs_and_main(self,models,default_model,out_path):
         abs_out_path = str(Path(out_path).absolute())
         subprocess.getoutput(f"cp {self.tvm_runtime_include_path} {abs_out_path}/include/tvm_runtime.h")
         subprocess.getoutput(f"cp {self.tvm_runtime_src_path} {abs_out_path}/src/tvm_runtime.c")
         subprocess.getoutput(f"cp {self.crt_config_path} {abs_out_path}/include/crt_config.h")
         subprocess.getoutput(f"cp {self.makefile_path} {abs_out_path}/Makefile")
-        models_ = {model.name:model for model in static_models}
+        models_ = models
+        match_inputs, match_outputs = models_[default_model].get_match_inputs_and_outputs()
         templates_data = {
             "target":self,
             "match_inputs":match_inputs,
             "match_outputs":match_outputs,
-            "runtime":runtime,
-            "dynamic_dims":dynamic_dims,
+            "default_model":default_model,
             "models":models_,
-            "benchmarking":benchmarking,
-            "golden_cpu_model":"golden_cpu_model" in models_,
+            "runtime":"",
+            "golden_cpu_model":models_[default_model].golden_cpu_model,
+            "benchmarking":models_[default_model].benchmark_model,
             "app":"match",
         }
-        with open(abs_out_path+"/include/match/default_inputs.h","w") as inp_file:
+        with open(abs_out_path+f"/include/{default_model}/default_inputs.h","w") as inp_file:
             inp_file.write(mako.template.Template(filename=self.default_inputs_include_path).render(**templates_data))
-        with open(abs_out_path+"/src/match/default_inputs.c","w") as inp_file:
+        with open(abs_out_path+f"/src/{default_model}/default_inputs.c","w") as inp_file:
             inp_file.write(mako.template.Template(filename=self.default_inputs_src_path).render(**templates_data))
         with open(abs_out_path+"/src/main.c","w") as main_file:
             main_file.write(mako.template.Template(filename=self.main_template_path).render(**templates_data))
-        with open(abs_out_path+"/src/match/generative_model_apis.c","w") as model_api_file:
-            model_api_file.write(mako.template.Template(filename=self.model_generative_apis_src_path).render(**templates_data))
-        with open(abs_out_path+"/include/match/generative_model_apis.h","w") as model_api_file:
-            model_api_file.write(mako.template.Template(filename=self.model_generative_apis_include_path).render(**templates_data))
+        # with open(abs_out_path+"/src/match/generative_model_apis.c","w") as model_api_file:
+            # model_api_file.write(mako.template.Template(filename=self.model_generative_apis_src_path).render(**templates_data))
+        # with open(abs_out_path+"/include/match/generative_model_apis.h","w") as model_api_file:
+            # model_api_file.write(mako.template.Template(filename=self.model_generative_apis_include_path).render(**templates_data))
 
     def get_match_pattern_from_pattern_name(self,pattern_name:str="conv2d"):
         for pt in self.match_patterns:
@@ -273,12 +279,13 @@ class MatchTarget(ABC):
         Returns:
             bool: is this the best pattern supporting this node?
         """
+        print(f"[PATTERN MATCHER] Matched pattern {match_pt.name}, checking additional conditions")
         # is pattern fully supported?
         if match_pt.additional_checks(node):
             # if supported get latency and energy of pattern
             try:
                 latency,energy=self.evaluate_pattern(node,match_pt)
-                print(f"\nNode is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}\n")
+                print(f"[PATTERN MATCHER] Node is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}\n")
             except Exception as exc:
                 import traceback as tb
                 print(tb.format_exc())
@@ -291,7 +298,7 @@ class MatchTarget(ABC):
                 if is_pattern_matching(other_pt.pattern(),node) and other_pt.additional_checks(node):
                     try:
                         other_pt_latency,other_pt_energy=self.evaluate_pattern(node,other_pt)
-                        print(f"\nNode is also supported by {other_pt.name} with expected latency {other_pt_latency} and expected energy {other_pt_energy}\n")
+                        print(f"[PATTERN MATCHER] Node is also supported by {other_pt.name} with expected latency {other_pt_latency} and expected energy {other_pt_energy}\n")
                     except Exception as exc:
                         continue
                     # if the result gathered by this other matching pattern is better break all
