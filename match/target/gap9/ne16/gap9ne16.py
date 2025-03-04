@@ -101,7 +101,7 @@ class Gap9NE16(ExecModule):
         types.mem_data_macro_and_type="GAP_L2_DATA uint8_t"
         return types
 
-    def cost_model(self):
+    def zigzag_cost_model(self):
         return Gap9NE16CostModel
     
     def layout_per_operand_def(self, pattern_name, specific_pattern, operands):

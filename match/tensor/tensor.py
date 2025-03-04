@@ -5,7 +5,7 @@ from numpy import typing as npt
 
 class MatchTensor:
     def __init__(self, name: str="tensor_A", dims: List[MatchDim]=[], dtype: npt.DTypeLike=np.dtype("int8"),
-                 tensor_type:str="var", data: npt.NDArray=np.array([])) -> None:
+                 tensor_type: str="var", data: npt.NDArray=np.array([]), layout: str="") -> None:
         self.name = name
         self.name_up = name.upper()
         self.dims = dims
@@ -15,6 +15,7 @@ class MatchTensor:
         self.tensor_type = tensor_type
         self.data = data
         self.original_data = data
+        self.layout = layout
         self.is_fused = False
         self.unsupported_layout = False
         self.stored_in_ext_mem = False

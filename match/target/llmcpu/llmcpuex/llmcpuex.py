@@ -80,5 +80,5 @@ class LLMCpuEx(ExecModule):
         comp_apis.specific_pattern=self.specific_pattern
         return comp_apis
     
-    #def cost_model(self):
+    #def zigzag_cost_model(self):
     #    return LLMAcceleratorCostModel

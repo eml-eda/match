@@ -34,9 +34,10 @@ class ZigZagEngine(ScheduleEngine):
         o_intermediate_prec,o_prec,first_inp_prec,second_inp_prec = 32,8,8,8
         conv = "conv1d" in self.match_node.ops_occurrences or "conv2d" in self.match_node.ops_occurrences
         conv2d = "conv2d" in self.match_node.ops_occurrences
+        dense = "dense" in self.match_node.ops_occurrences
         conv2d_is_dw = conv2d and self.match_node.ops["conv2d"].depthwise
         conv1d_is_dw = conv and (not conv2d) and self.match_node.ops["conv1d"].depthwise
-        add = (not conv2d) and ("add" in self.match_node.ops_occurrences)
+        add = (not conv2d) and (not dense) and ("add" in self.match_node.ops_occurrences)
         if conv:
             if conv2d:
                 strides = self.match_node.ops["conv2d"].strides
@@ -200,27 +201,110 @@ class ZigZagEngine(ScheduleEngine):
         if ex_module_acc is not None:
             return ex_module_acc
         return get_accelerator(optimal_spatial_mapping=optimal_spatial_mapping,platform_memories=platform_memories)
-    
+
     def get_dim_name_by_name(self,name):
-        if name=="K":
-            return self.o_tensor.dims[1]
-        if name=="C":
-            return self.o_tensor.dims[1]
-        if name=="OY":
-            return self.o_tensor.dims[2] if len(self.o_tensor.dims)>2 else self.match_node.default_dim
-        if name=="OX":
-            return self.o_tensor.dims[3] if len(self.o_tensor.dims)>3 else self.match_node.default_dim
+        def get_io_from_layout(dims, layout, tensor, key):
+            # conv2d and other 4 dims operators
+            if len(dims)==4:
+                if layout=="NHWC":
+                    # layout is nhwc
+                    n = dims[0]
+                    c = dims[3]
+                    h = dims[1]
+                    w = dims[2]
+                elif layout=="HWIO":
+                    n = dims[3]
+                    c = dims[2]
+                    h = dims[0]
+                    w = dims[1]
+                elif layout=="NCHW" or layout=="OIHW":
+                    n = dims[0]
+                    c = dims[1]
+                    h = dims[2]
+                    w = dims[3]
+                elif layout=="OIHW":
+                    n = dims[0]
+                    c = dims[1]
+                    h = dims[2]
+                    w = dims[3]
+                else:
+                    #layout is nchw
+                    n = dims[0]
+                    c = dims[1]
+                    h = dims[2]
+                    w = dims[3]
+                if tensor.tensor_type=="const":
+                    if key=="C":
+                        return c
+                    if key=="K":
+                        return n
+                    if key=="FY":
+                        return h
+                    if key=="FX":
+                        return w
+                if tensor.tensor_type=="output":
+                    if key=="B":
+                        return n
+                    if key=="K":
+                        return c
+                    if key=="OY":
+                        return h
+                    if key=="OX":
+                        return w
+                if tensor.tensor_type=="var":
+                    if key=="B":
+                        return n
+                    if key=="C":
+                        return c
+                    if key=="IY":
+                        return h
+                    if key=="IX":
+                        return w
+            # conv1d and other 3 dims operators
+            elif len(dims)==3:
+                n = dims[0]
+                c = dims[1]
+                spat = dims[2]
+                if tensor.tensor_type=="const":
+                    if key=="C":
+                        return c
+                    if key=="K":
+                        return n
+                    if key=="H":
+                        return spat
+                if tensor.tensor_type=="output":
+                    if key=="B":
+                        return n
+                    if key=="K":
+                        return c
+                    if key=="OY":
+                        return spat
+                if tensor.tensor_type=="var":
+                    if key=="B":
+                        return n
+                    if key=="C":
+                        return c
+                    if key=="IY":
+                        return spat
+            elif len(dims)==2:
+                if key=="N":
+                    return dims[0]
+                if key=="C":
+                    return dims[1]
+            elif len(dims)==1:
+                return dims[0]
+            return self.match_node.default_dim
+        
+        tensor = self.o_tensor
         if name=="FY":
-            return self.w_tensor.dims[2] if len(self.w_tensor.dims)>2 else self.match_node.default_dim
+            tensor = self.w_tensor
         if name=="FX":
-            return self.w_tensor.dims[3] if len(self.w_tensor.dims)>3 else self.match_node.default_dim
+            tensor = self.w_tensor
         if name=="IY":
-            return self.i_tensor.dims[2] if len(self.i_tensor.dims)>2 else self.match_node.default_dim
+            tensor = self.i_tensor
         if name=="IX":
-            return self.i_tensor.dims[3] if len(self.i_tensor.dims)>3 else self.match_node.default_dim
-        if name=="B":
-            return self.o_tensor.dims[0] if len(self.o_tensor.dims)>0 else self.match_node.default_dim
-        return self.match_node.default_dim
+            tensor = self.i_tensor
+        return get_io_from_layout(dims=tensor.dims, layout=tensor.layout, tensor=tensor, key=name)
 
     def zigzag_set_exec_module(self):
         # self.exec_module.set_match_node(self.match_node)
@@ -260,7 +344,7 @@ class ZigZagEngine(ScheduleEngine):
                     "unordered_loops":["FX","FY","C"],#+(["C"] if "nn.dense" != pattern_inst.ordered_operation else []),
                 }
         }
-        self.cost_model=self.exec_module.cost_model()
+        self.cost_model=self.exec_module.zigzag_cost_model()
         self.exec_module.match_specific_pattern(match_node=self.match_node,pattern_name=self.pattern_name)
         self.match_node.specific_pattern=self.exec_module.specific_pattern
         self.exec_module.match_layout_operand(pattern_name=self.pattern_name,specific_pattern=self.exec_module.specific_pattern,operands=self.zigzag_operands)
@@ -425,16 +509,17 @@ class ZigZagEngine(ScheduleEngine):
             ],
             # ZigZag schedule shouldnt use intermediate tensors
             tensors={tens_name:tens for tens_name,tens in self.match_node.tensors.items() if tens.tensor_type!="intermediate"},
+            tensor_tiles=dict(),
         )
-        breakpoint()
         # ZigZag expects all the constants to be loaded immediately to the inner memory of weights...
-        for const_tensor in self.match_node.const_tensors.values():
-            if const_tensor!=self.w_tensor:
-                self.schedule.blocks[0].loops[0].mem_transfers.append(
-                    MatchMemTransfer(tensor=const_tensor,
-                                     top_mem=mem_hierarchy["const"][-1].name,mem=mem_hierarchy["const"][0].name,
-                                     sw_controlled=mem_hierarchy["const"][0].sw_controlled)
-                )
+        if len(mem_hierarchy["const"])>1:
+            for const_tensor in self.match_node.const_tensors.values():
+                if const_tensor!=self.w_tensor:
+                    self.schedule.blocks[0].loops[0].mem_transfers.append(
+                        MatchMemTransfer(tensor=const_tensor,
+                                        top_mem=mem_hierarchy["const"][-1].name,mem=mem_hierarchy["const"][0].name,
+                                        sw_controlled=mem_hierarchy["const"][0].sw_controlled)
+                    )
         memories = self.exec_module.get_all_memories()
         for tensor in self.schedule.tensors.values():
             self.schedule.tensor_tiles[tensor.name] = [MatchTensorTile(tensor=tensor,

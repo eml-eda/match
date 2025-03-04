@@ -197,3 +197,21 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.calc_match_overall_latency()
         # set overall latency
         self.latency_total2=self.match_overall_latency
+
+class ZigZagMatchNoTilingCostModel(ZigZagMatchCostModel):
+    def __init__(
+        self,
+        *,
+        accelerator,
+        layer,
+        spatial_mapping,
+        temporal_mapping,
+        access_same_data_considered_as_no_access=True,
+    ):
+        super(ZigZagMatchNoTilingCostModel,self).__init__(
+            accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
+            temporal_mapping=temporal_mapping,
+            access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
+        
+    def adjust_temporal_mapping(self, temporal_mapping_dict, operand_list, layer):
+        return temporal_mapping_dict,True

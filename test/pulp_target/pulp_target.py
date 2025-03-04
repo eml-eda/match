@@ -35,7 +35,7 @@ class PulpCluster(ExecModule):
                                           inc_path=os.path.dirname(__file__)+"/include")
         self.top_memory = "L2_SHARED_MEM"
 
-    def cost_model(self):
+    def zigzag_cost_model(self):
         return PulpClusterCostModel
 
     def network_transformations(self, opts):

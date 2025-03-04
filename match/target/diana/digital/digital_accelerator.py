@@ -267,7 +267,7 @@ class DigitalAccelerator(ExecModule):
         types.mem_data_macro_and_type="L2_DATA uint8_t"
         return types
 
-    def cost_model(self):
+    def zigzag_cost_model(self):
         return DigitalAcceleratorCostModel
     
     #def layout_per_operand_def(self, pattern_name, specific_pattern, operands):

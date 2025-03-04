@@ -8,3 +8,5 @@ from .conv1d import MatchOpConv1D
 from .cast import MatchOpCast
 from .clip import MatchOpClip
 from .right_shift import MatchOpRightShift
+from .multiply import MatchOpMultiply
+from .add import MatchOpAdd

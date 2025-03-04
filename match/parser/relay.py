@@ -25,7 +25,16 @@ class MatchRelayParser(MatchTVMParser):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
-        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output")
+        if inp_tensor.layout=="":
+            if len(inp_tensor.dims)==4:
+                inp_tensor.layout = "NCHW"
+            elif len(inp_tensor.dims)==3:
+                inp_tensor.layout = "NCH"
+            elif len(inp_tensor.dims)==2:
+                inp_tensor.layout = "NC"
+            elif len(inp_tensor.dims)==1:
+                inp_tensor.layout = "N"
+        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op = ops.MatchOpReLU(
             var_arr=[inp_tensor],
@@ -37,7 +46,16 @@ class MatchRelayParser(MatchTVMParser):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
-        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output")
+        if inp_tensor.layout=="":
+            if len(inp_tensor.dims)==4:
+                inp_tensor.layout = "NCHW"
+            elif len(inp_tensor.dims)==3:
+                inp_tensor.layout = "NCH"
+            elif len(inp_tensor.dims)==2:
+                inp_tensor.layout = "NC"
+            elif len(inp_tensor.dims)==1:
+                inp_tensor.layout = "N"
+        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op = ops.MatchOpCast(
             var_arr=[inp_tensor],
@@ -51,7 +69,7 @@ class MatchRelayParser(MatchTVMParser):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
-        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output")
+        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op = ops.MatchOpRightShift(
             var_arr=[inp_tensor],
@@ -64,7 +82,16 @@ class MatchRelayParser(MatchTVMParser):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
-        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output")
+        if inp_tensor.layout=="":
+            if len(inp_tensor.dims)==4:
+                inp_tensor.layout = "NCHW"
+            elif len(inp_tensor.dims)==3:
+                inp_tensor.layout = "NCH"
+            elif len(inp_tensor.dims)==2:
+                inp_tensor.layout = "NC"
+            elif len(inp_tensor.dims)==1:
+                inp_tensor.layout = "N"
+        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op = ops.MatchOpClip(
             var_arr=[inp_tensor],
@@ -80,13 +107,23 @@ class MatchRelayParser(MatchTVMParser):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
-        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output")
+        w_tensor.layout = inp_tensor.layout
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
         if w_name in self.name_to_calls:
             w_tensor.tensor_type = "intermediate"
         for w_dim in w_tensor.dims:
             if w_dim.size!=1:
                 self.update_all_dim_names_occurrences_with(old_dim_name=w_dim.name,new_dim_name=inp_tensor.dims[-1].name if axis>=len(inp_tensor.dims) or axis<0 else inp_tensor.dims[axis].name)
+        if inp_tensor.layout=="":
+            if len(inp_tensor.dims)==4:
+                inp_tensor.layout = "NCHW"
+            elif len(inp_tensor.dims)==3:
+                inp_tensor.layout = "NCH"
+            elif len(inp_tensor.dims)==2:
+                inp_tensor.layout = "NC"
+            elif len(inp_tensor.dims)==1:
+                inp_tensor.layout = "N"
+        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op=ops.MatchOpBiasAdd(
             out_arr=[out_tensor],
@@ -97,17 +134,26 @@ class MatchRelayParser(MatchTVMParser):
         self.update_match_node(op=op,call=call,name=name)
 
     def visit_multiply(self,call,atts,name):
-        breakpoint()
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
         if w_name in self.name_to_calls:
             w_tensor.tensor_type = "intermediate"
+        if inp_tensor.layout=="":
+            if len(inp_tensor.dims)==4:
+                inp_tensor.layout = "NCHW"
+            elif len(inp_tensor.dims)==3:
+                inp_tensor.layout = "NCH"
+            elif len(inp_tensor.dims)==2:
+                inp_tensor.layout = "NC"
+            elif len(inp_tensor.dims)==1:
+                inp_tensor.layout = "N"
+        w_tensor.layout = inp_tensor.layout
         self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[-1].name,new_dim_name=inp_tensor.dims[-1].name)
         odtype = call.checked_type.dtype
         out_dims = inp_tensor.dims[:-1]+[w_tensor.dims[0]]
-        out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output")
+        out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op=ops.MatchOpMultiply(
             out_arr=[out_tensor],
@@ -132,9 +178,19 @@ class MatchRelayParser(MatchTVMParser):
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
         if w_name in self.name_to_calls:
             w_tensor.tensor_type = "intermediate"
+        if inp_tensor.layout=="":
+            if len(inp_tensor.dims)==4:
+                inp_tensor.layout = "NCHW"
+            elif len(inp_tensor.dims)==3:
+                inp_tensor.layout = "NCH"
+            elif len(inp_tensor.dims)==2:
+                inp_tensor.layout = "NC"
+            elif len(inp_tensor.dims)==1:
+                inp_tensor.layout = "N"
+        w_tensor.layout = inp_tensor.layout
         self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[-1].name,new_dim_name=inp_tensor.dims[-1].name)
         out_dims = inp_tensor.dims[:-1]+[w_tensor.dims[0]]
-        out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output")
+        out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op = ops.MatchOpDense(
             out_arr=[out_tensor],
@@ -147,17 +203,26 @@ class MatchRelayParser(MatchTVMParser):
         self.update_match_node(op=op,call=call,name=name)
 
     def visit_add(self,call,attrs,name):
-        breakpoint()
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
         if w_name in self.name_to_calls:
             w_tensor.tensor_type = "intermediate"
+        if inp_tensor.layout=="":
+            if len(inp_tensor.dims)==4:
+                inp_tensor.layout = "NCHW"
+            elif len(inp_tensor.dims)==3:
+                inp_tensor.layout = "NCH"
+            elif len(inp_tensor.dims)==2:
+                inp_tensor.layout = "NC"
+            elif len(inp_tensor.dims)==1:
+                inp_tensor.layout = "N"
+        w_tensor.layout = inp_tensor.layout
         self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[-1].name,new_dim_name=inp_tensor.dims[-1].name)
         odtype = call.checked_type.dtype
         out_dims = inp_tensor.dims[:-1]+[w_tensor.dims[0]]
-        out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output")
+        out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op=ops.MatchOpAdd(
             out_arr=[out_tensor],
@@ -179,8 +244,10 @@ class MatchRelayParser(MatchTVMParser):
         wshape = [int(v) for v in call.args[1].checked_type.shape]
         oshape = [int(v) for v in call.checked_type.shape]
         odtype = call.checked_type.dtype
+        inp_tensor.layout = attrs.data_layout if attrs.data_layout!="" else "NCHW"
         (i_n,i_n_dim), (i_c,i_c_dim), (i_h,i_h_dim), (i_w,i_w_dim) = self.get_io_from_layout(attrs.data_layout, ishape, inp_tensor.dims)
-        (w_cout,w_cout_dim), (w_cin,w_cin_dim), (w_ksh,w_ksh_dim), (w_ksw,w_ksw_dim) = self.get_io_from_layout(attrs.data_layout, wshape, w_tensor.dims)
+        w_tensor.layout = attrs.kernel_layout if attrs.kernel_layout!="" else "OIHW"
+        (w_cout,w_cout_dim), (w_cin,w_cin_dim), (w_ksh,w_ksh_dim), (w_ksw,w_ksw_dim) = self.get_io_from_layout(attrs.kernel_layout, wshape, w_tensor.dims)
         padding = [int(a_p) for a_p in attrs.padding]
         strides = [int(v) for v in attrs.strides]
         dilations = [int(a_d) for a_d in attrs.dilation]
@@ -214,7 +281,7 @@ class MatchRelayParser(MatchTVMParser):
         o_tensor = MatchTensor(name=name,dims=self.get_dim_arr_from_layout_and_nchw_arr(
             layout=attrs.out_layout if attrs.out_layout != "" else attrs.data_layout,
             nchw_arr=[i_n_dim,w_cout_dim,o_h_dim,o_w_dim]
-        ),dtype=np.dtype(odtype),tensor_type="output")
+        ),dtype=np.dtype(odtype),tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=o_tensor
         if i_n != o_n:
             raise NotImplementedError(
@@ -252,7 +319,9 @@ class MatchRelayParser(MatchTVMParser):
         wshape = [int(v) for v in call.args[1].checked_type.shape]
         oshape = [int(v) for v in call.checked_type.shape]
         odtype = call.checked_type.dtype
+        inp_tensor.layout = attrs.data_layout if attrs.data_layout!="" else "NCH"
         (i_n,i_n_dim), (i_c,i_c_dim), (i_spatial,i_spatial_dim)= self.get_io_from_layout(attrs.data_layout, ishape, inp_tensor.dims)
+        inp_tensor.layout = attrs.kernel_layout if attrs.kernel_layout!="" else "OIH"
         (w_cout,w_cout_dim), (w_cin,w_cin_dim), (w_kernel,w_kernel_dim) = self.get_io_from_layout(attrs.data_layout, wshape, w_tensor.dims)
         padding = [int(a_p) for a_p in attrs.padding]
         strides = [int(v) for v in attrs.strides]
@@ -278,7 +347,7 @@ class MatchRelayParser(MatchTVMParser):
         o_tensor = MatchTensor(name=name,dims=self.get_dim_arr_from_layout_and_nchw_arr(
             layout=attrs.out_layout if attrs.out_layout != "" else attrs.data_layout,
             nchw_arr=[i_n_dim,w_cout_dim,o_spatial_dim]
-        ),dtype=np.dtype(odtype),tensor_type="output")
+        ),dtype=np.dtype(odtype),tensor_type="output",layout=inp_tensor.layout)
         self.calls_tensors[name]=o_tensor
         if i_n != o_n:
             raise NotImplementedError(

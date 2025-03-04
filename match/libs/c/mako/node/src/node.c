@@ -142,7 +142,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     ${c_ident(loop_idx)}${mem_apis.mem_transfer}(
         ${c_ident(loop_idx)}ctx,${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt,
         ${c_ident(loop_idx)}${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
-        ${c_ident(loop_idx)}MATCH_SW_LOAD_TENSOR,MATCH_${"CONST" if mem_transfer.tensor.tensor_type=="constant" else "VAR"}_TENSOR,
+        ${c_ident(loop_idx)}MATCH_SW_LOAD_TENSOR,MATCH_${"CONST" if mem_transfer.tensor.tensor_type=="const" else "VAR"}_TENSOR,
         ${c_ident(loop_idx)}${mem_transfer.top_mem},${mem_transfer.mem}
     ${c_ident(loop_idx)});
     % if sync_apis.must_sync_after_load:
@@ -222,24 +222,21 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % endif
     % endfor
     % endfor
-
     % endfor
+    
     % for instr in schedule.instrs:
     ${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr};
     % endfor
-
     % for mem_level in set([mem_ for k,v in memory_hierarchy.items() for mem_ in v]):
     % if mem_level.sw_controlled and mem_level.name!=exec_module.top_memory:
     ${mem_apis.free_memory[mem_level.name]}(ctx,${mem_level.name}_base_pt);
     % endif
     % endfor
-    
     % for intermediate_tensor in schedule.tensors.values():
     % if intermediate_tensor.tensor_type=="intermediate":
     ${target.free_fn}(${intermediate_tensor.name}->base_pt);
     % endif
     % endfor
-
     % if platform_apis.free_module!="":
     ${platform_apis.free_module}(ctx);
     % endif

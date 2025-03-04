@@ -100,7 +100,7 @@ class MatchTVMParser:
             self.occurrences[unique_name]=1
         return unique_name
 
-    def get_io_from_layout(self,layout, data, dims):
+    def get_io_from_layout(self, layout, data, dims):
         # conv2d and other 4 dims operators
         if len(data)==4:
             if layout=="NHWC":

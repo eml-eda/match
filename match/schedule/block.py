@@ -26,4 +26,6 @@ class MatchBlock:
         for idx,lp in enumerate(self.loops):
             if any([mt.sw_controlled for mt in lp.mem_transfers]):
                 idx_end = idx
+        if idx_end==-1:
+            idx_end=0
         return idx_end

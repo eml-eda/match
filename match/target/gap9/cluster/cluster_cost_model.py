@@ -1,4 +1,4 @@
-from match.target.cost_model import ZigZagMatchCostModel
+from match.cost_model.zigzag import ZigZagMatchCostModel
 from math import prod,ceil,floor
 
  

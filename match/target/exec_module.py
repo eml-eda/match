@@ -2,7 +2,7 @@
 from abc import ABC,abstractmethod
 from math import ceil
 from typing import Any, Dict,List,Type
-from match.target.cost_model import ZigZagMatchCostModel
+from match.cost_model.zigzag import ZigZagMatchCostModel, ZigZagMatchNoTilingCostModel
 from match.partition.partitioning_pattern import PartitioningPattern
 from match.target.memory_inst import MemoryInst
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
@@ -257,13 +257,13 @@ class ExecModule(ABC):
                                         operand_precision:Dict[str,int]={}, strides:List[int]=[1,1], pattern_name:str="conv2d"):
         return loop_dim_size,pr_loop_dim_size,operand_precision,operand_precision
     
-    def cost_model(self):
+    def zigzag_cost_model(self):
         """Function that defines the used cost model to guide the schedule search
 
         Returns:
             Class: class itself(not an instance) of the used cost model
         """
-        return ZigZagMatchCostModel
+        return ZigZagMatchCostModel if len(self.memories)>1 else ZigZagMatchNoTilingCostModel
     
     def constrain_schedule(self,schedule,match_node):
         return schedule

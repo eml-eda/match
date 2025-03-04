@@ -2,29 +2,16 @@ import os
 from typing import Dict, List
 import match
 from match.model.model import MatchModel
-from match.target.cost_model import ZigZagMatchCostModel
+from match.cost_model.zigzag import ZigZagMatchCostModel
 from match.target.exec_module import ComputationalApis, ExecModule
 from patterns import maupiti_patterns
 from transform import maupiti_adjust_network, maupiti_network_transformations
 from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
 import tvm
-from tvm import relay
-import ctypes
 from pathlib import Path
 import numpy as np
-from numpy import typing as npt
-from typing import Dict, Optional, Tuple
-
-from tvm.relay import transform
-import tvm.relay as relay
-from match.partition.network_transformations import (
-    MatchOnnxBiasAdd,
-    MatchOnnxBiasAddRemoveFromMain,
-    MatchSaveModule,
-    MatchAddCastInMain,
-    MatchSaveRelay,
-)
+from typing import Dict
 
 
 class MaupitiKernels(ExecModule):
@@ -43,31 +30,17 @@ class MaupitiKernels(ExecModule):
         self.module_options["MAUPITI_KERNEL_MEM"] = self.KERNEL_MEM
         self.tiling_active = False
 
-    def optimal_spatial_mapping_def(
-        self,
-        pattern_name: str = "conv2d",
-        dim_sizes: Dict[str, int] = {},
-        layer_attrs: Dict = {},
-    ):
-        # k out channels
-        # c in channels
-        # oy out height
-        # ox out width
-        return [("K", 32), ("OY", 2)]
-    
-    def specific_pattern_def(self, match_node=None, pattern_name = "conv_2d"):
-        conv2d_patterns = [
-            "conv2d_bnorm_requant",
-        ]
-        dense_patterns = [
-            "dense_bnorm_requant",
-            "dense_out",
-        ]
-
-        pool_patterns = [
-            "maxpool2d",
-        ]
-        return pattern_name
+    # def optimal_spatial_mapping_def(
+    #     self,
+    #     pattern_name: str = "conv2d",
+    #     dim_sizes: Dict[str, int] = {},
+    #     layer_attrs: Dict = {},
+    # ):
+    #     # k out channels
+    #     # c in channels
+    #     # oy out height
+    #     # ox out width
+    #     return [("K", 32), ("OY", 2)]
 
     def partitioning_patterns(self):
         return maupiti_patterns()
@@ -83,6 +56,7 @@ class MaupitiKernels(ExecModule):
 
     def comp_apis_def(self, comp_apis: ComputationalApis = ComputationalApis()):
         comp_apis.innermost_computation = "maupiti_kernels"
+        comp_apis.compute_tile = "maupiti_kernels"
         return comp_apis
 
     def memories_def(self, pattern_name, operands):
@@ -160,25 +134,13 @@ class MaupitiTarget(MatchTarget):
 
 
 MAUPITI_RUN_CONV = False
-from match.relay.onnx.onnx_utils import (
-    get_onnx_static_model,
-    sanitize_onnx_plinio,
-    sanitize_onnx_only_remove,
-)
 
 
 def run_model(output_path, fname=None):
-    from transform import (
-        ONNXNHWCRewriter,
-        MaupitiBatchFlattenTransform,
-        MaupitiMergePadConv2d,
-        MaupitiQOpRewriter,
-    )
-    from match.partition.partition import pattern_table
 
     target = MaupitiTarget()
-    res = match.match(
-        filename=fname,
+    match.match(
+        model=MatchModel(filename=fname,model_type="onnx",golden_cpu_model=False),
         target=target,
         output_path=output_path,
     )
@@ -190,4 +152,4 @@ if __name__ == "__main__":
     ONNX_FILENAME = "examples/integerized_conv.onnx"
     onnx_model = onnx.load(ONNX_FILENAME)
 
-    run_model(fname=ONNX_FILENAME, output_path=str(Path("./model_build").absolute()))
+    run_model(fname=ONNX_FILENAME, output_path=str(Path(os.path.dirname(__file__)+"/model_build").absolute()))

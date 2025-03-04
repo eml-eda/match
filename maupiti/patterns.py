@@ -1,7 +1,6 @@
 # Imports
-import tvm
 import logging
-from tvm.relay.dataflow_pattern import wildcard, is_op, is_var, is_constant
+from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
 from match.partition.partitioning_pattern import PartitioningPattern
 
 logger = logging.getLogger("Maupiti")

@@ -2,7 +2,6 @@ import numpy as np
 import tvm
 from tvm import relay
 from tvm.relay import transform
-from tvm.relay.expr_functor import ExprMutator, ExprVisitor
 from tvm.relay.dataflow_pattern import (
     DFPatternCallback,
     rewrite,
@@ -10,6 +9,7 @@ from tvm.relay.dataflow_pattern import (
     is_op,
     is_constant,
 )
+from match.transform.requant import MatchRequantRewriter
 
 
 class MaupitiFlattenRewriter(DFPatternCallback):
@@ -314,15 +314,11 @@ class MaupitiMergePadConv2d:
 
 def maupiti_network_transformations(opts=None):
     pipeline = []
-    pipeline.append(transform.InferType())
-    pipeline.append(ONNXNHWCRewriter())
-    pipeline.append(transform.InferType())
-    pipeline.append(MaupitiBatchFlattenTransform())
-    pipeline.append(transform.InferType())
-    pipeline.append(MaupitiQOpRewriter())
-    pipeline.append(transform.InferType())
-    pipeline.append(MaupitiMergePadConv2d())
-    pipeline.append(transform.InferType())
+    pipeline.append(("nhwc",ONNXNHWCRewriter()))
+    pipeline.append(("batchflatten",MaupitiBatchFlattenTransform()))
+    pipeline.append(("qnn",MaupitiQOpRewriter()))
+    pipeline.append(("pad_conv",MaupitiMergePadConv2d()))
+    pipeline.append(("requant",MatchRequantRewriter()))
     return pipeline
 
 
