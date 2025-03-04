@@ -3,6 +3,17 @@
 #include <match/utils.h>
 
 typedef enum{
+    MATCH_VAR_TENSOR,
+    MATCH_CONST_TENSOR,
+    MATCH_OUT_TENSOR,
+}MATCH_TENSOR_TYPE;
+
+typedef enum{
+    MATCH_SW_LOAD_TENSOR,
+    MATCH_SW_STORE_TENSOR,
+}MATCH_MEM_OPS_TYPE;
+
+typedef enum{
     MATCH_OP_CONV2D,
     MATCH_OP_BIAS_ADD,
     MATCH_OP_ADD,
@@ -86,6 +97,16 @@ typedef struct{
     int idx;
     int axis;
 }MatchBiasAddAttrs;
+
+typedef struct{
+    int idx;
+    int axis;
+}MatchMultiplyAttrs;
+
+typedef struct{
+    int idx;
+    int axis;
+}MatchAddAttrs;
 
 typedef struct{
     int idx;

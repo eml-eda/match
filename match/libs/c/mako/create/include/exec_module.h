@@ -2,9 +2,8 @@
 #define __MATCH_EXEC_MODULE_${exec_module.name}_H__
 
 typedef enum{
-    mem_computation
     % for mem_level in exec_module.memories:
-    ,${mem_level}
+    ${mem_level},
     % endfor
 }${exec_module.name}_memories;
 

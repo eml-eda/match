@@ -1,10 +1,10 @@
 # TVM imports
-from match.parser.parser import MatchParser,get_depth_arr_pattern
+from match.parser.tvm_parser import MatchTVMParser,get_depth_arr_pattern
 import tvm
 # utils imports
 import copy
 
-class MatchWorkloadParser(MatchParser):
+class MatchWorkloadParser(MatchTVMParser):
 
     def __init__(self, node, args_list = ..., exec_module = None, pattern_name = "", partitioned = False, pattern_inst=None):
         super().__init__(node, args_list, exec_module, pattern_name, partitioned, pattern_inst)

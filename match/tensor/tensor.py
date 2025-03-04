@@ -14,8 +14,10 @@ class MatchTensor:
         self.bits = dtype.itemsize * 8
         self.tensor_type = tensor_type
         self.data = data
+        self.original_data = data
         self.is_fused = False
         self.unsupported_layout = False
+        self.stored_in_ext_mem = False
 
     def __eq__(self, other):
         return self.name == other.name and self.dtype == other.dtype and self.dims == other.dims
@@ -35,11 +37,11 @@ class MatchTensor:
             return "0"
         return " + ".join(dims_expr)
     
-    def c_offset_expr_size_sw_mem(self,mem):
+    def c_offset_expr_sw_mem(self,mem):
         dims_expr = []
         for idx,dim in enumerate(self.dims):
             global_idx = f"({dim.name}->global_idx - {self.name}_tiles_[{mem}][{idx}].start_idx)"
-            sizes_ = [f"{self.name}_tiles_[{mem}][{inner_idx+idx}].size" for inner_idx,inner_dim in enumerate(self.dims[idx+1:]) if inner_dim.size > 1]
+            sizes_ = [f"{self.name}_tiles_[{mem}*{self.num_dims}+{inner_idx+idx}].size" for inner_idx,inner_dim in enumerate(self.dims[idx+1:]) if inner_dim.size > 1]
             if dim.size > 1:
                 if sizes_:
                     dims_expr.append(f"{global_idx} * {' * '.join(sizes_)}")
@@ -49,9 +51,8 @@ class MatchTensor:
             return "0"
         return " + ".join(dims_expr)
     
-    def c_offset_expr_sw_mem(self,mem):
-        dims_expr = []
-        sizes_ = [f"{self.name}_tiles_[{mem}][{inner_idx}].size" for inner_idx,inner_dim in enumerate(self.dims) if inner_dim.size > 1]
+    def c_offset_expr_size_sw_mem(self,mem):
+        sizes_ = [f"{self.name}_tiles_[{mem}*{self.num_dims}+{inner_idx}].size" for inner_idx,inner_dim in enumerate(self.dims) if inner_dim.size > 1]
         if len(sizes_) == 0:
             return "0"
         return " * ".join(sizes_)

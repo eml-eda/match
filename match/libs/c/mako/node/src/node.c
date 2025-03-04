@@ -83,6 +83,10 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % endfor
     MatchCtx* ctx = ${name}_ctx;
 
+    % if platform_apis.init_module!="":
+    ${platform_apis.init_module}(ctx);
+    % endif
+
     % for var in match_node.var_tensors.values():
     ${var.name}->base_pt = var_${var.name}_pt;
     ${var.name}->pts[${memory_hierarchy["var"][-1].name}] = var_${var.name}_pt;
@@ -129,7 +133,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     ${c_ident(loop_idx)}void* ${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt = ${mem_apis.get_pt_of_fused_tensor}(ctx,${mem_transfer.tensor.name});
     % else:
     ${c_ident(loop_idx)}int ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size = ${mem_transfer.tensor.c_offset_expr_size_sw_mem(mem_transfer.mem)};
-    ${c_ident(loop_idx)}void* ${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt = ${mem_transfer.tensor.name}->pts[${mem_transfer.mem}]+${mem_transfer.tensor.c_offset_expr_sw_mem(mem_transfer.mem)};
+    ${c_ident(loop_idx)}void* ${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt = ${mem_transfer.tensor.name}->pts[${mem_transfer.top_mem}]+${mem_transfer.tensor.c_offset_expr_sw_mem(mem_transfer.mem)};
     % endif
     ${c_ident(loop_idx)}${mem_transfer.tensor.name}->pts[${mem_transfer.mem}] = ${mem_transfer.mem}_base_pt + ${mem_transfer.mem}_curr_pt_offset;
     ${c_ident(loop_idx)}${mem_transfer.mem}_curr_pt_offset += ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size;
@@ -226,15 +230,20 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
 
     % for mem_level in set([mem_ for k,v in memory_hierarchy.items() for mem_ in v]):
     % if mem_level.sw_controlled and mem_level.name!=exec_module.top_memory:
-    ${mem_apis.free_memory[mem_level.name]}(ctx);
+    ${mem_apis.free_memory[mem_level.name]}(ctx,${mem_level.name}_base_pt);
     % endif
     % endfor
     
-    % for intermediate_tensor in match_node.intermediate_tensors.values():
+    % for intermediate_tensor in schedule.tensors.values():
     % if intermediate_tensor.tensor_type=="intermediate":
     ${target.free_fn}(${intermediate_tensor.name}->base_pt);
     % endif
     % endfor
+
+    % if platform_apis.free_module!="":
+    ${platform_apis.free_module}(ctx);
+    % endif
+
     #endif
     #ifdef __MATCH_TEST_NODE_WITH_HELPER__
     run_node_schedule_nn(ctx);

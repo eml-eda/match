@@ -70,6 +70,8 @@ class PlatformApis:
 
         # testing ones
         self.parallelize_task = ""
+        self.init_module = ""
+        self.free_module = ""
 
 class SyncApis:
     """All the APIs for the synchronization that are used by templates of MATCH
@@ -301,6 +303,9 @@ class ExecModule(ABC):
             "single_costants":single_constants,
         }
     
+    def update_constants(self, match_node, pattern_name):
+        pass
+
     def additional_kernel_parameters(self,pattern_name):
         return dict()
     

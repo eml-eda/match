@@ -1,5 +1,5 @@
-% if runtime=="default":
-#include <match/default_inputs.h>
+% if len(match_inputs)>0:
+#include <${default_model}/default_inputs.h>
 % for include in target.include_list:
 #include <${include}.h>
 % endfor

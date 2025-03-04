@@ -40,13 +40,13 @@ class ZigZagEngine(ScheduleEngine):
         if conv:
             if conv2d:
                 strides = self.match_node.ops["conv2d"].strides
-                dilations = self.match_node.ops["conv2d"].dilations
+                dilations = self.match_node.ops["conv2d"].dilation
                 padding = self.match_node.ops["conv2d"].padding
                 k_size = self.match_node.ops["conv2d"].kernel_size
             else:
                 # get data
                 strides = self.match_node.ops["conv1d"].strides
-                dilations = self.match_node.ops["conv1d"].dilations
+                dilations = self.match_node.ops["conv1d"].dilation
                 padding = self.match_node.ops["conv1d"].padding
                 k_size = self.match_node.ops["conv1d"].kernel_size
                 # transform it like conv2d
@@ -225,11 +225,11 @@ class ZigZagEngine(ScheduleEngine):
     def zigzag_set_exec_module(self):
         # self.exec_module.set_match_node(self.match_node)
         # set spatial mapping and other known stuff
-        self.i_tensor = [t for t in self.match_node.tensors_arr if t.tensor_type in ["var","const"]][0]
+        self.i_tensor = [t for t in self.match_node.tensors_arr if t.tensor_type == "var"][0]
         self.x_tensor = self.i_tensor
-        self.y_tensor = None if len([t for t in self.match_node.tensors_arr if t.tensor_type in ["var","const"]])<2 else [t for t in self.match_node.tensors_arr if t.tensor_type in ["var","const"]][1]
+        self.y_tensor = None if len([t for t in self.match_node.tensors_arr if t.tensor_type == "var"])<2 else [t for t in self.match_node.tensors_arr if t.tensor_type == "var"][1]
         self.o_tensor = [t for t in self.match_node.tensors_arr if t.tensor_type=="output"][0]
-        self.w_tensor = None if len([t for t in self.match_node.tensors_arr if t.tensor_type in ["const","var"]])==0 else [t for t in self.match_node.tensors_arr if t.tensor_type in ["const","var"]][0]
+        self.w_tensor = None if len([t for t in self.match_node.tensors_arr if t.tensor_type == "const"])==0 else [t for t in self.match_node.tensors_arr if t.tensor_type == "const"][0]
         
         self.zigzag_operands = ["I","W","O"] if any([op in self.match_node.ops_occurrences for op in ["conv2d","dense"]]) else ["X","Y","O"]
         self.zigzag_operands_to_tensors = {
@@ -426,6 +426,7 @@ class ZigZagEngine(ScheduleEngine):
             # ZigZag schedule shouldnt use intermediate tensors
             tensors={tens_name:tens for tens_name,tens in self.match_node.tensors.items() if tens.tensor_type!="intermediate"},
         )
+        breakpoint()
         # ZigZag expects all the constants to be loaded immediately to the inner memory of weights...
         for const_tensor in self.match_node.const_tensors.values():
             if const_tensor!=self.w_tensor:
@@ -454,4 +455,3 @@ class ZigZagEngine(ScheduleEngine):
                                     self.schedule.tensor_tiles[tensor.name][mem_idx][dim_idx] = new_size
                                 else:
                                     self.schedule.tensor_tiles[tensor.name][mem_idx][dim_idx] = steps[dim.name]
-        breakpoint()

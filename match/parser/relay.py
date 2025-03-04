@@ -2,13 +2,10 @@
 import numpy as np
 from match import ops
 from match.dim.dim import MatchDim, DimDependency
-from match.parser.parser import MatchParser
+from match.parser.tvm_parser import MatchTVMParser
 from match.tensor.tensor import MatchTensor
 
-import tvm
-import tvm.relay
-
-class MatchRelayParser(MatchParser):
+class MatchRelayParser(MatchTVMParser):
     def __init__(self, node, args_list = ..., exec_module = None, pattern_name = "", partitioned = False, pattern_inst=None, match_node = None):
         super().__init__(node, args_list, exec_module, pattern_name, partitioned, pattern_inst, match_node)
         self.visit_router = {
@@ -19,8 +16,8 @@ class MatchRelayParser(MatchParser):
             "clip": self.visit_clip,
             "nn.bias_add": self.visit_bias_add,
             "nn.dense": self.visit_dense,
-            # "add": self.visit_add,
-            # "multiply": self.visit_multiply,
+            "add": self.visit_add,
+            "multiply": self.visit_multiply,
             "nn.relu": self.visit_relu,
         }
     
@@ -99,23 +96,26 @@ class MatchRelayParser(MatchParser):
         )
         self.update_match_node(op=op,call=call,name=name)
 
-    # def visit_multiply(self,call,atts,name):
-    #     itype = [int(v) for v in call.args[0].args[0].checked_type.shape]
-    #     iprec = call.args[0].args[0].checked_type.dtype
-    #     wtype = [int(v) for v in call.args[1].args[0].checked_type.shape]
-    #     wprec = call.args[1].args[0].checked_type.dtype
-    #     otype = [int(v) for v in call.checked_type.shape]
-    #     oprec = call.checked_type.dtype
-    #     op=ops.Multiply(
-    #         o_type=otype,
-    #         o_prec=oprec,
-    #         i_type=itype,
-    #         i_prec=iprec,
-    #         w_type=wtype,
-    #         w_prec=wprec,
-    #     )
-    #     self.match_node.ops[name]=op
-    #     self.match_node.calls[name]=call
+    def visit_multiply(self,call,atts,name):
+        breakpoint()
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
+        if inp_name in self.name_to_calls:
+            inp_tensor.tensor_type = "intermediate"
+        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
+        if w_name in self.name_to_calls:
+            w_tensor.tensor_type = "intermediate"
+        self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[-1].name,new_dim_name=inp_tensor.dims[-1].name)
+        odtype = call.checked_type.dtype
+        out_dims = inp_tensor.dims[:-1]+[w_tensor.dims[0]]
+        out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output")
+        self.calls_tensors[name]=out_tensor
+        op=ops.MatchOpMultiply(
+            out_arr=[out_tensor],
+            var_arr=[inp_tensor],
+            const_arr=[w_tensor],
+            axis=-1,
+        )
+        self.update_match_node(op=op,call=call,name=name)
 
     def visit_dense(self, call, attrs, name):
         ishape = [int(v) for v in call.args[0].checked_type.shape]
@@ -142,36 +142,30 @@ class MatchRelayParser(MatchParser):
             const_arr=[w_tensor],
             inp_features=inp_features,
             out_features=out_features,
-            out_dtype=np.dtype(attrs.out_dtype)
+            out_dtype=np.dtype(attrs.out_dtype) if attrs.out_dtype!="" else np.dtype(odtype),
         )
         self.update_match_node(op=op,call=call,name=name)
 
-    # def visit_add(self, call, attrs, name):
-    #     axis = int(attrs.axis) if hasattr(attrs,"axis") else 0
-    #     otype = [int(v) for v in call.checked_type.shape]
-    #     odtype = call.checked_type.dtype
-    #     otype_dim = [Dim(name=name+f"_dim_{idx}",size=otype[idx]) for idx in range(len(otype)) if otype[idx]!=1]
-    #     out = MatchOutputTensor(name,dims=otype_dim,dtype=odtype)
-    #     vars = []
-    #     consts = []
-    #     for arg in call.args:
-    #         type = [int(v) for v in arg.checked_type.shape]
-    #         dtype = arg.checked_type.dtype
-    #         if isinstance(arg,tvm.relay.Var):
-    #             vars.append(MatchVarTensor(name=arg.name_hint,dims=otype_dim,dtype=dtype))
-    #         elif isinstance(arg,tvm.relay.Call):
-    #             vars.append(MatchVarTensor(name=self.calls_to_name[arg],dims=otype_dim,dtype=dtype))
-    #         else:
-    #             consts.append(MatchConstTensor(name=call.op.name+ f".param.{int(name.split("_")[-1]) if name.split("_")[-1].isnumeric() else 0}"),
-    #                           dims=[d for d in otype_dim if d.name==name+f"_dim_{axis}"],dtype=dtype)
-    #     op = ops.MatchOpAdd(
-    #         outs=[out],
-    #         vars=vars,
-    #         consts=consts,
-    #         **attrs
-    #     )
-    #     self.match_node.ops[name]=op
-    #     self.match_node.calls[name]=call
+    def visit_add(self,call,attrs,name):
+        breakpoint()
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
+        if inp_name in self.name_to_calls:
+            inp_tensor.tensor_type = "intermediate"
+        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
+        if w_name in self.name_to_calls:
+            w_tensor.tensor_type = "intermediate"
+        self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[-1].name,new_dim_name=inp_tensor.dims[-1].name)
+        odtype = call.checked_type.dtype
+        out_dims = inp_tensor.dims[:-1]+[w_tensor.dims[0]]
+        out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output")
+        self.calls_tensors[name]=out_tensor
+        op=ops.MatchOpAdd(
+            out_arr=[out_tensor],
+            var_arr=[inp_tensor],
+            const_arr=[w_tensor],
+            axis=-1,
+        )
+        self.update_match_node(op=op,call=call,name=name)
 
     def visit_conv_2d(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
@@ -242,7 +236,7 @@ class MatchRelayParser(MatchParser):
             depthwise= depthwise,
             data_layout= attrs.data_layout,
             kernel_layout= attrs.kernel_layout,
-            out_dtype= np.dtype(attrs.out_dtype),
+            out_dtype= np.dtype(attrs.out_dtype) if attrs.out_dtype!="" else np.dtype(odtype),
         )
         self.update_match_node(op=op,call=call,name=name)
 
@@ -271,7 +265,7 @@ class MatchRelayParser(MatchParser):
         # manage dimensions dependencies
         if strides[0]!=1 or dilations[0]!=1:
             o_spatial_dim = MatchDim(name=name+"_out_spatial",size=o_spatial)
-            self.node_all_dims[o_spatial_dim.name] = o_h_dim
+            self.node_all_dims[o_spatial_dim.name] = o_spatial_dim
             if i_spatial_dim.name==i_spatial_dim.original_name:
                 i_spatial_dim.dim_dependency = DimDependency(dependencies={o_spatial_dim:strides[0],w_kernel_dim:dilations[0],padding[0]:-1})
             else:
@@ -306,6 +300,6 @@ class MatchRelayParser(MatchParser):
             depthwise= depthwise,
             data_layout= attrs.data_layout,
             kernel_layout= attrs.kernel_layout,
-            out_dtype= np.dtype(attrs.out_dtype),
+            out_dtype= np.dtype(attrs.out_dtype) if attrs.out_dtype!="" else np.dtype(odtype),
         )
         self.update_match_node(op=op,call=call,name=name)

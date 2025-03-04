@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import match
+from match.model.model import MatchModel
 from match.relay.utils.utils import create_random_array
 from match.target.exec_module import ExecModule
 from match.target.memory_inst import MemoryInst
@@ -14,7 +15,7 @@ from match.partition.partitioning_pattern import PartitioningPattern
 from pathlib import Path
 import numpy as np
 from typing import Tuple
-
+import cartoonnyx
 
 class BasicCpu(ExecModule):
     def __init__(self):
@@ -288,20 +289,42 @@ def run_microbench(microbench:str="conv",output_path:str="./builds/last_build"):
     save_model_and_params(mod=mod,params=params)
     #define HW Target inside match
     target=BasicCpuTarget()
-    match.match(relay_mod=mod,relay_params=params,
-                target=target,output_path=output_path,
-                golden_default_cpu_model=True)
+    match.match(
+        model=MatchModel(
+           relay_mod=mod, relay_params=params,
+           model_name=microbench, executor="graph"
+        ),
+        target=target,
+        output_path=output_path
+    )
 
 def run_model(model:str="keyword_spotting",output_path:str="./builds/last_build"):
     #define HW Target inside match
     target=BasicCpuTarget()
-    match.match(filename=os.path.dirname(__file__)+"/../models/"+model+".onnx",
-                target=target,output_path=output_path)
+    cartoonnyx.cartoonnyx.plinio.sanitize_to_mps(os.path.dirname(__file__)+"/../models/"+model+".onnx")
+    match.match(
+        model=MatchModel(
+           filename=os.path.dirname(__file__)+"/../models/"+model+".onnx",
+           model_type="onnx",
+           model_name=model, executor="graph"
+        ),
+        target=target,
+        output_path=output_path
+    )
 
 
 def run_relay_saved_model_at(mod_file,params_file,output_path):
     #define HW Target inside match
     target=BasicCpuTarget()
+    match.match(
+        model=MatchModel(
+           filename=mod_file, params_filename=params_file,
+           model_type="relay",
+           model_name="default", executor="graph"
+        ),
+        target=target,
+        output_path=output_path
+    )
     match.match(input_type="relay",filename=mod_file,params_filename=params_file,target=target,output_path=output_path)
 
 if __name__=="__main__":

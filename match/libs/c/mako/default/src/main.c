@@ -1,5 +1,5 @@
-#include <match/default_inputs.h>
-#include <match/runtime.h>
+#include <${default_model}/default_inputs.h>
+#include <${default_model}/runtime.h>
 
 // target specific inlcudes
 % for inc_h in target.include_list:
@@ -47,7 +47,15 @@ int main(int argc,char** argv){
     % endif
     % endfor
 
-    match_${"golden_check_" if golden_cpu_model else ""}${runtime}_runtime(
+    match_${"golden_check_" if golden_cpu_model else ""}${default_model}_runtime(
+        % for inp_name in match_inputs.keys():
+        ${inp_name}_default,
+        % endfor
+        % if golden_cpu_model:
+        % for inp_name in match_inputs.keys():
+        ${inp_name}_default,
+        % endfor
+        % endif
         % for out_name in match_outputs.keys():
         ${out_name}_pt,
         % endfor
