@@ -1,4 +1,4 @@
-#include <pulp_cluster/pulp_cluster.h>
+#include <pulp_cluster/cluster_dev.h>
 
 struct pi_device cluster_dev = {0};
 struct pi_cluster_task cluster_task = {0};

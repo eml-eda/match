@@ -93,10 +93,11 @@ class MatchTarget(ABC):
         self.exec_modules_dict=dict()
         self.disabled_exec_modules=[]
         self.soc_memory_bytes = 1024
-        self.load_to_ext_mem_fn = "load_file"
+        self.load_file_to_ext_mem_fn = "load_file"
+        self.load_to_ext_mem_fn = "memcpy_to_ext"
         self.free_external_mem = "free_ext_mem"
         self.allocate_ext_mem = "load_ext_mem"
-        self.load_from_ext_mem_fn = "memcpy_ext"
+        self.load_from_ext_mem_fn = "memcpy_from_ext"
         self.optimize_param="energy" if optimize_param=="energy" else "latency"
         self.tvm_runtime_include_path=os.path.dirname(__file__)+"/../libs/c/static/default/include/tvm_runtime.h"
         self.tvm_runtime_src_path=os.path.dirname(__file__)+"/../libs/c/static/default/src/tvm_runtime.c"
@@ -151,6 +152,7 @@ class MatchTarget(ABC):
             "runtime":"",
             "golden_cpu_model":models_[default_model].golden_cpu_model,
             "benchmarking":models_[default_model].benchmark_model,
+            "bench_iterations":int(models_[default_model].benchmark_model)*4+1,
             "app":"match",
         }
         with open(abs_out_path+f"/include/{default_model}/default_inputs.h","w") as inp_file:

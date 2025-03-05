@@ -13,7 +13,7 @@
 #endif
 #define MCHAN_EVENT_BIT (CL_IRQ_DMA0)  // 8
 #endif
-#include <pulp_target/mchan.h>
+#include <pulp_cluster/mchan.h>
 
 #if   defined(MCHAN_POLLED)
 #define MCHAN_FLAGS    (MCHAN_CMD_FLAG_INCREMENTAL)

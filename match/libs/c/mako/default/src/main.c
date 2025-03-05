@@ -6,7 +6,7 @@
 #include <${inc_h}.h>
 % endfor
 % if golden_cpu_model:
-#define GOLDEN_CHECK_BENCH_ITERATIONS 100
+#define GOLDEN_CHECK_BENCH_ITERATIONS ${bench_iterations}
 % endif
 
 int main(int argc,char** argv){
@@ -17,29 +17,6 @@ int main(int argc,char** argv){
     
     match_runtime_ctx match_ctx;
 
-    % if runtime=="generative":
-    % for inp_name,inp in match_inputs.items():
-    ${inp["c_type"]} ${inp_name} = 1;
-    % endfor
-    
-    % for out_name,out in match_outputs.items():
-    ${out["c_type"]} ${out_name} = 0;
-    % endfor
-    
-    match_generative_runtime(
-        % for inp_name in match_inputs.keys():
-        &${inp_name},
-        % endfor
-        % for out_name in match_outputs.keys():
-        &${out_name},
-        % endfor
-        % for dyn_dim in dynamic_dims.keys():
-        1,
-        % endfor
-        &match_ctx
-    );
-
-    % else:
     % for out_name,out in match_outputs.items():
     ${out["c_type"]}* ${out_name}_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
     % if golden_cpu_model:
@@ -66,7 +43,6 @@ int main(int argc,char** argv){
         GOLDEN_CHECK_BENCH_ITERATIONS,
         % endif
         &match_ctx);
-    % endif
     
     % for out_name in match_outputs.keys():
     % if golden_cpu_model:

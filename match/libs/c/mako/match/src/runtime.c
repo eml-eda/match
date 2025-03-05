@@ -22,6 +22,7 @@ double benchmark_${model_name}_model(int iterations){
     % for inp_name,inp in inputs.items():
     ${inp["c_type"]}* ${inp_name}_bench_pt = ${inp_name}_default;
     % endfor
+    #endif
     % for out_name,out in outputs.items():
     ${out["c_type"]}* ${out_name}_bench_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
     % endfor
@@ -84,6 +85,7 @@ int check_${model_name}_differences_with_golden_model(){
     % for inp_name,inp in inputs.items():
     ${inp["c_type"]}* ${inp_name}_${mod_name}_pt = ${inp_name}_default;
     % endfor
+    #endif
     % for out_name,out in outputs.items():
     ${out["c_type"]}* ${out_name}_${mod_name}_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
     % endfor

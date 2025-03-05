@@ -2,7 +2,7 @@
 #define __PULP_CLUSTER_LIB_H__
 
 #include <match/ctx.h>
-#include <pulp_cluster/pulp_target.h>
+#include <pulp_cluster/pulp_cluster.h>
 #include <pulp_cluster/dory_dma.h>
 #include <pulp_cluster/cluster_dev.h>
 #include <pulp_cluster/mem.h>
@@ -13,7 +13,9 @@ void* pulp_init_ram(int size);
 
 void pulp_load_file(const char* filename, void* ext_pt, int size);
 
-void pulp_memcpy_ram(void* l2_pt, void* ext_pt, int size);
+void pulp_memcpy_from_ram(void* l2_pt, void* ext_pt, int size);
+
+void pulp_memcpy_to_ram(void* l2_pt, void* ext_pt, int size);
 
 void pulp_shutdown_ram(void* ext_pt, int size);
 

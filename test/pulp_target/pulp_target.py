@@ -139,7 +139,7 @@ class PulpPlatform(MatchTarget):
             PulpCluster(),
         ],name="pulp_platform")
         # self.cpu_type = "arm_cpu"
-        # self.static_mem_plan = False
+        self.static_mem_plan = False
         self.static_mem_plan_algorithm = "hill_climb"
         self.makefile_path = os.path.dirname(__file__)+"/lib/Makefile"
         self.tvm_runtime_include_path = os.path.dirname(__file__)+"/lib/tvm_runtime.h"
@@ -157,10 +157,11 @@ class PulpPlatform(MatchTarget):
         self.alloc_fn = "malloc_wrapper"
         self.free_fn = "free_wrapper"
         self.allocate_ext_mem = "pulp_init_ram"
-        self.load_to_ext_mem_fn = "pulp_load_file"
-        self.load_from_ext_mem_fn = "pulp_memcpy_ram"
+        self.load_file_to_ext_mem_fn = "pulp_load_file"
+        self.load_to_ext_mem_fn = "pulp_memcpy_to_ram"
+        self.load_from_ext_mem_fn = "pulp_memcpy_from_ram"
         self.free_external_mem = "pulp_shutdown_ram"
-        self.soc_memory_bytes = 24 * 1024
+        self.soc_memory_bytes = 12428
 
 def create_dense_conv_dense_ex(inp_features:int=256,out_features:int=128,
                             inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
@@ -471,7 +472,7 @@ def run_microbench(microbench: str="conv", output_path: str="./builds/last_build
         model=MatchModel(
            relay_mod=mod, relay_params=params,
            model_name=microbench, executor=executor,
-        #    golden_cpu_model=False,
+           golden_cpu_model=False,
         ),
         target=target,
         output_path=output_path
