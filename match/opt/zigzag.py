@@ -289,10 +289,11 @@ class ZigZagEngine(ScheduleEngine):
             elif len(dims)==2:
                 if key=="N":
                     return dims[0]
-                if key=="C":
+                if key in ["C","K"]:
                     return dims[1]
             elif len(dims)==1:
                 return dims[0]
+            print(f"[ZIGZAG ENGINE] Error during dimension parsing, trying to get {key} from dims {[dim.name for dim in dims]} in tensor {tensor.name}")
             return self.match_node.default_dim
         
         tensor = self.o_tensor

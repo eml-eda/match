@@ -43,7 +43,7 @@ typedef struct{
 }MatchTensorTile;
 
 typedef struct{
-    MatchTensorTile** tiles;
+    MatchTensorTile* tiles;
     void* base_pt;
     void** pts;
     int num_tiles;

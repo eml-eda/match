@@ -21,8 +21,8 @@ extern MatchDims dims_cnt_;
 
 // TILES
 % for t_tensor_name,t_tensor_tiles in schedule.tensor_tiles.items():
-extern MatchTensorTile ${t_tensor_name}_tiles_[${len(t_tensor_tiles)}][${t_tensor_tiles[0].tensor.num_dims}];
-extern MatchTensorTile** ${t_tensor_name}_tiles;
+extern MatchTensorTile ${t_tensor_name}_tiles_[${len(t_tensor_tiles)*t_tensor_tiles[0].tensor.num_dims}];
+extern MatchTensorTile* ${t_tensor_name}_tiles;
 % endfor
 
 extern const char* tensors_names_[];

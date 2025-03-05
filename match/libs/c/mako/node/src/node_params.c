@@ -32,20 +32,18 @@ MatchDims dims_cnt_ = (MatchDims){
 
 // TILES
 % for t_tensor_name,t_tensor_tiles in schedule.tensor_tiles.items():
-MatchTensorTile ${t_tensor_name}_tiles_[${len(t_tensor_tiles)}][${t_tensor_tiles[0].tensor.num_dims}] = {
+MatchTensorTile ${t_tensor_name}_tiles_[${len(t_tensor_tiles)*t_tensor_tiles[0].tensor.num_dims}] = {
     % for idx_mem_tile,mem_tile in enumerate(t_tensor_tiles):
-    ${", " if idx_mem_tile else ""}{
-        % for idx_mem_tile_dim,tiled_dim in enumerate(mem_tile.tiled_dims):
-        ${", " if idx_mem_tile_dim else ""}(MatchTensorTile){
-            .dim = &(dims_[${list(match_node.dims.keys()).index(tiled_dim.dim.name)}]),
-            .size = ${tiled_dim.size},
-            .start_idx = 0
-        }
-        % endfor
+    % for idx_mem_tile_dim,tiled_dim in enumerate(mem_tile.tiled_dims):
+    ${", " if (idx_mem_tile_dim+idx_mem_tile)>0 else ""}(MatchTensorTile){
+        .dim = &(dims_[${list(match_node.dims.keys()).index(tiled_dim.dim.name)}]),
+        .size = ${tiled_dim.size},
+        .start_idx = 0
     }
     % endfor
+    % endfor
 };
-MatchTensorTile** ${t_tensor_name}_tiles = (MatchTensorTile**)${t_tensor_name}_tiles_;
+MatchTensorTile* ${t_tensor_name}_tiles = (MatchTensorTile*)${t_tensor_name}_tiles_;
 % endfor
 
 const char* tensors_names_[] = {

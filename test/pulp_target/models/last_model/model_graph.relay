@@ -1,15 +1,8 @@
 #[version = "0.0.5"]
-def @main(%input_0: Tensor[(1, 16), uint8], %dense_1_weights: Tensor[(512, 16), int8], %dense_1_bias: Tensor[(512), int32], %conv_weights: Tensor[(16, 8, 3, 3), int8], %conv_bias: Tensor[(16), int32], %dense_2_weights: Tensor[(8, 1024), int8], %dense_2_bias: Tensor[(8), int32]) {
-  %0 = nn.dense(%input_0, %dense_1_weights, units=None, out_dtype="int32");
-  %1 = nn.bias_add(%0, %dense_1_bias, axis=-1);
-  %2 = nn.relu(%1);
-  %3 = cast(%2, dtype="uint8");
-  %4 = reshape(%3, newshape=[1, 8, 8, 8]);
-  %5 = nn.conv2d(%4, %conv_weights, padding=[1, 1, 1, 1], kernel_size=[3, 3], out_dtype="int32");
-  %6 = nn.bias_add(%5, %conv_bias);
-  %7 = nn.relu(%6);
-  %8 = reshape(%7, newshape=[1, 1024]);
-  %9 = nn.dense(%8, %dense_2_weights, units=None, out_dtype="int32");
-  %10 = nn.bias_add(%9, %dense_2_bias, axis=-1);
-  nn.relu(%10)
+def @main(%input_0: Tensor[(1, 16), int8], %dense_weights: Tensor[(8, 16), int8], %dense_bias: Tensor[(8), int32]) {
+  %0 = nn.dense(%input_0, %dense_weights, units=None, out_dtype="int32");
+  %1 = nn.bias_add(%0, %dense_bias, axis=-1);
+  %2 = right_shift(%1, 4);
+  %3 = clip(%2, a_min=0f, a_max=255f);
+  cast(%3, dtype="int8")
 }

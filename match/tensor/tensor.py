@@ -41,7 +41,7 @@ class MatchTensor:
     def c_offset_expr_sw_mem(self,mem):
         dims_expr = []
         for idx,dim in enumerate(self.dims):
-            global_idx = f"({dim.name}->global_idx - {self.name}_tiles_[{mem}][{idx}].start_idx)"
+            global_idx = f"({dim.name}->global_idx - {self.name}_tiles_[{mem}*{self.num_dims}+{idx}].start_idx)"
             sizes_ = [f"{self.name}_tiles_[{mem}*{self.num_dims}+{inner_idx+idx}].size" for inner_idx,inner_dim in enumerate(self.dims[idx+1:]) if inner_dim.size > 1]
             if dim.size > 1:
                 if sizes_:
