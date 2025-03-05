@@ -1,4 +1,4 @@
-#include <pulp_target/net_utils.h>
+#include <pulp_cluster/net_utils.h>
 #include <pmsis.h>
 
 void print_perf(const char *name, const int cycles, const int macs) {

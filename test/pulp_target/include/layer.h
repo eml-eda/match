@@ -2,7 +2,7 @@
 #define __LAYER_H__
 
 #include <pmsis.h>
-#include <pulp_target/tile_index.h>
+#include <pulp_cluster/tile_index.h>
 
 typedef struct Address {
     uint32_t input;

@@ -1,5 +1,5 @@
 #include <pmsis.h>
-#include <pulp_target/pulp_rt_profiler_wrapper.h>
+#include <pulp_cluster/pulp_rt_profiler_wrapper.h>
 
 
 void  __attribute__((noinline, optimize("O0"))) init_global_perf_counter(){

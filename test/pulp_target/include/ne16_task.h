@@ -21,7 +21,7 @@
 #ifndef __NE16_TASK_H__
 #define __NE16_TASK_H__
 
-#include <pulp_target/ne16_task_defs.h>
+#include <pulp_cluster/ne16_task_defs.h>
 #include <stdint.h>
 
 typedef enum ne16_task_flag_e {

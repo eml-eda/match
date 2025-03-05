@@ -26,7 +26,7 @@ from match.utils.utils import get_random_np_array
 
 class PulpCluster(ExecModule):
     def __init__(self):
-        super(PulpCluster, self).__init__(name="cluster",
+        super(PulpCluster, self).__init__(name="pulp_cluster",
                                           specific_patterns=[
                                               "dense_requant",
                                               "conv_requant"
@@ -76,7 +76,7 @@ class PulpCluster(ExecModule):
         return computational_apis
     
     def specific_pattern_def(self, match_node=None, pattern_name = "conv_2d"):
-        return "dense" if pattern_name=="vec_dense" else pattern_name
+        return "dense" if pattern_name=="dense" else pattern_name
     
     def partitioning_patterns(self):
         
@@ -121,10 +121,8 @@ class PulpCluster(ExecModule):
         return [
             # PartitioningPattern(name="only_conv",pattern=only_conv_pt),
             # PartitioningPattern(name="wildcard_pt",pattern=match_everything),
-            # PartitioningPattern(name="vec_dense",pattern=vec_dense_pt),
-            # PartitioningPattern(name="vec_conv",pattern=vec_conv_pt),
             PartitioningPattern(name="dense_requant",pattern=dense_pt_requant),
-            PartitioningPattern(name="conv_requant",pattern=conv_pt_requant),
+            # PartitioningPattern(name="conv_requant",pattern=conv_pt_requant),
         ]
 
     def memories_def(self, pattern_name, operands):
@@ -153,9 +151,15 @@ class PulpPlatform(MatchTarget):
         self.end_get_timestamp_api = "stop_match_perf_counter"
         self.init_funcs = ["pulp_cluster_init"]
         self.clean_funcs = ["pulp_cluster_close"]
-        self.include_list = ["cluster/pulp_rt_profiler_wrapper","pmsis","cluster/pulp_cluster","cluster/dory_dma"]
+        self.include_list = ["pulp_cluster/pulp_rt_profiler_wrapper","pmsis",
+                             "pulp_cluster/cluster_dev","pulp_cluster/dory_dma",
+                             "pulp_cluster/cluster_lib"]
         self.alloc_fn = "malloc_wrapper"
         self.free_fn = "free_wrapper"
+        self.allocate_ext_mem = "pulp_init_ram"
+        self.load_to_ext_mem_fn = "pulp_load_file"
+        self.load_from_ext_mem_fn = "pulp_memcpy_ram"
+        self.free_external_mem = "pulp_shutdown_ram"
         self.soc_memory_bytes = 24 * 1024
 
 def create_dense_conv_dense_ex(inp_features:int=256,out_features:int=128,
@@ -220,21 +224,21 @@ def create_dense_conv_dense_ex(inp_features:int=256,out_features:int=128,
     mod = mod.from_expr(x)
     return mod, params
 
-def create_vec_conv_ex(inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
+def create_conv_ex(inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
                        padding:Tuple=(0,0,0,0),strides:Tuple=(1,1),
                        groups:int=1,out_ch:int=1,inp_ch:int=3,
                        requant_pattern:bool=False,
                        right_shift:int=1,**kwargs):
     np.random.seed(0)
-    x = relay.var("input_0", relay.TensorType((1,)+inp_shape+(inp_ch,), "int8"))
+    x = relay.var("input_0", relay.TensorType((1,inp_ch)+inp_shape, "int8"))
     # Get or generate weight_values
-    weights = create_random_array(fil_shape+(inp_ch,out_ch),"int8")
+    weights = create_random_array((out_ch,inp_ch)+fil_shape,"int8")
     # Get or generate bias values
     bias = create_random_array((out_ch,), "int32")
     # Generate the conv2d call
     # define weights and bias variables
-    weights_name = "vec_conv_weights"
-    bias_name = "vec_conv_bias"
+    weights_name = "conv_weights"
+    bias_name = "conv_bias"
 
     # define relay input vars
     w = relay.var(weights_name, relay.TensorType(weights.shape, weights.dtype))
@@ -248,12 +252,12 @@ def create_vec_conv_ex(inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
                            padding=padding,
                            groups=groups,
                            kernel_size=fil_shape,
-                           data_layout="NHWC",
-                           kernel_layout="HWIO",
+                        #    data_layout="NHWC",
+                        #    kernel_layout="HWIO",
                            out_dtype="int32",
                            )
     b = relay.var(bias_name, relay.TensorType(bias.shape, bias.dtype))
-    x = relay.op.nn.bias_add(x, b, axis=-1)
+    x = relay.op.nn.bias_add(x, b, axis=1)
     if requant_pattern:
         x = relay.op.right_shift(x, relay.const(right_shift))
         x = relay.op.clip(x, a_min=0, a_max=255)
@@ -357,7 +361,7 @@ def create_fp_dense_ex(inp_features:int=256,out_features:int=128,**kwargs):
     return mod, params
 
 
-def create_vec_dense_ex(inp_features:int=256,out_features:int=128,
+def create_dense_ex(inp_features:int=256,out_features:int=128,
                         activation:bool=True,
                         requant_pattern:bool=False,
                         right_shift:int=1,**kwargs):
@@ -372,8 +376,8 @@ def create_vec_dense_ex(inp_features:int=256,out_features:int=128,
     bias = create_random_array((out_features,), "int32")
     # Generate the conv2d call
     # define weights and bias variables
-    weights_name = "vec_dense_weights"
-    bias_name = "vec_dense_bias"
+    weights_name = "dense_weights"
+    bias_name = "dense_bias"
 
     # define relay input vars
     w = relay.var(weights_name, relay.TensorType(weights.shape, weights.dtype))
@@ -436,9 +440,10 @@ def save_model_and_params(mod,params):
         par_file.write(relay.save_param_dict(params=params))
 
 MICROBENCH_MAPPER = {
-    "conv":create_vec_conv_ex,
-    "dense":create_vec_dense_ex,
+    "conv":create_conv_ex,
+    "dense":create_dense_ex,
     "dense_conv_dense":create_dense_conv_dense_ex,
+    "avg_pool": create_fp_globalavgpool_ex,
 }
 
 def run_relay_saved_model_at(mod_file,params_file,output_path):

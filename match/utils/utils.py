@@ -59,6 +59,7 @@ class RelaySave:
         
 output_path=None
 model_name = "default"
+executor = "aot"
 relay_list=[]
 schedules=[]
 searched_schedules=[]
@@ -92,6 +93,14 @@ def set_model_name(mod_name):
 def get_model_name():
     global model_name
     return model_name
+
+def set_executor(exec_):
+    global executor
+    executor = exec_
+
+def get_executor():
+    global executor
+    return executor
 
 def mock_func(*args):
     return None

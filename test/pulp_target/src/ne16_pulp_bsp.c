@@ -18,7 +18,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <pulp_target/ne16_pulp_bsp.h>
+#include <pulp_cluster/ne16_pulp_bsp.h>
 #include <pmsis.h>
 
 #define NE16_PULP_CLUSTER_CTRL_ADDR_BASE (0x00200000)

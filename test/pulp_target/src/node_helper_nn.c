@@ -1,5 +1,5 @@
 #if defined(__MATCH_NODE_HELPER_NN_H__)
-#include <pulp_target/node_helper_nn.h>
+#include <pulp_cluster/node_helper_nn.h>
 
 // #define __MATCH_EXECUTE_BASIC_PARALLEL_SCHEDULE__
 #define __MATCH_EXECUTE_PULP_NN_SCHEDULE__

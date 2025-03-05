@@ -21,7 +21,7 @@
 #ifndef __NE16_H__
 #define __NE16_H__
 
-#include <pulp_target/hwpe.h>
+#include <pulp_cluster/hwpe.h>
 #include <stdint.h>
 
 #define NE16_TASK_QUEUE_SIZE (2)

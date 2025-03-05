@@ -18,10 +18,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <pulp_target/pulp_nnx_ne16.h>
-#include <pulp_target/hwpe.h>
-#include <pulp_target/ne16.h>
-#include <pulp_target/pulp_nnx_util.h>
+#include <pulp_cluster/pulp_nnx_ne16.h>
+#include <pulp_cluster/hwpe.h>
+#include <pulp_cluster/ne16.h>
+#include <pulp_cluster/pulp_nnx_util.h>
 #include <pmsis.h>
 #include <stdint.h>
 

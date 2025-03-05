@@ -1,6 +1,22 @@
-#include <${model_name}/graph_runtime.h>
+#include <${model_name}_graph.h>
 
-int match_${model_name}_graph_runtime(
+// DLTensor declarations
+% for mem_tensor in mem_tensors:
+DLTensor ${mem_tensor.name}_dltensor;
+% endfor
+// params of nodes
+// void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handle
+% for node in nodes:
+// node ${node.name}
+TVMValue ${node.name}_args_[${len(node.inputs)+len(node.outputs)}];
+int* ${node.name}_arg_type_ids_;
+int ${node.name}_num_args_ = ${len(node.inputs)+len(node.outputs)};
+void* ${node.name}_out_ret_value_;
+int* ${node.name}_out_ret_tcode_;
+void* ${node.name}_resource_handle_;
+% endfor
+
+int match_${model_name}_run_graph(
     % for rt_i in rt_inputs:
     ${rt_i.c_type}* ${rt_i.name}_pt,
     % endfor
@@ -20,7 +36,7 @@ int match_${model_name}_graph_runtime(
     % if mem_tensor.stored_in_external_memory:
     void* ${mem_tensor.name}_pt = match_mem+${mem_tensor.soc_memory_offset};
     void* ${mem_tensor.name}_ext_pt = match_ext_mem+ext_mem_offset;
-    ${target.load_to_ext_mem_fn}("${model_name}_params_${mem_tensor.name}_data.hex", ${mem_tensor.name}_ext_pt, ${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    ${target.load_to_ext_mem_fn}("${model_name}_${mem_tensor.name}_data.hex", ${mem_tensor.name}_ext_pt, ${mem_tensor.elems * mem_tensor.dtype.itemsize});
     ext_mem_offset += ${mem_tensor.elems * mem_tensor.dtype.itemsize};
     % else:
     void* ${mem_tensor.name}_pt = ${mem_tensor.name}_data_;
@@ -34,20 +50,24 @@ int match_${model_name}_graph_runtime(
     ## SET V_HANDLE OF TENSORS
     // set correct pointers for node
     % for inp_idx,node_in in enumerate(node.inputs):
-    % if node_in.is_constant and node.node_id in node_in.load_from_ext_mem_at:
+    % if node_in.is_constant and node_in.stored_in_external_memory:
+    ## and node.node_id in node_in.load_from_ext_mem_at:
     // load constant from external memory
     ${target.load_from_ext_mem_fn}(${node_in.name}_pt, ${node_in.name}_ext_pt,${node_in.elems * node_in.dtype.itemsize});
     % endif
-    ${node.name}_args_[${inp_idx}].v_handle = ${node_in.name}_pt;
+    ${node.name}_args_[${inp_idx}].v_handle = (void*)(&${node_in.name}_dltensor);
+    ${node_in.name}_dltensor.data = ${node_in.name}_pt;
     % endfor
     % for out_idx,node_out in enumerate(node.outputs):
-    ${node.name}_args_[${len(node.inputs)+out_idx}].v_handle = ${node_out.name}_pt;
+    ${node.name}_args_[${len(node.inputs)+out_idx}].v_handle = (void*)(&${node_out.name}_dltensor);
+    ${node_out.name}_dltensor.data = ${node_out.name}_pt;
     % endfor
     if( ${node.fn_name}(${node.name}_args_, ${node.name}_arg_type_ids_, ${node.name}_num_args_,
-                        ${node.name}_out_ret_value_, ${node.name}_out_ret_tcode, ${node.name}_resource_handle_)) return -1;
+                        ${node.name}_out_ret_value_, ${node.name}_out_ret_tcode_, ${node.name}_resource_handle_)) return -1;
     % else:
     % for inp_idx,node_in in enumerate(node.inputs):
-    % if node_in.is_constant and node.node_id in node_in.load_from_ext_mem_at:
+    % if node_in.is_constant and node_in.stored_in_external_memory:
+    ## and node.node_id in node_in.load_from_ext_mem_at:
     // load constant from external memory
     ${target.load_from_ext_mem_fn}(${node_in.name}_pt, ${node_in.name}_ext_pt,${node_in.elems * node_in.dtype.itemsize});
     % endif

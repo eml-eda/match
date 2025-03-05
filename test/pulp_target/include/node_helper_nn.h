@@ -3,15 +3,15 @@
 #ifndef __MATCH_NODE_HELPER_NN_H__
 #define __MATCH_NODE_HELPER_NN_H__
 
-#include <pulp_target/node_config.h>
+#include <pulp_cluster/node_config.h>
 #include <match/ctx.h>
-#include <pulp_target/pulp_nn_kernels.h>
+#include <pulp_cluster/pulp_nn_kernels.h>
 #include <nodes/default/main_0_params.h>
 
-#include <pulp_target/pulp_rt_profiler_wrapper.h>
+#include <pulp_cluster/pulp_rt_profiler_wrapper.h>
 #include <pmsis.h>
-#include <pulp_target/gap9_cluster.h>
-#include <pulp_target/dory_dma.h>
+#include <pulp_cluster/cluster_dev.h>
+#include <pulp_cluster/dory_dma.h>
 
 void pulp_nn_schedule__(void* args);
 void basic_parallel_pulp_schedule(void* args);

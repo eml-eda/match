@@ -1,5 +1,5 @@
-#ifndef __PULP_CLUSTER_H__
-#define __PULP_CLUSTER_H__
+#ifndef __PULP_CLUSTER_DEV_H__
+#define __PULP_CLUSTER_DEV_H__
 
 
 #include <pmsis.h>
@@ -10,4 +10,4 @@ void pulp_cluster_init();
 
 void pulp_cluster_close();
 
-#endif //GAP9_CLUSTER_H
+#endif

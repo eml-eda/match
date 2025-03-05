@@ -1,9 +1,26 @@
-#include <pulp_target/cluster_lib.h>
+#include <pulp_cluster/cluster_lib.h>
 
 static void* l1_memory_pt_ = NULL;
 static int im2col_size_ = 0;
 static int pwt_buffer_size_ = 0;
 static DmaTransfer dma_transfer_;
+
+void* pulp_init_ram(int size){
+    mem_init();
+    return ram_malloc(size);
+}
+
+void pulp_load_file(const char* filename, void* ext_pt, int size){
+    load_file_to_ram(ext_pt, filename);
+}
+
+void pulp_memcpy_ram(void* l2_pt, void* ext_pt, int size){
+    ram_read(l2_pt, ext_pt, size);
+}
+
+void pulp_shutdown_ram(void* ext_pt, int size){
+    ram_free(ext_pt, size);
+}
 
 void offload_to_pulp_cluster(void (inner_function)(unsigned int* args_inner_function),unsigned int* args){
     pi_cluster_task(&cluster_task,inner_function,args);

@@ -139,6 +139,10 @@ typedef struct{
     int pattern_name;
 }MatchCtx;
 
+typedef struct match_runtime_ctx_t{
+    int status;
+}match_runtime_ctx;
+
 MatchTensor* default_match_ctx_get_tensor(struct MatchTensors_t *self,const char *name);
 
 int default_match_ctx_get_tensor_idx(struct MatchTensors_t *self,const char *name);

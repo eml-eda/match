@@ -8,7 +8,7 @@ from mako.template import Template
 from mako import exceptions
 from pathlib import Path
 from match.target.target import MatchTarget
-from match.utils.utils import get_output_path,numpy_dtype_to_c_type,c_friendly_npvalue
+from match.utils.utils import get_executor, get_output_path,numpy_dtype_to_c_type,c_friendly_npvalue
 import tvm
 
 class TemplateWriter:
@@ -53,6 +53,7 @@ class TemplateWriter:
         self.template_data["sync_apis"] = self.exec_module.match_sync_apis(self.pattern_name)
         self.template_data["platform_apis"] = self.exec_module.match_platform_apis(self.pattern_name)
         self.template_data["comp_apis"] = self.exec_module.match_comp_apis(self.pattern_name)
+        self.template_data["executor"] = get_executor()
 
     def write_layer_files(self):
         # write layer files

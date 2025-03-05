@@ -17,7 +17,7 @@ from match.utils import save_all_relay,add_save_relay,reset_relay_list,reset_out
 from match.compile.c_aot import MatchCompilerCAoT
 from mako.template import Template
 
-from match.utils.utils import c_friendly_npvalue, get_random_np_array, numpy_dtype_to_c_type, set_model_name
+from match.utils.utils import c_friendly_npvalue, get_executor, get_random_np_array, numpy_dtype_to_c_type, set_executor, set_model_name
 import tvm
 from tvm import relay
 
@@ -42,6 +42,7 @@ class MatchModel:
         if executor in EXCUTOR_COMPILER_CLS:
             self.executor = executor
             self.compilation_cls = EXCUTOR_COMPILER_CLS[self.executor]
+        self.executors = {self.model_name: self.executor}
         self.default_inputs = default_inputs
         # dynamic model params
         self.is_model_dynamic = is_model_dynamic
@@ -56,13 +57,14 @@ class MatchModel:
         return str(Path(out_path).absolute())+"/"+model_name+"_buildtmp"
 
     @staticmethod
-    def set_model(out_path, model_name):
+    def set_model(out_path, model_name, executor):
         reset_output_path()
         reset_relay_list()
         reset_schedules()
         model_path = MatchModel.get_path(out_path=out_path, model_name=model_name)
         set_output_path(model_path)
         set_model_name(model_name)
+        set_executor(executor)
         return model_path
 
     @staticmethod
@@ -83,8 +85,9 @@ class MatchModel:
         
         if len(self.other_models)>0:
             for model_name, model in self.other_models.items():
-                model_path = MatchModel.set_model(out_path=out_path, model_name=model_name)
-                comp =  self.compilation_cls(
+                model_path = MatchModel.set_model(out_path=out_path, model_name=model_name, executor=self.executor)
+                self.executors[model_name] = get_executor()
+                comp =  EXCUTOR_COMPILER_CLS[get_executor()](
                             model[0], model[1],
                             target = target,
                             build_dir = model_path,
@@ -102,8 +105,9 @@ class MatchModel:
             for ex_mod in target.exec_modules_dict:
                 new_disabled_modules.append(ex_mod)
             target.disabled_exec_modules = new_disabled_modules
-            model_path = MatchModel.set_model(out_path=out_path, model_name=self.model_name+"_golden_cpu")
-            comp =  self.compilation_cls(
+            model_path = MatchModel.set_model(out_path=out_path, model_name=self.model_name+"_golden_cpu", executor="aot")
+            self.executors[self.model_name+"_golden_cpu"] = get_executor()
+            comp =  EXCUTOR_COMPILER_CLS[get_executor()](
                         self.relay_mod, self.relay_params,
                         target = target,
                         build_dir = model_path,
@@ -116,7 +120,7 @@ class MatchModel:
             target.disabled_exec_modules = target_disabled_modules
 
         # compile the model
-        model_path = MatchModel.set_model(out_path=out_path, model_name=self.model_name)
+        model_path = MatchModel.set_model(out_path=out_path, model_name=self.model_name, executor=self.executor)
         comp =  self.compilation_cls(
                     self.relay_mod, self.relay_params,
                     target = target,
@@ -138,7 +142,11 @@ class MatchModel:
             "inputs":match_inputs,
             "all_model_names":[self.model_name]+([] if not self.golden_cpu_model else [self.model_name+"_golden_cpu"]) + [key_ for key_ in self.other_models],
             "target":target,
+            "executors":self.executors
         }
+        # if not there move and unzip the TVM runtime
+        if not Path(abs_out_path+"/runtime").is_dir():
+            subprocess.getoutput(f"unzip {Path(os.path.dirname(__file__)+'/tvm_runtime.zip').absolute()} -d {Path(abs_out_path+"/")}")
         if not Path(abs_out_path+f"/src/{self.model_name}").is_dir():
             subprocess.getoutput(f"mkdir {abs_out_path}/src/{self.model_name}")
         if not Path(abs_out_path+f"/include/{self.model_name}").is_dir():
@@ -176,10 +184,10 @@ class MatchModel:
             graph_runtime = MatchTVMGraphRuntime(target=target, mod_info=mod_info, params=params, model_name=model_name, out_path=build_dir)
             graph_runtime_template_data = graph_runtime.generate()
             try:
-                with open(f"{build_dir}/codegen/host/src/graph_runtime.c","w") as run_file:
-                    run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/src/graph_runtime.c").render(**graph_runtime_template_data))
-                # with open(f"{build_dir}/codegen/host/include/graph_runtime.c","w") as run_file:
-                    # run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/include/graph_runtime.h").render(**graph_runtime_template_data))
+                with open(f"{build_dir}/codegen/host/src/{model_name}_graph.c","w") as run_file:
+                    run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/src/graph.c").render(**graph_runtime_template_data))
+                with open(f"{build_dir}/codegen/host/include/{model_name}_graph.h","w") as run_file:
+                    run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/include/graph.h").render(**graph_runtime_template_data))
             except Exception as e:
                 print(f"[TEMPLATE WRITER] Error processing graph runtime template")
                 raise e

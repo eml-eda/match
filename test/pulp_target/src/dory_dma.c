@@ -1,4 +1,4 @@
-#include <pulp_target/dory_dma.h>
+#include <pulp_cluster/dory_dma.h>
 #include <pmsis.h>
 
 #ifdef GAP_SDK

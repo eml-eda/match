@@ -107,7 +107,6 @@ class MatchRelayParser(MatchTVMParser):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
-        w_tensor.layout = inp_tensor.layout
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
         if w_name in self.name_to_calls:
             w_tensor.tensor_type = "intermediate"
@@ -123,6 +122,7 @@ class MatchRelayParser(MatchTVMParser):
                 inp_tensor.layout = "NC"
             elif len(inp_tensor.dims)==1:
                 inp_tensor.layout = "N"
+        w_tensor.layout = inp_tensor.layout
         out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op=ops.MatchOpBiasAdd(

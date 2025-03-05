@@ -25,9 +25,9 @@
 #include <tvm/runtime/crt/stack_allocator.h>
 #ifdef PULP
 #include <pmsis.h>
-#include <pulp_target/gap9_cluster.h>
+#include <pulp_cluster/cluster_dev.h>
 #endif
-#include <pulp_target/malloc_wrapper.h>
+#include <pulp_cluster/malloc_wrapper.h>
 
 #ifdef __cplusplus
 extern "C" {

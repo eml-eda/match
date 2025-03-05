@@ -21,7 +21,7 @@
 #ifndef __NE16_PULP_BSP_H__
 #define __NE16_PULP_BSP_H__
 
-#include <pulp_target/ne16.h>
+#include <pulp_cluster/ne16.h>
 #include <stdint.h>
 
 /**

@@ -19,7 +19,7 @@
  */
 
 #include <pmsis.h>
-#include <pulp_target/pulp_nn_utils.h>
+#include <pulp_cluster/pulp_nn_utils.h>
 
 #define log2(x) __builtin_pulp_fl1(x)
 #define min(a,b) ((a)<(b)?(a):(b))

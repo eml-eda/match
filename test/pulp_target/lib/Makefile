@@ -60,6 +60,11 @@ APP_CFLAGS += -DSINGLE_CORE_DMA
 APP_CFLAGS += -DGAP_SDK=1
 APP_CFLAGS += -DTARGET_CHIP_FAMILY_$(TARGET_CHIP_FAMILY)
 
+MODELS_PATHS := $(wildcard $(abspath $(BUILD_DIR))/models/*)
+FLASH_FILES = $(foreach model, $(MODELS_PATHS), $(wildcard $(model)/parameters/*))
+
+READFS_FILES := $(FLASH_FILES)
+APP_CFLAGS += -DFS_READ_FS
 ################################### SPECIAL ####################################
 
 # The special rule modifiers (.PHONY etc...) go here

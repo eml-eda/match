@@ -18,7 +18,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <pulp_target/hwpe.h>
+#include <pulp_cluster/hwpe.h>
 #include <stdint.h>
 
 #define HWPE_TRIGGER 0

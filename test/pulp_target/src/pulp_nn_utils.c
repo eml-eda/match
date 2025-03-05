@@ -19,7 +19,7 @@
  */
 
 #include <pmsis.h>
-#include <pulp_target/pulp_nn_utils.h>
+#include <pulp_cluster/pulp_nn_utils.h>
 #ifdef PULPNN_USE_DMA
 #include "mchan_test.h"
 #endif

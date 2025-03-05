@@ -1,4 +1,4 @@
-#include <pulp_target/malloc_wrapper.h>
+#include <pulp_cluster/malloc_wrapper.h>
 #include <stdint.h>
 
 #ifdef PULP

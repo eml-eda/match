@@ -192,7 +192,7 @@ class MatchTVMGraphRuntime:
             Path(self.out_path+"/parameters").absolute().mkdir()
         for mem_tensor in mem_tensors:
             if mem_tensor.stored_in_external_memory and mem_tensor.is_constant:
-                mem_tensor.constant_val.flatten().astype("uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}.hex"))
+                mem_tensor.constant_val.flatten().astype("uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}_data.hex"))
         # breakpoint()
         template_data = {
             "target": self.target,

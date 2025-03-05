@@ -18,9 +18,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <pulp_target/ne16_task.h>
-#include <pulp_target/ne16_task_defs.h>
-#include <pulp_target/pulp_nnx_util.h>
+#include <pulp_cluster/ne16_task.h>
+#include <pulp_cluster/ne16_task_defs.h>
+#include <pulp_cluster/pulp_nnx_util.h>
 
 uint32_t ne16_get_tile_padding(uint32_t padding, uint32_t i_height,
                                uint32_t i_width, uint32_t n_height,

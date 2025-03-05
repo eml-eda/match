@@ -2,11 +2,20 @@
 #define __PULP_CLUSTER_LIB_H__
 
 #include <match/ctx.h>
-#include <pulp_target/pulp_target.h>
-#include <pulp_target/dory_dma.h>
-#include <pulp_target/gap9_cluster.h>
+#include <pulp_cluster/pulp_target.h>
+#include <pulp_cluster/dory_dma.h>
+#include <pulp_cluster/cluster_dev.h>
+#include <pulp_cluster/mem.h>
 
 #define CLUSTER_LIB_DEBUG
+
+void* pulp_init_ram(int size);
+
+void pulp_load_file(const char* filename, void* ext_pt, int size);
+
+void pulp_memcpy_ram(void* l2_pt, void* ext_pt, int size);
+
+void pulp_shutdown_ram(void* ext_pt, int size);
 
 void offload_to_pulp_cluster(void (inner_function)(unsigned int* args_inner_function),unsigned int* args);
 

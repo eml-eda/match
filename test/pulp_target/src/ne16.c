@@ -18,7 +18,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <pulp_target/ne16.h>
+#include <pulp_cluster/ne16.h>
 
 #define NE16_STATUS_EMPTY (0x000)
 #define NE16_STATUS_FULL (0x101)

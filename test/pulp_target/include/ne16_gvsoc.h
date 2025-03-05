@@ -21,8 +21,8 @@
 #ifndef __NE16_GVSOC_H__
 #define __NE16_GVSOC_H__
 
-#include <pulp_target/ne16.h>
-#include <pulp_target/ne16_task.h>
+#include <pulp_cluster/ne16.h>
+#include <pulp_cluster/ne16_task.h>
 
 #define NE16_REG_GVSOC_LOG_LEVEL 24
 #define NE16_REG_GVSOC_LOG_FORMAT 25

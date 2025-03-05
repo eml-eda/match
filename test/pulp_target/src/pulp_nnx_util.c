@@ -18,7 +18,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include <pulp_target/pulp_nnx_util.h>
+#include <pulp_cluster/pulp_nnx_util.h>
 
 inline int nnx_calculate_number_of_tiles(const int dim_size,
                                          const int tile_size) {
