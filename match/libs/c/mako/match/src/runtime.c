@@ -122,15 +122,16 @@ int check_${model_name}_differences_with_golden_model(){
     ${target.free_fn}(${out_name}_${mod_name}_pt);
     % endfor
     % endif
+    % endfor
     return diffs;
 }
 
 void match_golden_check_${model_name}_runtime(
     % for match_inp_name,match_inp in inputs.items():
-    ${out["c_type"]}* ${match_inp_name}_${model_name}_pt,
+    ${match_inp["c_type"]}* ${match_inp_name}_${model_name}_pt,
     % endfor
     % for match_inp_name,match_inp in inputs.items():
-    ${out["c_type"]}* ${match_inp_name}_${match_model.model_name+"_golden_cpu"}_pt,
+    ${match_inp["c_type"]}* ${match_inp_name}_${match_model.model_name+"_golden_cpu"}_pt,
     % endfor
     % for out_name,out in outputs.items():
     ${out["c_type"]}* ${out_name}_${model_name}_pt,

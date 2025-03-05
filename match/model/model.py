@@ -96,7 +96,7 @@ class MatchModel:
                 comp.tvm_compile(fusion=True)
                 MatchModel.save_model_logs()
                 MatchModel.gen_model_runtime_and_move_model(target=target, out_path=out_path,
-                                                            model_name=model_name, executor=self.executor)
+                                                            model_name=model_name, executor=get_executor())
 
         # compile the golden cpu to check if used
         if self.golden_cpu_model:
@@ -116,7 +116,7 @@ class MatchModel:
             comp.tvm_compile(fusion=True)
             MatchModel.save_model_logs()
             MatchModel.gen_model_runtime_and_move_model(target=target, out_path=out_path,
-                                                        model_name=self.model_name+"_golden_cpu", executor=self.executor)
+                                                        model_name=self.model_name+"_golden_cpu", executor=get_executor())
             target.disabled_exec_modules = target_disabled_modules
 
         # compile the model
@@ -146,7 +146,7 @@ class MatchModel:
         }
         # if not there move and unzip the TVM runtime
         if not Path(abs_out_path+"/runtime").is_dir():
-            subprocess.getoutput(f"unzip {Path(os.path.dirname(__file__)+'/tvm_runtime.zip').absolute()} -d {Path(abs_out_path+"/")}")
+            subprocess.getoutput(f"unzip {Path(os.path.dirname(__file__)+'/tvm_runtime.zip').absolute()} -d {Path(abs_out_path+'/')}")
         if not Path(abs_out_path+f"/src/{self.model_name}").is_dir():
             subprocess.getoutput(f"mkdir {abs_out_path}/src/{self.model_name}")
         if not Path(abs_out_path+f"/include/{self.model_name}").is_dir():
@@ -188,6 +188,11 @@ class MatchModel:
                     run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/src/graph.c").render(**graph_runtime_template_data))
                 with open(f"{build_dir}/codegen/host/include/{model_name}_graph.h","w") as run_file:
                     run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/include/graph.h").render(**graph_runtime_template_data))
+                # params
+                with open(f"{build_dir}/codegen/host/src/{model_name}_params_data.c","w") as run_file:
+                    run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/src/params_data.c").render(**graph_runtime_template_data))
+                with open(f"{build_dir}/codegen/host/include/{model_name}_params_data.h","w") as run_file:
+                    run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/include/params_data.h").render(**graph_runtime_template_data))
             except Exception as e:
                 print(f"[TEMPLATE WRITER] Error processing graph runtime template")
                 raise e

@@ -471,7 +471,7 @@ def run_microbench(microbench: str="conv", output_path: str="./builds/last_build
         model=MatchModel(
            relay_mod=mod, relay_params=params,
            model_name=microbench, executor=executor,
-           golden_cpu_model=False,
+        #    golden_cpu_model=False,
         ),
         target=target,
         output_path=output_path

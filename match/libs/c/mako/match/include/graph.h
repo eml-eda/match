@@ -1,10 +1,11 @@
-#ifndef __MATCH_${model_name}_GRAPH_RUNTIME_H__
-#define __MATCH_${model_name}_GRAPH_RUNTIME_H__
+#ifndef __MATCH_${model_name}_RUN_GRAPH_H__
+#define __MATCH_${model_name}_RUN_GRAPH_H__
 
 % for include in target.include_list:
 #include <${include}.h>
 % endfor
 #include <tvm/runtime/c_runtime_api.h>
+#include <${model_name}_params_data.h>
 
 // TVM signature
 // void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handle

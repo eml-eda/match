@@ -7,7 +7,7 @@ from numpy import typing as npt
 import mako
 
 from match.target.target import MatchTarget
-from match.utils.utils import numpy_dtype_to_c_type
+from match.utils.utils import c_friendly_npvalue, numpy_dtype_to_c_type
 
 
 class MatchMemoryTensor:
@@ -32,6 +32,8 @@ class MatchMemoryTensor:
         self.stored_in_external_memory = False
         self.load_from_ext_mem_at = set()
         self.c_type = numpy_dtype_to_c_type(self.dtype)
+        self.c_value = "{}" if not self.is_constant else c_friendly_npvalue(self.constant_val)
+        self.prod_shape = prod(self.shape) 
         self.node_info = node_info
 
     @property
@@ -136,6 +138,7 @@ class MatchTVMGraphRuntime:
         dtypes = self.mod_info["attrs"]["dltype"][1]
         shapes = self.mod_info["attrs"]["shape"][1]
         heads = [head[0] for head in self.mod_info["heads"]]
+        nop_maps = dict()
         # breakpoint()
         for node_id,node in enumerate(self.mod_info["nodes"]):
             if node["op"]=="null":
@@ -157,7 +160,22 @@ class MatchTVMGraphRuntime:
                     mem_tensors.append(mem_tensor)
                     tensor_map[node["name"]] = mem_tensor
             else:
-                inputs = [mem_tensors[inp_node_idx] for inp_node_idx in [inp_node_idxs[0] for inp_node_idxs in node["inputs"]]]
+                inputs = []
+                for inp_node_idx in [inp_node_idxs[0] for inp_node_idxs in node["inputs"]]:
+                    if self.mod_info["nodes"][inp_node_idx]["op"]!="null" and "_nop" in self.mod_info["nodes"][inp_node_idx]["name"]\
+                        and self.mod_info["nodes"][inp_node_idx]["name"] in nop_maps:
+                        # inputs is a nop skip
+                        inputs.append(nop_maps[self.mod_info["nodes"][inp_node_idx]["name"]])
+                    else:
+                        name_tens = self.mod_info["nodes"][inp_node_idx]["name"]
+                        if self.mod_info["nodes"][inp_node_idx]["op"]!="null":
+                            name_tens = name_tens+"_out"
+                        inputs.append(tensor_map[name_tens])
+                if "_nop" in node["name"]:
+                    if len(inputs)==1:
+                        nop_maps[node["name"]] = inputs[0]
+                    continue
+                # inputs = [mem_tensors[inp_node_idx] for inp_node_idx in [inp_node_idxs[0] for inp_node_idxs in node["inputs"]]]
                 for inp in inputs:
                     inp.update_last_usage(node_id)
                 id_out = -1
