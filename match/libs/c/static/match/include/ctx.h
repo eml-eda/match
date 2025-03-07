@@ -45,7 +45,7 @@ typedef struct{
 typedef struct{
     MatchTensorTile* tiles;
     void* base_pt;
-    void** pts;
+    unsigned int* pts;
     int num_tiles;
     int curr_tile;
     int num_dims;

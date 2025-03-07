@@ -64,6 +64,8 @@ class ScheduleGenerator:
             raise Exception("No valid schedule found")
         schedule_engine.transform_schedule()
         self.schedule=schedule_engine.get_schedule()
+        self.exec_module.set_buffers_for_schedule(self.match_node, self.schedule,
+                                                  self.pattern_name, self.schedule_engine_classname)
         self.latency=schedule_engine.get_latency()
         self.energy=schedule_engine.get_energy()
     

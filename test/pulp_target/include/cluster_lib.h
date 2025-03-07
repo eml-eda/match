@@ -7,7 +7,7 @@
 #include <pulp_cluster/cluster_dev.h>
 #include <pulp_cluster/mem.h>
 
-#define CLUSTER_LIB_DEBUG
+// #define CLUSTER_LIB_DEBUG
 
 void* pulp_init_ram(int size);
 
@@ -20,6 +20,8 @@ void pulp_memcpy_to_ram(void* l2_pt, void* ext_pt, int size);
 void pulp_shutdown_ram(void* ext_pt, int size);
 
 void offload_to_pulp_cluster(void (inner_function)(unsigned int* args_inner_function),unsigned int* args);
+
+void* cluster_alloc_buffer(const char* name, int tensor_l1_pt, int size, int mem, int buffer_idx);
 
 void cluster_lib_init(MatchCtx* ctx);
 

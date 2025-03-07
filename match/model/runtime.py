@@ -389,22 +389,12 @@ class MatchMemoryPlanner:
         return soc_mem_needed, ext_mem_needed
 
     def generate(self):
-        # use only SoC memory
-        if not self.external_memory_needed:
-            offsets_time = [0] * (self.last_timestep + 1)
-            for tensor in self.mem_tensors:
-                if not tensor.is_input and not tensor.is_output and not tensor.is_constant:
-                    for time in range(tensor.node_id, tensor.last_usage + 1):
-                        if time==tensor.node_id:
-                            tensor.soc_memory_offset = offsets_time[time]
-                        offsets_time[time] += tensor.elems * tensor.dtype.itemsize
-            return max(self.intermediate_memory_usage), 0
-        else:
-            try:
-                return self.match_mem_planner_impl()
-            except Exception as exc:
-                print(f"[MEMORY PLANNER] Error during memory planner {exc}")
-                raise Exception("Not enough SoC memory available")
+        # use only SoC memory if possible, otherwise use external memory
+        try:
+            return self.match_mem_planner_impl()
+        except Exception as exc:
+            print(f"[MEMORY PLANNER] Error during memory planner {exc}")
+            raise Exception("Not enough SoC memory available")
     
 class MatchGraphRuntimeNodeCall:
     def __init__(self, inputs=None, outputs=None, fn_name="default_lib_1", name="default_lib_1", node_info={}, node_id: int=0):

@@ -55,7 +55,8 @@ class MatchRelayParser(MatchTVMParser):
                 inp_tensor.layout = "NC"
             elif len(inp_tensor.dims)==1:
                 inp_tensor.layout = "N"
-        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output", layout=inp_tensor.layout)
+        out_tensor = MatchTensor(name=name,dims=inp_tensor.dims, dtype=np.dtype(attrs.dtype),
+                                 tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op = ops.MatchOpCast(
             var_arr=[inp_tensor],
@@ -149,17 +150,15 @@ class MatchRelayParser(MatchTVMParser):
                 inp_tensor.layout = "NC"
             elif len(inp_tensor.dims)==1:
                 inp_tensor.layout = "N"
-        w_tensor.layout = inp_tensor.layout
-        self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[-1].name,new_dim_name=inp_tensor.dims[-1].name)
         odtype = call.checked_type.dtype
-        out_dims = inp_tensor.dims[:-1]+[w_tensor.dims[0]]
+        out_dims, axeses = self.check_broadcasting_and_get_out_dims(inp_tensor=inp_tensor, w_tensor=w_tensor)
         out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op=ops.MatchOpMultiply(
             out_arr=[out_tensor],
             var_arr=[inp_tensor],
             const_arr=[w_tensor],
-            axis=-1,
+            axis=-1 if len(axeses)>1 or len(axeses)==0 else axeses[0],
         )
         self.update_match_node(op=op,call=call,name=name)
 
@@ -169,8 +168,8 @@ class MatchRelayParser(MatchTVMParser):
         inp_features = wshape[1]
         out_features = wshape[0]
         odtype = call.checked_type.dtype
-        if ishape[1] != wshape[1]:
-            raise NotImplementedError(f"[PARSER]: The weights shape in the dense operation are not correct")
+        if ishape[-1] != wshape[1]:
+            raise NotImplementedError(f"[RELAY PARSER]: The weights shape in the dense operation are not correct")
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         if inp_name in self.name_to_calls:
             inp_tensor.tensor_type = "intermediate"
@@ -218,17 +217,16 @@ class MatchRelayParser(MatchTVMParser):
                 inp_tensor.layout = "NC"
             elif len(inp_tensor.dims)==1:
                 inp_tensor.layout = "N"
-        w_tensor.layout = inp_tensor.layout
-        self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[-1].name,new_dim_name=inp_tensor.dims[-1].name)
+
         odtype = call.checked_type.dtype
-        out_dims = inp_tensor.dims[:-1]+[w_tensor.dims[0]]
+        out_dims, axeses = self.check_broadcasting_and_get_out_dims(inp_tensor=inp_tensor, w_tensor=w_tensor)
         out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op=ops.MatchOpAdd(
             out_arr=[out_tensor],
             var_arr=[inp_tensor],
             const_arr=[w_tensor],
-            axis=-1,
+            axis=-1 if len(axeses)>1 or len(axeses)==0 else axeses[0],
         )
         self.update_match_node(op=op,call=call,name=name)
 
@@ -281,15 +279,15 @@ class MatchRelayParser(MatchTVMParser):
         o_tensor = MatchTensor(name=name,dims=self.get_dim_arr_from_layout_and_nchw_arr(
             layout=attrs.out_layout if attrs.out_layout != "" else attrs.data_layout,
             nchw_arr=[i_n_dim,w_cout_dim,o_h_dim,o_w_dim]
-        ),dtype=np.dtype(odtype),tensor_type="output", layout=inp_tensor.layout)
+        ),dtype=np.dtype(odtype),tensor_type="output", layout=attrs.out_layout if attrs.out_layout != "" else attrs.data_layout if attrs.data_layout!="" else inp_tensor.layout)
         self.calls_tensors[name]=o_tensor
         if i_n != o_n:
             raise NotImplementedError(
-                f"Input batch size is {i_n}, while output batch size is {o_n}"
+                f"[RELAY PARSER] Input batch size is {i_n}, while output batch size is {o_n}"
             )
         if not depthwise and groups>1:
             raise NotImplementedError(
-                f"Grouped convolutions which are not completely depthwise aren't supported yet, groups set to {groups}"
+                f"[PARSER] Grouped convolutions which are not completely depthwise aren't supported yet, groups set to {groups}"
             )
         op = ops.MatchOpConv2D(
             out_arr=[o_tensor],

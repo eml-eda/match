@@ -46,6 +46,7 @@ class MemoryApis:
         self.store_tile = ""
         self.init_mem_levels = ""
         self.free_mem_levels = ""
+        self.alloc_buffer = ""
 
 class ComputationalApis:
     """All the APIs relating to the computational part that are used later by MATCH templates
@@ -271,6 +272,9 @@ class ExecModule(ABC):
     def template_data(self):
         return {}
     
+    def set_buffers_for_schedule(self, match_node, schedule, pattern_name, engine):
+        return
+
     def weights_and_constants(self,match_node,pattern_name):
         """define how the weights and constants of a layer must be saved in C on the generated code
 

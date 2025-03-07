@@ -14,8 +14,9 @@
 # specific language governing permissions and limitations
 # under the License.
 """
-Operations to support the SOMA accelerator.
+Operations to support a MATCH Target with one or more ExecModule.
 """
+from match.transform.naming import MatchRenameIO
 from match.transform.save import MatchSaveModule, MatchSaveRelay
 from match.utils.utils import get_model_name
 import tvm
@@ -68,6 +69,9 @@ def partition(mod, params, dpu, opts):
     pipeline = []
     pipeline.append(MatchSaveRelay("start"))
     pipeline.append(transform.InferType())
+    pipeline.append(MatchRenameIO())
+    pipeline.append(MatchSaveRelay("renamed"))
+    pipeline.append(transform.InferType())
 
     for net_transform_name, net_transform in target.network_transformations(opts):
         pipeline.append(net_transform)
@@ -96,7 +100,6 @@ def partition(mod, params, dpu, opts):
             fused = seq(mod)
             return fused
         except Exception as err:
-            breakpoint()
             raise Exception(
                 "Error converting layout to {0}".format(str(err))
             )

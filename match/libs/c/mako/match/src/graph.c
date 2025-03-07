@@ -28,7 +28,9 @@ int match_${model_name}_run_graph(
     void* match_ext_mem = ${target.allocate_ext_mem}(${ext_mem_needed_bytes});
     int ext_mem_offset = 0;
     % endif
+    % if mem_needed_bytes>0:
     void* match_mem = ${target.alloc_fn}(${mem_needed_bytes});
+    % endif
     % for mem_tensor in mem_tensors:
     % if mem_tensor.is_intermediate or (mem_tensor.is_constant and mem_tensor.stored_in_external_memory):
     void* ${mem_tensor.name}_pt = match_mem+${mem_tensor.mem_offset};
@@ -90,7 +92,9 @@ int match_${model_name}_run_graph(
     % endif
     % endfor
     // final cleanup
+    % if mem_needed_bytes>0:
     ${target.free_fn}(match_mem);
+    % endif
     % if ext_mem_needed_bytes>0:
     ${target.free_external_mem}(match_ext_mem, ${ext_mem_needed_bytes});
     % endif

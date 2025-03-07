@@ -64,11 +64,8 @@ class MatchLayoutNCHWtoNHWC(relay.ExprMutator):
         dtype = const.checked_type.dtype
         if len_shape>1 and dim_sized_one==len_shape-1:
             size_dim_not_at_one = int([sz for sz in shape if sz>1][0])
-            #breakpoint()
             # broadcasting
             return relay.const(const.data.numpy().reshape(tuple([1 for _ in range(int(3))]+[size_dim_not_at_one])).astype(dtype))
-        elif len_shape==4:
-            return relay.const(const.data.numpy().reshape((shape[2],shape[3],shape[1],shape[0])).astype(dtype))
         return super().visit_constant(const)
 
     def visit_var(self, var):
@@ -77,29 +74,32 @@ class MatchLayoutNCHWtoNHWC(relay.ExprMutator):
         else:
             return super.visit_var(var)
 
+    def modify_axis_to_bias_add(self, call, new_args):
+        updated_attrs = {key: getattr(call.attrs, key) for key in call.attrs.keys()}
+        updated_attrs["axis"] = -1
+        if "nn" in call.op.name and hasattr(relay.op.nn,".".join(call.op.name.split(".")[1:])):
+            op_func = getattr(relay.op.nn, ".".join(call.op.name.split(".")[1:]))
+        else:
+            if hasattr(relay.op.nn,call.op.name):
+                op_func = getattr(relay.op.nn,call.op.name)
+            elif hasattr(relay.op,call.op.name):
+                op_func = getattr(relay.op,call.op.name)
+            elif hasattr(relay.nn,call.op.name):
+                op_func = getattr(relay.nn,call.op.name)
+
+        if op_func:
+            new_call = op_func(*new_args,**updated_attrs)
+        else:
+            new_call = relay.Call(call.op, new_args, call.attrs)
+        return new_call
+
     def visit_call(self, call):
         # Recurse into arguments
         new_args = [self.visit(arg) for arg in call.args]
         new_call = None
         # Modify layout-sensitive operators
         if isinstance(call.op, tvm.ir.Op) and call.op.name=="nn.bias_add":
-            updated_attrs = {key: getattr(call.attrs, key) for key in call.attrs.keys()}
-            updated_attrs["axis"] = -1
-            if "nn" in call.op.name and hasattr(relay.op.nn,".".join(call.op.name.split(".")[1:])):
-                op_func = getattr(relay.op.nn, ".".join(call.op.name.split(".")[1:]))
-            else:
-                if hasattr(relay.op.nn,call.op.name):
-                    op_func = getattr(relay.op.nn,call.op.name)
-                elif hasattr(relay.op,call.op.name):
-                    op_func = getattr(relay.op,call.op.name)
-                elif hasattr(relay.nn,call.op.name):
-                    op_func = getattr(relay.nn,call.op.name)
-
-            if op_func:
-                new_call = op_func(*new_args,**updated_attrs)
-            else:
-
-                new_call = relay.Call(call.op, new_args, call.attrs)
+            new_call = self.modify_axis_to_bias_add(call, new_args)
         if isinstance(call.op, tvm.ir.Op) and call.op.name in NCHW_TO_NHWC_OPERATORS_SET:
             updated_attrs = {key: getattr(call.attrs, key) for key in call.attrs.keys()}
             for layout_key in [key for key in updated_attrs.keys() if key in LAYOUT_FROM_TO and updated_attrs[key]!="" and updated_attrs[key]==LAYOUT_FROM_TO[key]["from"]]:
@@ -115,11 +115,20 @@ class MatchLayoutNCHWtoNHWC(relay.ExprMutator):
                 elif hasattr(relay.nn,call.op.name):
                     op_func = getattr(relay.nn,call.op.name)
 
+            new_args_layout = []
+            for arg in new_args:
+                arg_to_add = arg
+                if isinstance(arg, relay.Constant):
+                    shape = [int(sz) for sz in arg.checked_type.shape]
+                    if len(shape)==4 and (call.attrs.kernel_layout=="" or call.attrs.kernel_layout==LAYOUT_FROM_TO["kernel_layout"]["from"]):
+                        arg_to_add = relay.const(arg.data.numpy().transpose(2,3,1,0).astype(arg.checked_type.dtype))
+                new_args_layout.append(arg_to_add)
+
             if op_func:
-                new_call = op_func(*new_args,**updated_attrs)
+                new_call = op_func(*new_args_layout,**updated_attrs)
             else:
 
-                new_call = relay.Call(call.op, new_args, call.attrs)
+                new_call = relay.Call(call.op, new_args_layout, call.attrs)
         
         # Default behavior for other operators
         if new_call is None:

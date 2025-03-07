@@ -8,60 +8,62 @@
 #include <nodes/${model_name}/${name}_data.h>
 
 // DIMS
-extern const char* dims_names_[];
+extern const char* ${name}_dims_names_[];
 % if len(match_node.dims)>0:
-extern MatchDim dims_[${len(match_node.dims)}];
+extern MatchDim ${name}_dims_[${len(match_node.dims)}];
 % else:
-extern MatchDim *dims_;
+extern MatchDim* ${name}_dims_;
 % endif
 % for idx,dim in enumerate(match_node.dims.values()):
-extern MatchDim* ${dim.name};
+extern MatchDim* ${name}_${dim.name};
 % endfor
-extern MatchDims dims_cnt_;
+extern MatchDims ${name}_dims_cnt_;
 
 // TILES
 % for t_tensor_name,t_tensor_tiles in schedule.tensor_tiles.items():
-extern MatchTensorTile ${t_tensor_name}_tiles_[${len(t_tensor_tiles)*t_tensor_tiles[0].tensor.num_dims}];
-extern MatchTensorTile* ${t_tensor_name}_tiles;
+extern MatchTensorTile ${name}_${t_tensor_name}_tiles_[${len(t_tensor_tiles)*t_tensor_tiles[0].tensor.num_dims}];
+extern MatchTensorTile* ${name}_${t_tensor_name}_tiles;
 % endfor
 
-extern const char* tensors_names_[];
-extern MatchTensor tensors_[${len(schedule.tensors)}];
+
+extern const char* ${name}_tensors_names_[];
+extern MatchTensor ${name}_tensors_[${len(schedule.tensors)}];
 % for idx,tensor in enumerate(schedule.tensors.values()):
-extern MatchTensor* ${tensor.name};
+extern unsigned int ${name}_${tensor.name}_pts[${len(schedule.tensor_tiles[tensor.name])}];
+extern MatchTensor* ${name}_${tensor.name};
 % endfor
-extern MatchTensors tensors_cnt_;
+extern MatchTensors ${name}_tensors_cnt_;
 
 // ops
-extern const char* ops_names_[];
+extern const char* ${name}_ops_names_[];
 % if len(match_node.ops)>0:
-extern MatchOp ops_[${len(match_node.ops)}];
+extern MatchOp ${name}_ops_[${len(match_node.ops)}];
 % else:
-extern MatchOp *ops_;
+extern MatchOp* ${name}_ops_;
 % endif
 % for idx,(op_name,op) in enumerate(match_node.ops.items()):
-extern Match${op.op}Attrs op_${op_name}_attrs_;
-extern Match${op.op}Attrs* ${op_name}_attrs;
-extern MatchOp* ${op_name}_op;
+extern Match${op.op}Attrs ${name}_op_${op_name}_attrs_;
+extern Match${op.op}Attrs* ${name}_${op_name}_attrs;
+extern MatchOp* ${name}_${op_name}_op;
 % endfor
-extern MatchOps ops_cnt_;
+extern MatchOps ${name}_ops_cnt_;
 
 extern MatchCtx ${name}_ctx_;
 
 extern MatchCtx* ${name}_ctx;
 
 % for dep_dim in match_node.dependent_dims:
-inline void update_${dep_dim.name}(){
-    ${dep_dim.name}->global_idx = 
+inline void ${name}_update_${dep_dim.name}(){
+    ${name}_${dep_dim.name}->global_idx = 
     % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.dependencies.items()):
-    ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else ind_dim.name+"->global_idx"})
+    ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else name+"_"+ind_dim.name+"->global_idx"})
     % endfor
     ;
 }
-inline void set_${dep_dim.name}(){
-    ${dep_dim.name}->curr_size = 
+inline void ${name}_set_${dep_dim.name}(){
+    ${name}_${dep_dim.name}->curr_size = 
     % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.dependencies.items()):
-    ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else ind_dim.name+"->curr_size"})
+    ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else name+"_"+ind_dim.name+"->curr_size"})
     % endfor
     ;
 }
@@ -71,33 +73,33 @@ inline void set_${dep_dim.name}(){
 // loops iters counters
 % for block_idx,block in enumerate(schedule.blocks):
 % for loop_idx,lp in enumerate(block.loops):
-extern int block_${block_idx}_loop_${block.loops[loop_idx].name}_iter;
+extern int ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter;
 
-inline void block_${block_idx}_loop_${lp.name}_set(){
-    block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
-    ${lp.dim.name}->curr_size = ${lp.step*lp.size};
+inline void ${name}_block_${block_idx}_loop_${lp.name}_set(){
+    ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
+    ${name}_${lp.dim.name}->curr_size = ${lp.step*lp.size};
     % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
-    set_${dep_dim}();
+    ${name}_set_${dep_dim}();
     % endfor
 }
-inline int block_${block_idx}_loop_${lp.name}_reset(){
-    // block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
-    ${lp.dim.name}->global_idx -= ${lp.step*lp.size};
+inline int ${name}_block_${block_idx}_loop_${lp.name}_reset(){
+    // ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
+    ${name}_${lp.dim.name}->global_idx -= ${lp.step*lp.size};
+    % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
+    ${name}_set_${dep_dim}();
+    ${name}_update_${dep_dim}();
+    % endfor
     return 0;
+}
+inline void ${name}_block_${block_idx}_loop_${lp.name}_update(){
+    ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter += 1;
+    ${name}_${lp.dim.name}->global_idx += ${lp.step};
     % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
-    set_${dep_dim}();
-    update_${dep_dim}();
+    ${name}_update_${dep_dim}();
     % endfor
 }
-inline void block_${block_idx}_loop_${lp.name}_update(){
-    block_${block_idx}_loop_${block.loops[loop_idx].name}_iter += 1;
-    ${lp.dim.name}->global_idx += ${lp.step};
-    % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
-    update_${dep_dim}();
-    % endfor
-}
-inline int block_${block_idx}_loop_${lp.name}_end(){
-    return block_${block_idx}_loop_${block.loops[loop_idx].name}_iter >= ${lp.size} ? block_${block_idx}_loop_${lp.name}_reset() : 1;
+inline int ${name}_block_${block_idx}_loop_${lp.name}_end(){
+    return ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter >= ${lp.size} ? ${name}_block_${block_idx}_loop_${lp.name}_reset() : 1;
 }
 
 % endfor

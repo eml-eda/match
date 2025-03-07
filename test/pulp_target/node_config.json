@@ -5,7 +5,7 @@
     "inp_shape":[8,8],
     "inp_ch":3,
     "out_ch":16,
-    "right_shift":4,
+    "right_shift":15,
     "inp_features":16,
     "out_features":8,
     "activation":true,

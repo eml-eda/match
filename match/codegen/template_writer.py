@@ -40,8 +40,8 @@ class TemplateWriter:
         self.template_data["memory_hierarchy"]=self.exec_module.mem_hierarchy
         self.template_data["match_node"]=self.match_node
         self.template_data["mod"] = self.mod
-        self.template_data["model_name"] = self.mod.attrs.global_symbol.split("_")[1]
-        self.template_data["node_name"] = "_".join(self.mod.attrs.global_symbol.split("_")[3:])
+        self.template_data["model_name"] = "_".join(self.mod.attrs.global_symbol.split("_")[1:-2])
+        self.template_data["node_name"] = "_".join(self.mod.attrs.global_symbol.split("_")[-2:])
         self.template_data["name"] = self.template_data["node_name"]
         self.template_data["fullname"] = self.mod.attrs.global_symbol
         self.template_data["node_fullname"] = self.template_data["fullname"]
@@ -54,6 +54,8 @@ class TemplateWriter:
         self.template_data["platform_apis"] = self.exec_module.match_platform_apis(self.pattern_name)
         self.template_data["comp_apis"] = self.exec_module.match_comp_apis(self.pattern_name)
         self.template_data["executor"] = get_executor()
+        # update schedule params...
+        self.schedule.update_exprs_with_node_name(self.template_data["name"])
 
     def write_layer_files(self):
         # write layer files

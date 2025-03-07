@@ -94,11 +94,60 @@ class MatchTVMParser:
     def get_unique_name_and_update_occs(self,call):
         unique_name=self.op_name(call)
         if unique_name in self.occurrences:
-            unique_name+=f"_{self.occurrences[unique_name]}"
             self.occurrences[unique_name]+=1
+            unique_name+=f"_{self.occurrences[unique_name]}"
         else:
             self.occurrences[unique_name]=1
         return unique_name
+
+    def check_broadcasting_and_get_out_dims(self, inp_tensor, w_tensor):
+        w_tensor.layout = inp_tensor.layout
+        # check if broadcasted
+        broadcasted_tensor = None
+        dim_idxs_to_remove = []
+        axeses = []
+        dim_idx = 0
+        for inp_dim, w_dim in zip(inp_tensor.dims, w_tensor.dims):
+            if inp_dim.size!=w_dim.size and inp_dim.size!=1 and w_dim.size!=1:
+                raise RuntimeError(f"[TVM PARSER] Trying to do broadcast an operation which violates constraints,\
+                                    shape A {[dim.size for dim in inp_tensor.dims]} shape B {[dim.size for dim in w_tensor.dims]}")
+            if inp_dim.size!=w_dim.size:
+                if broadcasted_tensor is None and w_dim.size==1:
+                    broadcasted_tensor = w_tensor
+                elif broadcasted_tensor is None and inp_dim.size==1:
+                    broadcasted_tensor = inp_tensor
+                if broadcasted_tensor==w_tensor and w_dim.size==1:
+                    dim_idxs_to_remove.append(dim_idx)
+                    self.update_all_dim_names_occurrences_with(old_dim_name=w_dim.name, new_dim_name=inp_dim.name)
+                elif broadcasted_tensor==inp_tensor and inp_tensor.size==1:
+                    dim_idxs_to_remove.append(dim_idx)
+                    self.update_all_dim_names_occurrences_with(old_dim_name=inp_dim.name, new_dim_name=w_dim.name)
+            else:
+                axeses.append(dim_idx)
+            dim_idx += 1
+
+        other_tensor = inp_tensor if broadcasted_tensor==w_tensor else w_tensor
+        if broadcasted_tensor is None:
+            for dim_idx in range(len(inp_tensor.dims)):
+                self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[dim_idx], new_dim_name=inp_tensor.dims[dim_idx])
+        else:
+            sum_sizes_other_tensor = sum([dim.size for dim in other_tensor.dims])
+            for dim_idx in range(len(broadcasted_tensor.dims)):
+                if sum_sizes_other_tensor>1 and broadcasted_tensor.dims[dim_idx].size==1 and dim_idx not in dim_idxs_to_remove:
+                    dim_idxs_to_remove.append(dim_idx)
+                    axeses.remove(dim_idx)
+                    self.update_all_dim_names_occurrences_with(old_dim_name=broadcasted_tensor.dims[dim_idx].name, new_dim_name=other_tensor.dims[dim_idx].name)
+                else:
+                    self.update_all_dim_names_occurrences_with(old_dim_name=broadcasted_tensor.dims[dim_idx].name, new_dim_name=other_tensor.dims[dim_idx].name)
+            broadcasted_tensor.dims = [broadcasted_tensor.dims[dim_idx] for dim_idx in range(len(broadcasted_tensor.dims)) if dim_idx not in dim_idxs_to_remove]
+            if broadcasted_tensor.tensor_type=="const":
+                new_broadcasted_tensor_shape = tuple([dim.size for dim in broadcasted_tensor.dims])
+                broadcasted_tensor.data = broadcasted_tensor.data.reshape(new_broadcasted_tensor_shape)
+                broadcasted_tensor.num_dims = len(broadcasted_tensor.dims)
+        if len(axeses) not in (1, len(other_tensor.dims)):
+            raise RuntimeError(f"[TVM PARSER] Trying to do broadcast an operation which violates constraints,\
+                                    shape A {[dim.size for dim in inp_tensor.dims]} shape B {[dim.size for dim in w_tensor.dims]}")
+        return other_tensor.dims, axeses
 
     def get_io_from_layout(self, layout, data, dims):
         # conv2d and other 4 dims operators
@@ -124,6 +173,11 @@ class MatchTVMParser:
                 c = (int(data[1]), dims[1])
                 h = (int(data[2]), dims[2])
                 w = (int(data[3]), dims[3])
+            elif layout=="OHWI":
+                n = (int(data[0]), dims[0])
+                c = (int(data[3]), dims[3])
+                h = (int(data[1]), dims[1])
+                w = (int(data[2]), dims[2])
             else:
                 print(f"[PARSER]: Warning, layout {layout} not recognized, interpreting as NCHW")
                 #layout is nchw
@@ -141,7 +195,7 @@ class MatchTVMParser:
 
     def get_dim_arr_from_layout_and_nchw_arr(self,layout,nchw_arr):
         if layout=="NHWC":
-            return [nchw_arr[0],nchw_arr[3],nchw_arr[1],nchw_arr[2]]
+            return [nchw_arr[0],nchw_arr[2],nchw_arr[3],nchw_arr[1]]
         elif layout=="NCHW":
             return nchw_arr
         else:

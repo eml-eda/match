@@ -1,3 +1,4 @@
+import copy
 from math import floor
 from typing import Any, Dict, List
 
@@ -22,11 +23,12 @@ from zigzag.classes.hardware.architecture.accelerator import Accelerator
 from zigzag.classes.hardware.architecture.core import Core
 from zigzag.classes.opt.temporal.loma.engine import NoValidLoopOrderingFoundException
 
+DEBUG_MODE_MATCH = False
+
 class ZigZagEngine(ScheduleEngine):
     def __init__(self,exec_module:ExecModule=None,pattern_name:str="",match_node:MatchNode=None):
         super(ZigZagEngine, self).__init__(exec_module=exec_module,pattern_name=pattern_name,match_node=match_node)
         self.lpf_limit=13
-        self.debug_node_schedule=False
         self.zigzag_temporal_mapping=dict()
 
     def transform_schedule_for_engine(self):
@@ -62,14 +64,16 @@ class ZigZagEngine(ScheduleEngine):
             padding = (0,0,0,0)
             k_size = (1,1)
         padding = {"IY":(padding[0],padding[2]),"IX":(padding[1],padding[3])}
-        inp_tensors_names = [n for n in self.match_node.var_tensors.keys()]
-        out_tensors_names = [n for n in self.match_node.output_tensors.keys()]
-        inp_dims = [d.size for d in self.match_node.var_tensors[inp_tensors_names[0]].dims]
-        out_dims = [d.size for d in self.match_node.output_tensors[out_tensors_names[0]].dims]
-        o_n,o_c,o_h,o_w = (inp_dims[0],out_dims[1]) + ((out_dims[2],out_dims[3]) if len(out_dims)>3 else (out_dims[2],) if len(out_dims)>2 else (1,1))
-        i_h,i_w = (inp_dims[2],inp_dims[3]) if len(inp_dims)>3 else (inp_dims[2],) if len(inp_dims)>2 else (1,1)
-        w_cin, w_ks_h, w_ks_w = inp_dims[1], k_size[0], k_size[1]
-        kernel_size = (w_ks_h, w_ks_w)
+        self.i_tensor = [t for t in self.match_node.tensors_arr if t.tensor_type == "var"][0]
+        self.x_tensor = self.i_tensor
+        self.y_tensor = None if len([t for t in self.match_node.tensors_arr if t.tensor_type == "var"])<2 else [t for t in self.match_node.tensors_arr if t.tensor_type == "var"][1]
+        self.o_tensor = [t for t in self.match_node.tensors_arr if t.tensor_type=="output"][0]
+        self.w_tensor = None if len([t for t in self.match_node.tensors_arr if t.tensor_type == "const"])==0 else [t for t in self.match_node.tensors_arr if t.tensor_type == "const"][0]
+
+        o_n, o_c, o_h, o_w = [self.get_dim_name_by_name(key).size for key in ["B","K","OY","OX"]]
+        i_h,i_w = [self.get_dim_name_by_name(key).size for key in ["IY","IX"]]
+        w_cin, w_ks_h, w_ks_w = [self.get_dim_name_by_name(key).size for key in ["C","FY","FX"]]
+        kernel_size = k_size
         dimension_relations = [
             f"ix={strides[1]}*ox+{dilations[1]}*fx",
             f"iy={strides[0]}*oy+{dilations[0]}*fy",
@@ -227,6 +231,11 @@ class ZigZagEngine(ScheduleEngine):
                     c = dims[1]
                     h = dims[2]
                     w = dims[3]
+                elif layout=="OHWI":
+                    n = dims[0]
+                    c = dims[3]
+                    h = dims[1]
+                    w = dims[2]
                 else:
                     #layout is nchw
                     n = dims[0]
@@ -292,11 +301,13 @@ class ZigZagEngine(ScheduleEngine):
                 if key in ["C","K"]:
                     return dims[1]
             elif len(dims)==1:
-                return dims[0]
-            print(f"[ZIGZAG ENGINE] Error during dimension parsing, trying to get {key} from dims {[dim.name for dim in dims]} in tensor {tensor.name}")
+                if key=="N":
+                    return dims[0]
             return self.match_node.default_dim
         
         tensor = self.o_tensor
+        if name=="C":
+            tensor = self.i_tensor
         if name=="FY":
             tensor = self.w_tensor
         if name=="FX":
@@ -305,16 +316,29 @@ class ZigZagEngine(ScheduleEngine):
             tensor = self.i_tensor
         if name=="IX":
             tensor = self.i_tensor
-        return get_io_from_layout(dims=tensor.dims, layout=tensor.layout, tensor=tensor, key=name)
 
+        if tensor is None:
+            return self.match_node.default_dim
+        
+        found_dim = get_io_from_layout(dims=tensor.dims, layout=tensor.layout, tensor=tensor, key=name)
+        if found_dim==self.match_node.default_dim:
+            error_dim = False
+            if name in ["IX","FX","OX"] and len(tensor.dims)>=4:
+                error_dim = True
+            elif name in ["IY","FY","OY"] and len(tensor.dims)>=3:
+                error_dim = True
+            elif name in ["C","K"] and len(tensor.dims)>=2:
+                error_dim = True
+            elif name in ["N"] and len(tensor.dims)>=1:
+                error_dim = True
+            
+            if error_dim:
+                print(f"[ZIGZAG ENGINE] Error during dimension parsing, trying to get {name} from dims {[dim.name for dim in tensor.dims]} in tensor {tensor.name}")
+        return found_dim
+    
     def zigzag_set_exec_module(self):
         # self.exec_module.set_match_node(self.match_node)
         # set spatial mapping and other known stuff
-        self.i_tensor = [t for t in self.match_node.tensors_arr if t.tensor_type == "var"][0]
-        self.x_tensor = self.i_tensor
-        self.y_tensor = None if len([t for t in self.match_node.tensors_arr if t.tensor_type == "var"])<2 else [t for t in self.match_node.tensors_arr if t.tensor_type == "var"][1]
-        self.o_tensor = [t for t in self.match_node.tensors_arr if t.tensor_type=="output"][0]
-        self.w_tensor = None if len([t for t in self.match_node.tensors_arr if t.tensor_type == "const"])==0 else [t for t in self.match_node.tensors_arr if t.tensor_type == "const"][0]
         
         self.zigzag_operands = ["I","W","O"] if any([op in self.match_node.ops_occurrences for op in ["conv2d","dense"]]) else ["X","Y","O"]
         self.zigzag_operands_to_tensors = {
@@ -378,7 +402,7 @@ class ZigZagEngine(ScheduleEngine):
                     found_valid_temporal_mapping = False
                 if not found_valid_temporal_mapping and all([v[1]==1 for v in list(current_spatial_mapping[self.pattern_name]["spatial_mapping"].values())]):
                     raise NoValidLoopOrderingFoundException(
-                        f"No valid loop ordering was found for layer {cme[0][0].layer}."
+                        f"No valid loop ordering was found for layer {self.workload}."
                     )
                 if not found_valid_temporal_mapping:
                     max_spatial_size = max(list(current_spatial_mapping[self.pattern_name]["spatial_mapping"].values()),key= lambda a: a[1])
@@ -390,7 +414,6 @@ class ZigZagEngine(ScheduleEngine):
                             break
 
         except Exception as exc:
-            #breakpoint()
             self.energy=-1
             self.latency=-1
             self.cme=None
@@ -398,8 +421,7 @@ class ZigZagEngine(ScheduleEngine):
             raise Exception(f"[ZIGZAG_ENGINE] No valid loop ordering found: {exc}")
         self.cme = cme[0][0]
         self.zigzag_temporal_mapping = self.cme.temporal_mapping.mapping_dic_stationary
-        #breakpoint()
-        if self.debug_node_schedule:
+        if DEBUG_MODE_MATCH:
             print(f"[ZIGZAG_ENGINE] Total node energy = {self.energy} pJ")
             print(f"[ZIGZAG_ENGINE] Total node latency = {self.latency} cycles")
             print("[ZIGZAG_ENGINE] ZigZag Schedule: ")
@@ -465,7 +487,7 @@ class ZigZagEngine(ScheduleEngine):
                     self.temporal_mapping[idx]["mem_O"]=mem_name["O"][1 if len(mem_name["O"])>1 else 0]
                     break
         new_temporal_mapping = []
-        dim_step = self.workload[1]["loop_dim_size"]
+        dim_step = copy.deepcopy(self.workload[1]["loop_dim_size"])
         for idx,t_map in enumerate(self.temporal_mapping):
             dim_step[t_map["name"]] /= t_map["size"]
             t_map["step"] = dim_step[t_map["name"]]
@@ -509,35 +531,42 @@ class ZigZagEngine(ScheduleEngine):
                 )
             ],
             # ZigZag schedule shouldnt use intermediate tensors
-            tensors={tens_name:tens for tens_name,tens in self.match_node.tensors.items() if tens.tensor_type!="intermediate"},
+            tensors={tens_name:tens for tens_name,tens in self.match_node.tensors.items() if tens.tensor_type!="intermediate" and len(tens.dims)>0},
             tensor_tiles=dict(),
+            buffers=[],
         )
         # ZigZag expects all the constants to be loaded immediately to the inner memory of weights...
         if len(mem_hierarchy["const"])>1:
-            for const_tensor in self.match_node.const_tensors.values():
-                if const_tensor!=self.w_tensor:
-                    self.schedule.blocks[0].loops[0].mem_transfers.append(
-                        MatchMemTransfer(tensor=const_tensor,
-                                        top_mem=mem_hierarchy["const"][-1].name,mem=mem_hierarchy["const"][0].name,
-                                        sw_controlled=mem_hierarchy["const"][0].sw_controlled)
-                    )
+            for const_tensor in self.schedule.tensors.values():
+                if const_tensor.tensor_type=="const":
+                    if const_tensor!=self.w_tensor:
+                        self.schedule.blocks[0].loops[0].mem_transfers.append(
+                            MatchMemTransfer(tensor=const_tensor,
+                                            top_mem=mem_hierarchy["const"][-1].name,mem=mem_hierarchy["const"][0].name,
+                                            sw_controlled=mem_hierarchy["const"][0].sw_controlled)
+                        )
         memories = self.exec_module.get_all_memories()
         for tensor in self.schedule.tensors.values():
             self.schedule.tensor_tiles[tensor.name] = [MatchTensorTile(tensor=tensor,
                                             tiled_dims=[MatchTiledDim(dim=dim,size=dim.size) for dim in tensor.dims]) for mem in mem_hierarchy_dict]
-            for mem_idx,mem_name in enumerate(memories):
+            t_type = "out" if tensor.tensor_type=="output" else "const" if tensor.tensor_type=="const" else "var"
+            if t_type=="const" and tensor!=self.w_tensor:
+                continue
+            for mem_idx,mem_inst in enumerate(memories):
+                # if mem_inst.name=="L1_SCRATCHPAD" and t_type=="out":
+                #     breakpoint()
                 # is a memory of the tensor and its not the top memory so we can get the tiling size of it
-                t_type = "out" if tensor.tensor_type=="output" else "const" if tensor.tensor_type=="constant" else "var"
-                if mem_name in mem_hierarchy[t_type] and mem_name!=mem_hierarchy[t_type][-1]:
-                    steps = {dim.name:dim.size for dim in tensor.dims}
+                if mem_inst.name in [mem_inst_.name for mem_inst_ in mem_hierarchy[t_type]] and mem_inst.name!=mem_hierarchy[t_type][-1].name:
+                    steps = {dim.name:dim.size for dim in self.match_node.dims.values()}
                     for loop in self.schedule.blocks[0].loops:
                         steps[loop.dim.name] = loop.step
-                        if any([mem_trans.tensor==tensor and mem_trans.mem==mem_name for mem_trans in loop.mem_transfers]):
+                        if any([mem_trans.tensor==tensor and mem_trans.mem==mem_inst.name for mem_trans in loop.mem_transfers]):
                             for dim_idx,dim in enumerate(tensor.dims):
                                 if dim.dim_dependency:
                                     new_size = 0
                                     for ind_dim,mult in dim.dim_dependency.dependencies.items():
-                                        new_size = (mult*(ind_dim if not hasattr(ind_dim,"name") else steps[ind_dim.size]))
-                                    self.schedule.tensor_tiles[tensor.name][mem_idx][dim_idx] = new_size
+                                        new_size += (mult*(ind_dim if not hasattr(ind_dim,"name") else steps[ind_dim.name]))
+                                    new_size = int(new_size)
+                                    self.schedule.tensor_tiles[tensor.name][mem_idx].tiled_dims[dim_idx].size = new_size
                                 else:
-                                    self.schedule.tensor_tiles[tensor.name][mem_idx][dim_idx] = steps[dim.name]
+                                    self.schedule.tensor_tiles[tensor.name][mem_idx].tiled_dims[dim_idx].size = int(steps[dim.name])

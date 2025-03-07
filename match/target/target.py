@@ -5,6 +5,7 @@ import subprocess
 
 import mako
 from match.opt.generator import ScheduleGenerator
+import tvm.relay
 from tvm.relay.dataflow_pattern import match as is_pattern_matching
 from match.partition.partitioning_pattern import PartitioningPattern
 from tvm.relay.dataflow_pattern import CallPattern,AttrPattern,AltPattern
@@ -152,7 +153,7 @@ class MatchTarget(ABC):
             "runtime":"",
             "golden_cpu_model":models_[default_model].golden_cpu_model,
             "benchmarking":models_[default_model].benchmark_model,
-            "bench_iterations":int(models_[default_model].benchmark_model)*4+1,
+            "bench_iterations":int(models_[default_model].benchmark_model),
             "app":"match",
         }
         with open(abs_out_path+f"/include/{default_model}/default_inputs.h","w") as inp_file:
@@ -283,7 +284,9 @@ class MatchTarget(ABC):
         """
         print(f"[PATTERN MATCHER] Matched pattern {match_pt.name}, checking additional conditions")
         # is pattern fully supported?
-        if match_pt.additional_checks(node):
+        # node_add_checks = tvm.relay.transform.InferType()(tvm.ir.IRModule().from_expr(match_pt.pattern().partition(node)))["main"].body.op.body
+        node_add_checks = node
+        if match_pt.additional_checks(node_add_checks):
             # if supported get latency and energy of pattern
             try:
                 latency,energy=self.evaluate_pattern(node,match_pt)
@@ -297,7 +300,9 @@ class MatchTarget(ABC):
                 if other_pt.exec_module.name in self.disabled_exec_modules:
                     continue
                 # if pattern is fully matching get results
-                if is_pattern_matching(other_pt.pattern(),node) and other_pt.additional_checks(node):
+                # node_add_checks = tvm.relay.transform.InferType()(tvm.ir.IRModule().from_expr(other_pt.pattern().partition(node)))["main"].body.op.body
+                node_add_checks = node
+                if is_pattern_matching(other_pt.pattern(),node) and other_pt.additional_checks(node_add_checks):
                     try:
                         other_pt_latency,other_pt_energy=self.evaluate_pattern(node,other_pt)
                         print(f"[PATTERN MATCHER] Node is also supported by {other_pt.name} with expected latency {other_pt_latency} and expected energy {other_pt_energy}\n")

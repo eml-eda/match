@@ -136,20 +136,22 @@ class MatchPrimitiveExpr(MatchExpr):
         return self.name
 
 class MatchTensorExpr(MatchExpr):
-    def __init__(self, tensor: MatchTensor=MatchTensor()) -> None:
+    def __init__(self, tensor: MatchTensor=MatchTensor(), node_name: str="main_0") -> None:
         super().__init__(tensor.name)
         self.tensor = tensor
+        self.node_name = node_name
 
     @property
     def c_expr(self):
-        return f"(({numpy_dtype_to_c_type(self.tensor.dtype)}*){self.tensor.name}->base_pt)[{self.tensor.c_offset_expr}]"
+        return f"(({numpy_dtype_to_c_type(self.tensor.dtype)}*){self.node_name}_{self.tensor.name}->base_pt)[{self.tensor.c_offset_expr(self.node_name)}]"
 
 class MatchDimIdxExpr(MatchExpr):
-    def __init__(self, name: str="dim_idx", dim: MatchDim=MatchDim()) -> None:
+    def __init__(self, name: str="dim_idx", dim: MatchDim=MatchDim(), node_name: str="main_0") -> None:
         super().__init__(name)
         self.dim = dim
+        self.node_name = node_name
 
     @property
     def c_expr(self):
-        return f"{self.dim.name}->global_idx"
+        return f"{self.node_name}_{self.dim.name}->global_idx"
     

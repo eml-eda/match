@@ -23,11 +23,10 @@ class MatchTensor:
     def __eq__(self, other):
         return self.name == other.name and self.dtype == other.dtype and self.dims == other.dims
     
-    @property
-    def c_offset_expr(self):
+    def c_offset_expr(self, node_name):
         dims_expr = []
         for idx,dim in enumerate(self.dims):
-            global_idx = f"{dim.name}->global_idx"
+            global_idx = f"{node_name}_{dim.name}->global_idx"
             sizes_ = [str(inner_dim.size) for inner_dim in self.dims[idx+1:] if inner_dim.size > 1]
             if dim.size > 1:
                 if sizes_:
@@ -38,24 +37,28 @@ class MatchTensor:
             return "0"
         return " + ".join(dims_expr)
     
-    def c_offset_expr_sw_mem(self,mem):
+    def c_offset_expr_sw_mem(self, mem, node_name):
         dims_expr = []
         for idx,dim in enumerate(self.dims):
-            global_idx = f"({dim.name}->global_idx - {self.name}_tiles_[{mem}*{self.num_dims}+{idx}].start_idx)"
-            sizes_ = [f"{self.name}_tiles_[{mem}*{self.num_dims}+{inner_idx+idx}].size" for inner_idx,inner_dim in enumerate(self.dims[idx+1:]) if inner_dim.size > 1]
+            global_idx = f"({node_name}_{dim.name}->global_idx - {node_name}_{self.name}_tiles_[{mem}*{self.num_dims}+{idx}].start_idx)"
+            sizes_ = [f"{node_name}_{self.name}_tiles_[{mem}*{self.num_dims}+{inner_idx+idx}].size" for inner_idx,inner_dim in enumerate(self.dims[idx+1:]) if inner_dim.size > 1]
             if dim.size > 1:
                 if sizes_:
+                    if self.bits!=8:
+                        sizes_.append(f"{self.bits/8}")
                     dims_expr.append(f"{global_idx} * {' * '.join(sizes_)}")
                 else:
                     dims_expr.append(f"{global_idx}")
         if len(dims_expr) == 0:
             return "0"
-        return " + ".join(dims_expr)
+        return "(int)("+" + ".join(dims_expr)+")"
     
-    def c_offset_expr_size_sw_mem(self,mem):
-        sizes_ = [f"{self.name}_tiles_[{mem}*{self.num_dims}+{inner_idx}].size" for inner_idx,inner_dim in enumerate(self.dims) if inner_dim.size > 1]
+    def c_offset_expr_size_sw_mem(self, mem, node_name):
+        sizes_ = [f"{node_name}_{self.name}_tiles_[{mem}*{self.num_dims}+{inner_idx}].size" for inner_idx,inner_dim in enumerate(self.dims) if inner_dim.size > 1]
         if len(sizes_) == 0:
             return "0"
+        if self.bits!=8:
+            sizes_.append(f"{self.bits/8}")
         return " * ".join(sizes_)
 
     @property

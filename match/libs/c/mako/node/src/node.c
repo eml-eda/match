@@ -38,9 +38,9 @@ void match_backend_block_${block_idx}_computation(MatchCtx* ctx){
     % else:
     <% brackets_cnt += 1 %>
     % endif
-    ${c_ident(brackets_cnt-1)}for(block_${block_idx}_loop_${lp.name}_set();
-        ${c_ident(brackets_cnt-1)}block_${block_idx}_loop_${lp.name}_end();
-        ${c_ident(brackets_cnt-1)}block_${block_idx}_loop_${lp.name}_update()){
+    ${c_ident(brackets_cnt-1)}for(${name}_block_${block_idx}_loop_${lp.name}_set();
+        ${c_ident(brackets_cnt-1)}${name}_block_${block_idx}_loop_${lp.name}_end();
+        ${c_ident(brackets_cnt-1)}${name}_block_${block_idx}_loop_${lp.name}_update()){
         % for instr in lp.init_instrs:
         ${c_ident(brackets_cnt-1)}${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr};
         % endfor
@@ -88,24 +88,26 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % endif
 
     % for var in match_node.var_tensors.values():
-    ${var.name}->base_pt = var_${var.name}_pt;
-    ${var.name}->pts[${memory_hierarchy["var"][-1].name}] = var_${var.name}_pt;
+    ${name}_${var.name}->base_pt = var_${var.name}_pt;
+    ${name}_${var.name}->pts[${memory_hierarchy["var"][-1].name}] = var_${var.name}_pt;
     % endfor
     % for out in match_node.output_tensors.values():
-    ${out.name}->base_pt = out_${out.name}_pt;
-    ${out.name}->pts[${memory_hierarchy["out"][-1].name}] = out_${out.name}_pt;
+    ${name}_${out.name}->base_pt = out_${out.name}_pt;
+    ${name}_${out.name}->pts[${memory_hierarchy["out"][-1].name}] = out_${out.name}_pt;
     % endfor
     
-    % for const_tensor in match_node.const_tensors.values():
-    ${const_tensor.name}->base_pt = ${const_tensor.name}_data;
-    ${const_tensor.name}->pts[${memory_hierarchy["const"][-1].name}] = ${const_tensor.name}_data;
+    % for const_tensor in schedule.tensors.values():
+    % if const_tensor.tensor_type=="const":
+    ${name}_${const_tensor.name}->base_pt = ${name}_${const_tensor.name}_data;
+    ${name}_${const_tensor.name}->pts[${memory_hierarchy["const"][-1].name}] = ${name}_${const_tensor.name}_data;
+    % endif
     % endfor
 
     #ifndef __MATCH_TEST_NODE_WITH_HELPER__
     % for intermediate_tensor in schedule.tensors.values():
     % if intermediate_tensor.tensor_type=="intermediate":
-    ${intermediate_tensor.name}->base_pt = ${target.alloc_fn}(${intermediate_tensor.prod_shape}*sizeof(${c_dtype(intermediate_tensor.dtype)}));
-    ${intermediate_tensor.name}->pts[${memory_hierarchy["inter"][-1].name}] = ${intermediate_tensor.name}->base_pt;
+    ${name}_${intermediate_tensor.name}->base_pt = ${target.alloc_fn}(${intermediate_tensor.prod_shape}*sizeof(${c_dtype(intermediate_tensor.dtype)}));
+    ${name}_${intermediate_tensor.name}->pts[${memory_hierarchy["inter"][-1].name}] = ${intermediate_tensor.name}->base_pt;
     % endif
     % endfor
 
@@ -113,8 +115,20 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % if mem_level.sw_controlled and mem_level.name!=exec_module.top_memory:
     void* ${mem_level.name}_base_pt = ${mem_apis.init_memory[mem_level.name]}(ctx);
     int ${mem_level.name}_curr_pt_offset = 0;
+    ## alloc buffers on sw controlled memory
+    % for buffer_idx,buffer in enumerate(schedule.buffers):
+    % if mem_apis.alloc_buffer!="" and buffer.mem_name==mem_level.name:
+    ${mem_apis.alloc_buffer}(
+        "${buffer.name}",
+        ${buffer.mem_name}_base_pt + ${buffer.mem_name}_curr_pt_offset,
+        ${buffer.num_bytes}, ${buffer.mem_name}, ${buffer_idx}
+    );
+    ${buffer.mem_name}_curr_pt_offset += ${buffer.num_bytes};
     % endif
     % endfor
+    % endif
+    % endfor
+
     % for instr in schedule.init_instrs:
     ${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr};
     % endfor
@@ -129,19 +143,19 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % for mem_transfer in lp.mem_transfers:
     ${c_ident(loop_idx)}// compute the offset from the top level memory to obtain the correct tile for the transfer
     % if tensor.is_fused and tensor.unsupported_layout:
-    ${c_ident(loop_idx)}int ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size = ${mem_apis.get_size_of_fused_tensor}(ctx,${mem_transfer.tensor.name});
-    ${c_ident(loop_idx)}void* ${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt = ${mem_apis.get_pt_of_fused_tensor}(ctx,${mem_transfer.tensor.name});
+    ${c_ident(loop_idx)}int ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size = ${mem_apis.get_size_of_fused_tensor}(ctx,${name}_${mem_transfer.tensor.name});
+    ${c_ident(loop_idx)}void* ${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt = ${mem_apis.get_pt_of_fused_tensor}(ctx,${name}_${mem_transfer.tensor.name});
     % else:
-    ${c_ident(loop_idx)}int ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size = ${mem_transfer.tensor.c_offset_expr_size_sw_mem(mem_transfer.mem)};
-    ${c_ident(loop_idx)}void* ${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt = ${mem_transfer.tensor.name}->pts[${mem_transfer.top_mem}]+${mem_transfer.tensor.c_offset_expr_sw_mem(mem_transfer.mem)};
+    ${c_ident(loop_idx)}int ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size = ${mem_transfer.tensor.c_offset_expr_size_sw_mem(mem_transfer.mem, name)};
+    ${c_ident(loop_idx)}void* ${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt = ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.top_mem}]+${mem_transfer.tensor.c_offset_expr_sw_mem(mem_transfer.mem, name)};
     % endif
-    ${c_ident(loop_idx)}${mem_transfer.tensor.name}->pts[${mem_transfer.mem}] = ${mem_transfer.mem}_base_pt + ${mem_transfer.mem}_curr_pt_offset;
+    ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}] = ${mem_transfer.mem}_base_pt + ${mem_transfer.mem}_curr_pt_offset;
     ${c_ident(loop_idx)}${mem_transfer.mem}_curr_pt_offset += ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size;
     % if mem_transfer.tensor.tensor_type != "output":
     ${c_ident(loop_idx)}// call API for ${exec_module.name}-specific memory transfer handling
     ${c_ident(loop_idx)}${mem_apis.mem_transfer}(
-        ${c_ident(loop_idx)}ctx,${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt,
-        ${c_ident(loop_idx)}${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
+        ${c_ident(loop_idx)}ctx,${name}_${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt,
+        ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
         ${c_ident(loop_idx)}MATCH_SW_LOAD_TENSOR,MATCH_${"CONST" if mem_transfer.tensor.tensor_type=="const" else "VAR"}_TENSOR,
         ${c_ident(loop_idx)}${mem_transfer.top_mem},${mem_transfer.mem}
     ${c_ident(loop_idx)});
@@ -155,9 +169,9 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % if exec_module.backend_constraints_check(match_node,schedule,block,lp,loop_idx) and block.loop_idx_end_sw_controlled_loads>=loop_idx:
     <% break %>
     % endif 
-    ${c_ident(loop_idx)}for(block_${block_idx}_loop_${lp.name}_set();
-        ${c_ident(loop_idx)}block_${block_idx}_loop_${lp.name}_end();
-        ${c_ident(loop_idx)}block_${block_idx}_loop_${lp.name}_update()){
+    ${c_ident(loop_idx)}for(${name}_block_${block_idx}_loop_${lp.name}_set();
+        ${c_ident(loop_idx)}${name}_block_${block_idx}_loop_${lp.name}_end();
+        ${c_ident(loop_idx)}${name}_block_${block_idx}_loop_${lp.name}_update()){
     % endfor
     
     % if not sync_apis.must_sync_after_load and sync_apis.wait_load!="":
@@ -204,8 +218,8 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % if mem_transfer.tensor.tensor_type == "output":
     ${c_ident(loop_idx_)}// call API for ${exec_module.name}-specific memory transfer handling
     ${c_ident(loop_idx_)}${mem_apis.mem_transfer}(
-        ${c_ident(loop_idx_)}ctx,${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt,
-        ${c_ident(loop_idx_)}${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
+        ${c_ident(loop_idx_)}ctx,${name}_${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt,
+        ${c_ident(loop_idx_)}${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
         ${c_ident(loop_idx_)}MATCH_SW_STORE_TENSOR,MATCH_OUT_TENSOR,
         ${c_ident(loop_idx_)}${mem_transfer.top_mem},${mem_transfer.mem}
     ${c_ident(loop_idx_)});
@@ -234,7 +248,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % endfor
     % for intermediate_tensor in schedule.tensors.values():
     % if intermediate_tensor.tensor_type=="intermediate":
-    ${target.free_fn}(${intermediate_tensor.name}->base_pt);
+    ${target.free_fn}(${name}_${intermediate_tensor.name}->base_pt);
     % endif
     % endfor
     % if platform_apis.free_module!="":

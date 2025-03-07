@@ -3,7 +3,7 @@ class DimDependency:
         self.dependencies = dependencies
     
     def __eq__(self, other):
-        return self.dependencies == other.dependencies
+        return other is not None and self.dependencies == other.dependencies
 
 class MatchDim:
     def __init__(self, name: str="width", size: int=1, is_dynamic: bool=False, dim_dependency: DimDependency=None) -> None:
