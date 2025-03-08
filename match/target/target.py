@@ -2,9 +2,11 @@ from abc import ABC,abstractmethod
 import os
 from pathlib import Path
 import subprocess
+from typing import List
 
 import mako
 from match.opt.generator import ScheduleGenerator
+from match.target.memory_inst import MemoryInst
 import tvm.relay
 from tvm.relay.dataflow_pattern import match as is_pattern_matching
 from match.partition.partitioning_pattern import PartitioningPattern
@@ -12,6 +14,8 @@ from tvm.relay.dataflow_pattern import CallPattern,AttrPattern,AltPattern
 from match.utils import save_codegen_schedule,save_schedule_search_res
 from functools import partial
 import tvm 
+
+import traceback as tb
 
 class PatternResult:
     """Class that stores all the information that may be relevant to cache a result of a node that we want to compile
@@ -282,7 +286,7 @@ class MatchTarget(ABC):
         Returns:
             bool: is this the best pattern supporting this node?
         """
-        print(f"[PATTERN MATCHER] Matched pattern {match_pt.name}, checking additional conditions")
+        print(f"-------------------\n[PATTERN MATCHER] Node matched pattern {match_pt.name}, checking additional conditions")
         # is pattern fully supported?
         # node_add_checks = tvm.relay.transform.InferType()(tvm.ir.IRModule().from_expr(match_pt.pattern().partition(node)))["main"].body.op.body
         node_add_checks = node
@@ -292,8 +296,8 @@ class MatchTarget(ABC):
                 latency,energy=self.evaluate_pattern(node,match_pt)
                 print(f"[PATTERN MATCHER] Node is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}\n")
             except Exception as exc:
-                import traceback as tb
-                print(tb.format_exc())
+                print(tb.format_exc(exc))
+                print(f"[PATTERN MATCHER] Node failed to be evaluated with pattern {match_pt.name}")
                 return False
             # check all the patterns that are after me
             for other_pt in self.match_patterns[match_pt.idx+1:]:
@@ -302,19 +306,30 @@ class MatchTarget(ABC):
                 # if pattern is fully matching get results
                 # node_add_checks = tvm.relay.transform.InferType()(tvm.ir.IRModule().from_expr(other_pt.pattern().partition(node)))["main"].body.op.body
                 node_add_checks = node
-                if is_pattern_matching(other_pt.pattern(),node) and other_pt.additional_checks(node_add_checks):
-                    try:
-                        other_pt_latency,other_pt_energy=self.evaluate_pattern(node,other_pt)
-                        print(f"[PATTERN MATCHER] Node is also supported by {other_pt.name} with expected latency {other_pt_latency} and expected energy {other_pt_energy}\n")
-                    except Exception as exc:
-                        continue
-                    # if the result gathered by this other matching pattern is better break all
-                    # this is due to the fact that this pattern will be matched later and finally
-                    # the best pattern will return True
-                    if self.is_better_result(latency,energy,other_pt_latency,other_pt_energy):
-                        return False
+                if is_pattern_matching(other_pt.pattern(),node):
+                    print(f"[PATTERN MATCHER] Node matched pattern {match_pt.name}, checking additional conditions")
+                    if other_pt.additional_checks(node_add_checks):
+                        try:
+                            other_pt_latency,other_pt_energy=self.evaluate_pattern(node,other_pt)
+                            print(f"[PATTERN MATCHER] Node is also supported by {other_pt.name} with expected latency {other_pt_latency} and expected energy {other_pt_energy}\n")
+                        except Exception as exc:
+                            print(tb.format_exc(exc))
+                            print(f"[PATTERN MATCHER] Node failed to be evaluated with pattern {other_pt.name}")
+                            continue
+                        # if the result gathered by this other matching pattern is better break all
+                        # this is due to the fact that this pattern will be matched later and finally
+                        # the best pattern will return True
+                        if self.is_better_result(latency,energy,other_pt_latency,other_pt_energy):
+                            print(f"[PATTERN MATCHER] Pattern {other_pt.name} is expected to be better for this node than {match_pt.name}, refusing current pattern")
+                            return False
+                        else:
+                            print(f"[PATTERN MATCHER] Pattern {match_pt.name} is expected to be better for this node than {other_pt.name}, checking remaining patterns")
+                    else:
+                        print(f"[PATTERN MATCHER] Matched pattern {other_pt.name} didnt satisfy the additional conditions")
             # best fully supported pattern for these set of nodes
             return True
+        else:
+            print(f"[PATTERN MATCHER] Matched pattern {match_pt.name} didnt satisfy the additional conditions")
         return False
     
     def sort_match_patterns(self):
@@ -351,6 +366,23 @@ class MatchTarget(ABC):
             for m_pt in self.match_patterns
             if m_pt.exec_module.name not in self.disabled_exec_modules
         ]
+
+    @property
+    def host_memory(self):
+        host_mem = ""
+        host_exec_mem = []
+        for exec_module in self.exec_modules:
+            exec_module_mems: List[MemoryInst] = exec_module.get_all_memories()
+            for exec_mem in exec_module_mems[::-1]:
+                if not exec_mem.external:
+                    host_exec_mem.append(exec_mem.name)
+                    break
+        if len(host_exec_mem)==0:
+            return "default_mem"
+        if len(host_exec_mem)==1:
+            return host_exec_mem[0]
+        else:
+            return sorted(set(host_exec_mem), key=host_exec_mem.count, reverse=True)[0]
 
     def adjust_network(self,opts):
         pipeline=[]

@@ -59,13 +59,16 @@ inline void ${name}_update_${dep_dim.name}(){
     ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else name+"_"+ind_dim.name+"->global_idx"})
     % endfor
     ;
-}
-inline void ${name}_set_${dep_dim.name}(){
-    ${name}_${dep_dim.name}->curr_size = 
+    ${name}_${dep_dim.name}->curr_max_size = 
     % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.dependencies.items()):
     ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else name+"_"+ind_dim.name+"->curr_size"})
     % endfor
     ;
+    // if ${dep_dim.name} goes behind 0 it means there was padding so that shouldnt count for the size
+    // same if it goes over the real size
+    int max_size = (${name}_${dep_dim.name}->global_idx + ${name}_${dep_dim.name}->curr_size) - ${name}_${dep_dim.name}->size;
+    int min_size = -${name}_${dep_dim.name}->global_idx;
+    ${name}_${dep_dim.name}->curr_size = ${name}_${dep_dim.name}->curr_max_size - ((max_size>0?max_size:0) + (min_size>0?min_size:0));
 }
 % endfor
 
@@ -77,16 +80,15 @@ extern int ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter;
 
 inline void ${name}_block_${block_idx}_loop_${lp.name}_set(){
     ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
-    ${name}_${lp.dim.name}->curr_size = ${lp.step*lp.size};
+    ${name}_${lp.dim.name}->curr_size = ${lp.step};
     % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
-    ${name}_set_${dep_dim}();
+    ${name}_update_${dep_dim}();
     % endfor
 }
 inline int ${name}_block_${block_idx}_loop_${lp.name}_reset(){
     // ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
     ${name}_${lp.dim.name}->global_idx -= ${lp.step*lp.size};
     % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
-    ${name}_set_${dep_dim}();
     ${name}_update_${dep_dim}();
     % endfor
     return 0;

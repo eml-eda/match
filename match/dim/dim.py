@@ -14,6 +14,26 @@ class MatchDim:
         self.dim_dependency = dim_dependency
     
     @property
+    def start_idx(self):
+        if self.dim_dependency is None:
+            return 0
+        else:
+            start_idx = 0
+            for ind_dim,mult in self.dim_dependency.dependencies.items():
+                start_idx += (mult*(ind_dim if not hasattr(ind_dim,"name") else 0))
+            return int(start_idx)
+
+    @property
+    def max_size(self):
+        if self.dim_dependency is None:
+            return self.size
+        else:
+            max_size = 0
+            for ind_dim,mult in self.dim_dependency.dependencies.items():
+                max_size += (mult*(ind_dim if not hasattr(ind_dim,"name") else ind_dim.size))
+            return int(max_size)
+        
+    @property
     def is_independent(self):
         return self.dim_dependency is None
     
@@ -24,7 +44,8 @@ class MatchDim:
         return self.name == other.name and self.size == other.size and self.is_dynamic == other.is_dynamic and self.dim_dependency == other.dim_dependency
     
 class MatchTiledDim:
-    def __init__(self,dim: MatchDim=MatchDim(),size: int=1) -> None:
+    def __init__(self,dim: MatchDim=MatchDim(), size: int=1, max_size: int=1) -> None:
         self.dim = dim
         self.name = dim.name
         self.size = size
+        self.max_size = max_size

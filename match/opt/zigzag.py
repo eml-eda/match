@@ -548,18 +548,15 @@ class ZigZagEngine(ScheduleEngine):
         memories = self.exec_module.get_all_memories()
         for tensor in self.schedule.tensors.values():
             self.schedule.tensor_tiles[tensor.name] = [MatchTensorTile(tensor=tensor,
-                                            tiled_dims=[MatchTiledDim(dim=dim,size=dim.size) for dim in tensor.dims]) for mem in mem_hierarchy_dict]
+                                            tiled_dims=[MatchTiledDim(dim=dim, size=dim.size, max_size=dim.max_size) for dim in tensor.dims]) for mem in mem_hierarchy_dict]
             t_type = "out" if tensor.tensor_type=="output" else "const" if tensor.tensor_type=="const" else "var"
             if t_type=="const" and tensor!=self.w_tensor:
                 continue
             for mem_idx,mem_inst in enumerate(memories):
-                # if mem_inst.name=="L1_SCRATCHPAD" and t_type=="out":
-                #     breakpoint()
                 # is a memory of the tensor and its not the top memory so we can get the tiling size of it
                 if mem_inst.name in [mem_inst_.name for mem_inst_ in mem_hierarchy[t_type]] and mem_inst.name!=mem_hierarchy[t_type][-1].name:
                     steps = {dim.name:dim.size for dim in self.match_node.dims.values()}
                     for loop in self.schedule.blocks[0].loops:
-                        steps[loop.dim.name] = loop.step
                         if any([mem_trans.tensor==tensor and mem_trans.mem==mem_inst.name for mem_trans in loop.mem_transfers]):
                             for dim_idx,dim in enumerate(tensor.dims):
                                 if dim.dim_dependency:
@@ -567,6 +564,11 @@ class ZigZagEngine(ScheduleEngine):
                                     for ind_dim,mult in dim.dim_dependency.dependencies.items():
                                         new_size += (mult*(ind_dim if not hasattr(ind_dim,"name") else steps[ind_dim.name]))
                                     new_size = int(new_size)
+                                    self.schedule.tensor_tiles[tensor.name][mem_idx].tiled_dims[dim_idx].max_size = new_size
+                                    if new_size>dim.size:
+                                        new_size = dim.size
                                     self.schedule.tensor_tiles[tensor.name][mem_idx].tiled_dims[dim_idx].size = new_size
                                 else:
                                     self.schedule.tensor_tiles[tensor.name][mem_idx].tiled_dims[dim_idx].size = int(steps[dim.name])
+                                    self.schedule.tensor_tiles[tensor.name][mem_idx].tiled_dims[dim_idx].max_size = int(steps[dim.name])
+                        steps[loop.dim.name] = loop.step

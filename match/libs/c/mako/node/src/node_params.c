@@ -11,8 +11,9 @@ MatchDim ${name}_dims_[${len(match_node.dims)}] = {
     ${", " if idx>0 else ""}(MatchDim){
         .size = ${dim.size},
         .dynamic = 0,//${int(dim.is_dynamic)},
-        .global_idx = 0,
-        .curr_size = 0,
+        .global_idx = ${dim.start_idx},
+        .curr_size = ${dim.size},
+        .curr_max_size = ${dim.max_size}
     }
 % endfor
 };
@@ -38,7 +39,8 @@ MatchTensorTile ${name}_${t_tensor_name}_tiles_[${len(t_tensor_tiles)*t_tensor_t
     ${", " if (idx_mem_tile_dim+idx_mem_tile)>0 else ""}(MatchTensorTile){
         .dim = &(${name}_dims_[${list(match_node.dims.keys()).index(tiled_dim.dim.name)}]),
         .size = ${tiled_dim.size},
-        .start_idx = 0
+        .max_size = ${tiled_dim.max_size},
+        .start_idx = ${tiled_dim.dim.start_idx}
     }
     % endfor
     % endfor

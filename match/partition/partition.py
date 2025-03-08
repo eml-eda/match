@@ -99,7 +99,7 @@ def partition(mod, params, dpu, opts):
         try:
             fused = seq(mod)
             return fused
-        except Exception as err:
+        except Exception as exc:
             raise Exception(
-                "Error converting layout to {0}".format(str(err))
+                "[PARTITION] Error converting layout to {0}".format(str(exc))
             )

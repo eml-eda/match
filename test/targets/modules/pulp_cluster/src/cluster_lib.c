@@ -69,17 +69,16 @@ void handle_dma_transfer(
     if(!tensor->num_dims) return;
 
     #ifdef CLUSTER_LIB_DEBUG
-    printf("Handle transfer params ctx %d tensor %d tensor l2 pt %d tensor l1 pt %d transfer type %d tensor type %d ext mem %d int mem %d\n",
-        ctx, tensor, tensor_l2_pt, tensor_l1_pt, match_transfer_type, match_tensor_type, ext_mem, int_mem);
-    printf("Transferring tensor from %d to %d, num dims %d tiles addr %d sizes:\n(", tensor_l2_pt, tensor_l1_pt, tensor->num_dims, tensor->tiles);
-    for(int idx=0; idx<tensor->num_dims; idx++) printf(" [L2: %d L1: %d]", tensor->tiles[L2_SHARED_MEM*2+idx].size, tensor->tiles[L1_SCRATCHPAD*2+idx].size);
+    printf("Handle transfer params tensor l2 pt %d tensor l1 pt %d transfer type %d tensor type %d ext mem %d int mem %d\n",
+        tensor_l2_pt, tensor_l1_pt, match_transfer_type, match_tensor_type, ext_mem, int_mem);
+    for(int idx=0; idx<tensor->num_dims; idx++) printf(" [L2: %d L1: %d]", tensor->tiles[L2_SHARED_MEM*tensor->num_dims+idx].size, tensor->tiles[L1_SCRATCHPAD*tensor->num_dims+idx].size);
     printf("\n");
     #endif
     
     switch(tensor->num_dims){
         case 1:
             #ifdef CLUSTER_LIB_DEBUG
-            printf("1D transfer --> moving %d bytes from %d to %d\n", tensor->tiles[L1_SCRATCHPAD*1+0].size*tensor->bits/8, tensor_l2_pt, tensor_l1_pt);
+            printf("1D transfer prec %d bytes\n", tensor->bits/8);
             #endif
             dma_transfer_1d_async((DmaTransferConf) {
                 .ext = tensor_l2_pt,
@@ -90,10 +89,10 @@ void handle_dma_transfer(
             break;
         case 2:
             #ifdef CLUSTER_LIB_DEBUG
-            printf("2D transfer 1D %d --> moving %d bytes from %d to %d\n", 
-                tensor->tiles[L2_SHARED_MEM*2+1].size==tensor->tiles[L1_SCRATCHPAD*2+1].size, 
-                tensor->tiles[L1_SCRATCHPAD*2+0].size*tensor->tiles[L1_SCRATCHPAD*2+1].size*tensor->bits/8,
-                tensor_l2_pt, tensor_l1_pt);
+            printf("2D transfer 1D %d prec %d bytes\n", 
+                tensor->tiles[L2_SHARED_MEM*2+1].size==tensor->tiles[L1_SCRATCHPAD*2+1].size,
+                tensor->bits/8
+            );
             #endif
             // check if we can do a 1D transfer
             if(tensor->tiles[L2_SHARED_MEM*2+1].size==tensor->tiles[L1_SCRATCHPAD*2+1].size)
@@ -115,6 +114,14 @@ void handle_dma_transfer(
                 });
             break;
         case 3:
+            #ifdef CLUSTER_LIB_DEBUG
+            printf("3D transfer 1D %d 2D %d prec %d bytes\n", 
+                tensor->tiles[L2_SHARED_MEM*3+1].size==tensor->tiles[L1_SCRATCHPAD*3+1].size
+                && tensor->tiles[L2_SHARED_MEM*3+2].size==tensor->tiles[L1_SCRATCHPAD*3+2].size,
+                tensor->tiles[L2_SHARED_MEM*3+2].size==tensor->tiles[L1_SCRATCHPAD*3+2].size,
+                tensor->bits/8
+            );
+            #endif
             // check if we can do a 1D transfer
             if(tensor->tiles[L2_SHARED_MEM*3+1].size==tensor->tiles[L1_SCRATCHPAD*3+1].size
                 && tensor->tiles[L2_SHARED_MEM*3+2].size==tensor->tiles[L1_SCRATCHPAD*3+2].size)
@@ -151,6 +158,17 @@ void handle_dma_transfer(
                 });
             break;
         case 4:
+            #ifdef CLUSTER_LIB_DEBUG
+            printf("4D transfer HWC_TO_CHW %d 1D %d 2D %d prec %d bytes\n", 
+                ctx->pattern_name==depthwise_conv2d && match_tensor_type==MATCH_VAR_TENSOR,
+                tensor->tiles[L2_SHARED_MEM*4+1].size==tensor->tiles[L1_SCRATCHPAD*4+1].size
+                && tensor->tiles[L2_SHARED_MEM*4+2].size==tensor->tiles[L1_SCRATCHPAD*4+2].size
+                && tensor->tiles[L2_SHARED_MEM*4+3].size==tensor->tiles[L1_SCRATCHPAD*4+3].size,
+                tensor->tiles[L2_SHARED_MEM*4+2].size==tensor->tiles[L1_SCRATCHPAD*4+2].size
+                && tensor->tiles[L2_SHARED_MEM*4+3].size==tensor->tiles[L1_SCRATCHPAD*4+3].size,
+                tensor->bits/8
+            );
+            #endif
             // check if depthwise conv2d and activations
             if(ctx->pattern_name==depthwise_conv2d && match_tensor_type==MATCH_VAR_TENSOR)
                 dma_transfer_hwc_to_chw((DmaTransferConf) {
@@ -198,11 +216,11 @@ void handle_dma_transfer(
             else
                 for(int idx=0; idx<tensor->tiles[L1_SCRATCHPAD*4+0].size; idx++)
                     dma_transfer_3d_async((DmaTransferConf) {
-                        .ext = tensor_l2_pt + tensor->tiles[L2_SHARED_MEM*4+1].size*
+                        .ext = tensor_l2_pt + idx*tensor->tiles[L2_SHARED_MEM*4+1].size*
                                     tensor->tiles[L2_SHARED_MEM*4+2].size*
                                     tensor->tiles[L2_SHARED_MEM*4+3].size*
                                     tensor->bits/8,
-                        .loc = tensor_l1_pt + tensor->tiles[L1_SCRATCHPAD*4+1].size*
+                        .loc = tensor_l1_pt + idx*tensor->tiles[L1_SCRATCHPAD*4+1].size*
                                     tensor->tiles[L1_SCRATCHPAD*4+2].size*
                                     tensor->tiles[L1_SCRATCHPAD*4+3].size*
                                     tensor->bits/8,
@@ -219,6 +237,9 @@ void handle_dma_transfer(
                     });
             break;
     }
+    #ifdef CLUSTER_LIB_DEBUG
+    printf("\n");
+    #endif
 }
 
 void wait_l1_dma_transfers(MatchCtx* ctx){
@@ -288,8 +309,7 @@ void pulp_nn_dw_conv2d_wrapper(void* args){
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
-    MatchRightShiftAttrs* r_shift_attrs = (MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs;
-    int right_shift = r_shift_attrs->right_shift;
+    int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
     // out
     int out_width = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+2].size; // out width
@@ -300,16 +320,15 @@ void pulp_nn_dw_conv2d_wrapper(void* args){
     int inp_height = tensors[0].tiles[L1_SCRATCHPAD*4+1].size; // out height
     int inp_ch = tensors[0].tiles[L1_SCRATCHPAD*4+3].size; // out ch
     // pad
-    int pad_top = conv_attrs->padding[0]-tensors[0].tiles[L1_SCRATCHPAD*4+1].start_idx;
-    pad_top = pad_top>0?pad_top:0;
-    int pad_bottom = tensors[0].tiles[L1_SCRATCHPAD*4+1].dim->size-
-        (tensors[0].tiles[L1_SCRATCHPAD*4+1].size+tensors[0].tiles[L1_SCRATCHPAD*4+1].start_idx);
-    pad_bottom = pad_bottom<0?-pad_bottom:0;
-    int pad_left = conv_attrs->padding[1]-tensors[0].tiles[L1_SCRATCHPAD*4+2].start_idx;
-    pad_left = pad_left>0?pad_left:0;
-    int pad_right = tensors[0].tiles[L1_SCRATCHPAD*4+2].dim->size-
-        (tensors[0].tiles[L1_SCRATCHPAD*4+2].size+tensors[0].tiles[L1_SCRATCHPAD*4+2].start_idx);
-    pad_right = pad_right<0?-pad_right:0;
+    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    #ifdef CLUSTER_LIB_DEBUG
+    if(pi_core_id()==0)
+        printf("Out tile [%d %d %d] Inp tile [%d %d %d] pad ^ %d v %d < %d > %d\n", out_ch, out_height, out_width, inp_ch, inp_height, inp_width,
+            pad_top, pad_bottom, pad_left, pad_right);
+    #endif
     pulp_nn_depthwise_generic(
         // activations pt  
         tensors[0].pts[L1_SCRATCHPAD], // acts pt
@@ -350,8 +369,7 @@ void pulp_nn_pw_conv2d_wrapper(void* args){
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
-    MatchRightShiftAttrs* r_shift_attrs = (MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs;
-    int right_shift = r_shift_attrs->right_shift;
+    int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
     // out
     int out_width = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+2].size; // out width
@@ -362,16 +380,15 @@ void pulp_nn_pw_conv2d_wrapper(void* args){
     int inp_height = tensors[0].tiles[L1_SCRATCHPAD*4+1].size; // out height
     int inp_ch = tensors[0].tiles[L1_SCRATCHPAD*4+3].size; // out ch
     // pad
-    int pad_top = conv_attrs->padding[0]-tensors[0].tiles[L1_SCRATCHPAD*4+1].start_idx;
-    pad_top = pad_top>0?pad_top:0;
-    int pad_bottom = tensors[0].tiles[L1_SCRATCHPAD*4+1].dim->size-
-        (tensors[0].tiles[L1_SCRATCHPAD*4+1].size+tensors[0].tiles[L1_SCRATCHPAD*4+1].start_idx);
-    pad_bottom = pad_bottom<0?-pad_bottom:0;
-    int pad_left = conv_attrs->padding[1]-tensors[0].tiles[L1_SCRATCHPAD*4+2].start_idx;
-    pad_left = pad_left>0?pad_left:0;
-    int pad_right = tensors[0].tiles[L1_SCRATCHPAD*4+2].dim->size-
-        (tensors[0].tiles[L1_SCRATCHPAD*4+2].size+tensors[0].tiles[L1_SCRATCHPAD*4+2].start_idx);
-    pad_right = pad_right<0?-pad_right:0;
+    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    #ifdef CLUSTER_LIB_DEBUG
+    if(pi_core_id()==0)
+        printf("Out tile [%d %d %d] Inp tile [%d %d %d] pad ^ %d v %d < %d > %d\n", out_ch, out_height, out_width, inp_ch, inp_height, inp_width,
+            pad_top, pad_bottom, pad_left, pad_right);
+    #endif
     pulp_nn_pointwise_HoWo_parallel(
         // activations pt  
         tensors[0].pts[L1_SCRATCHPAD], // acts pt
@@ -411,8 +428,7 @@ void pulp_nn_hoparallel_conv2d_wrapper(void* args){
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
-    MatchRightShiftAttrs* r_shift_attrs = (MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs;
-    int right_shift = r_shift_attrs->right_shift;
+    int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
     // out
     int out_width = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+2].size; // out width
@@ -423,16 +439,15 @@ void pulp_nn_hoparallel_conv2d_wrapper(void* args){
     int inp_height = tensors[0].tiles[L1_SCRATCHPAD*4+1].size; // out height
     int inp_ch = tensors[0].tiles[L1_SCRATCHPAD*4+3].size; // out ch
     // pad
-    int pad_top = conv_attrs->padding[0]-tensors[0].tiles[L1_SCRATCHPAD*4+1].start_idx;
-    pad_top = pad_top>0?pad_top:0;
-    int pad_bottom = tensors[0].tiles[L1_SCRATCHPAD*4+1].dim->size-
-        (tensors[0].tiles[L1_SCRATCHPAD*4+1].size+tensors[0].tiles[L1_SCRATCHPAD*4+1].start_idx);
-    pad_bottom = pad_bottom<0?-pad_bottom:0;
-    int pad_left = conv_attrs->padding[1]-tensors[0].tiles[L1_SCRATCHPAD*4+2].start_idx;
-    pad_left = pad_left>0?pad_left:0;
-    int pad_right = tensors[0].tiles[L1_SCRATCHPAD*4+2].dim->size-
-        (tensors[0].tiles[L1_SCRATCHPAD*4+2].size+tensors[0].tiles[L1_SCRATCHPAD*4+2].start_idx);
-    pad_right = pad_right<0?-pad_right:0;
+    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    #ifdef CLUSTER_LIB_DEBUG
+    if(pi_core_id()==0)
+        printf("Out tile [%d %d %d] Inp tile [%d %d %d] pad ^ %d v %d < %d > %d\n", out_ch, out_height, out_width, inp_ch, inp_height, inp_width,
+            pad_top, pad_bottom, pad_left, pad_right);
+    #endif
     pulp_nn_conv_Ho_parallel(
         // activations pt  
         tensors[0].pts[L1_SCRATCHPAD], // acts pt

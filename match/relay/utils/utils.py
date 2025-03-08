@@ -218,7 +218,7 @@ def relay_add_uint8_requant(input_tensor_a: relay.Var,
     return x
 
 
-def create_random_array(shape: Tuple[int, ...], dtype: str) -> tvm.nd.array:
+def create_random_array(shape: Tuple[int, ...], dtype: str, min_val=None, max_val=None) -> tvm.nd.array:
     """
     Generate random interger weights with numpy and converts them to a TVMArray with requested dtype.
     :param shape: tuple of ints that indicates size of array
@@ -231,8 +231,14 @@ def create_random_array(shape: Tuple[int, ...], dtype: str) -> tvm.nd.array:
     """
     def get_dtype_range():
         try:
-            dtype_min = np.iinfo(dtype).min
-            dtype_max = np.iinfo(dtype).max
+            if min_val is not None and isinstance(min_val, (float,int)):
+                dtype_min = min_val
+            else:
+                dtype_min = np.iinfo(dtype).min
+            if max_val is not None and isinstance(max_val, (float,int)):
+                dtype_max = max_val
+            else:
+                dtype_max = np.iinfo(dtype).max
         except ValueError:
             range_map = {
                 "int4": (-8, 7),
@@ -249,6 +255,7 @@ def create_random_array(shape: Tuple[int, ...], dtype: str) -> tvm.nd.array:
     np_dtype = dtype
     if dtype in ['int4', 'int2']:
         np_dtype = 'int8'
+    shape = [int(i) for i in shape]
     np_array = np.random.randint(low=dtype_min, high=dtype_max+1,
                                  size=shape, dtype=np_dtype)
     return numpy_to_array(np_array, dtype)

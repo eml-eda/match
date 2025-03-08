@@ -44,7 +44,8 @@ class MemoryInst:
                  r_bw:int=32,w_bw:int=32,r_ports:int=0,w_ports:int=0,rw_ports:int=1,
                  operands:List[str]=[],double_buffering_support:bool=False,
                  sw_controlled:bool=False,page_size:int=1,
-                 buffer_for_layer_func:Callable=no_buffer,used_ports:Dict[str,Tuple[PortConnection]]={}):
+                 buffer_for_layer_func:Callable=no_buffer,used_ports:Dict[str,Tuple[PortConnection]]={},
+                 external:bool=False):
         """_summary_
 
         Args:
@@ -61,6 +62,7 @@ class MemoryInst:
             used_ports (Dict[str,Tuple[PortConnection]], optional): Optional parameter to manually define the connection of the memory. Defaults to {}.
         """
         # added
+        self.external = external
         self.page_size=page_size
         self.sw_controlled=sw_controlled
         # original

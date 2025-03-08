@@ -40,7 +40,7 @@ class TemplateWriter:
         self.template_data["memory_hierarchy"]=self.exec_module.mem_hierarchy
         self.template_data["match_node"]=self.match_node
         self.template_data["mod"] = self.mod
-        self.template_data["model_name"] = "_".join(self.mod.attrs.global_symbol.split("_")[1:-2])
+        self.template_data["model_name"] = "_".join(self.mod.attrs.global_symbol.split("_")[1:-3])
         self.template_data["node_name"] = "_".join(self.mod.attrs.global_symbol.split("_")[-2:])
         self.template_data["name"] = self.template_data["node_name"]
         self.template_data["fullname"] = self.mod.attrs.global_symbol
@@ -54,6 +54,23 @@ class TemplateWriter:
         self.template_data["platform_apis"] = self.exec_module.match_platform_apis(self.pattern_name)
         self.template_data["comp_apis"] = self.exec_module.match_comp_apis(self.pattern_name)
         self.template_data["executor"] = get_executor()
+
+        last_transfer_of_tensor_block = {(tensor.name,block_idx):\
+                                         (0, self.exec_module.mem_hierarchy[tensor.tensor_type if tensor.tensor_type!="output" else "out"][-1].name)\
+                                            for tensor in self.schedule.tensors.values() for block_idx in range(len(self.schedule.blocks))}
+        unique_tile_counter = {tensor: 0 for tensor in self.schedule.tensors}
+
+        def add_tile_to_tensor_at_block_and_loop_(tensor_name, block_idx, loop_idx, mem_name):
+            unique_tile_counter[tensor_name] += 1
+            last_transfer_of_tensor_block[(tensor_name, block_idx)] = (loop_idx, mem_name)
+
+        def free_transfer_unique_tile_(tensor_name):
+            unique_tile_counter[tensor_name] -= 1
+
+        self.template_data["c_unique_num_tile"] = lambda tensor_name:"" * unique_tile_counter[tensor_name]
+        self.template_data["last_transfer_of_tensor_block"] = last_transfer_of_tensor_block
+        self.template_data["free_transfer_unique_tile"] = free_transfer_unique_tile_
+        self.template_data["add_tile_to_tensor_at_block_and_loop"] = add_tile_to_tensor_at_block_and_loop_
         # update schedule params...
         self.schedule.update_exprs_with_node_name(self.template_data["name"])
 
@@ -70,6 +87,7 @@ class TemplateWriter:
         Path(out_path+"/include/"+node_path).mkdir(parents=True,exist_ok=True)
         print(f"[TEMPLATE WRITER] Generating node {self.template_data['node_name']}")
         node_code = "#include <stdio.h>\n"
+        # breakpoint()
         for base_dir in ["src", "include", "metadata"]:
             template_dir = os.path.dirname(__file__) + "/../libs/c/mako/node/" + base_dir
             node_base_path = "" if base_dir=="metadata" else base_dir+"/"+node_path

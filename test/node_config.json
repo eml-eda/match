@@ -1,0 +1,13 @@
+{
+    "strides":[2,2],
+    "padding":[2,2,2,2],
+    "fil_shape":[5,5],
+    "inp_shape":[80,80],
+    "inp_ch":1,
+    "out_ch":32,
+    "right_shift":13,
+    "inp_features":16,
+    "out_features":8,
+    "activation":true,
+    "requant_pattern":true
+}

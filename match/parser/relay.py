@@ -255,7 +255,7 @@ class MatchRelayParser(MatchTVMParser):
             attrs.out_layout if attrs.out_layout != "" else attrs.data_layout, oshape, [None,None,None,None]
         )
         # manage dimensions dependencies
-        if strides[0]!=1 or dilations[0]!=1:
+        if strides[0]!=1 or dilations[0]!=1 or w_ksh!=1 or padding[0]!=0:
             o_h_dim = MatchDim(name=name+"_out_h",size=o_h)
             self.node_all_dims[o_h_dim.name] = o_h_dim
             if i_h_dim.name==i_h_dim.original_name:
@@ -264,7 +264,7 @@ class MatchRelayParser(MatchTVMParser):
                 self.node_all_dims[i_h_dim.name].dependencies = DimDependency(dependencies={w_cout_dim:strides[0],w_ksh_dim:dilations[0],padding[0]:-1})
         else:
             o_h_dim = i_h_dim
-        if strides[1]!=1 or dilations[1]!=1:
+        if strides[1]!=1 or dilations[1]!=1 or w_ksw!=1 or padding[1]!=0:
             o_w_dim = MatchDim(name=name+"_out_w",size=o_w)
             self.node_all_dims[o_w_dim.name] = o_w_dim
             if i_w_dim.name==i_w_dim.original_name:
@@ -330,7 +330,7 @@ class MatchRelayParser(MatchTVMParser):
             attrs.out_layout if attrs.out_layout != "" else attrs.data_layout, oshape, [None,None,None,None]
         )
         # manage dimensions dependencies
-        if strides[0]!=1 or dilations[0]!=1:
+        if strides[0]!=1 or dilations[0]!=1 or padding[0]!=0 or w_kernel!=1:
             o_spatial_dim = MatchDim(name=name+"_out_spatial",size=o_spatial)
             self.node_all_dims[o_spatial_dim.name] = o_spatial_dim
             if i_spatial_dim.name==i_spatial_dim.original_name:

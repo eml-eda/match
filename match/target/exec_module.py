@@ -134,7 +134,7 @@ class ExecModule(ABC):
         self.src_path=src_path
         self.inc_path=inc_path
         self.module_options=dict()
-        self.backend = "MATCH"
+        self.backend = "ZigZag"
 
     def backend_constraints_check(self,match_node,schedule,block,lp,lp_idx):
         # if any([mt.sw_controlled for mt in lp.mem_transfers]):

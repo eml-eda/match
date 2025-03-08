@@ -25,6 +25,7 @@ typedef struct{
     int size;
     int dynamic;
     int curr_size;
+    int curr_max_size;
     int global_idx;
 }MatchDim;
 
@@ -39,6 +40,7 @@ typedef struct MatchDims_t{
 typedef struct{
     MatchDim* dim;
     int size;
+    int max_size;
     int start_idx;
 }MatchTensorTile;
 
@@ -154,5 +156,13 @@ int default_match_ctx_get_op_idx(struct MatchOps_t *self,const char *name);
 MatchDim* default_match_ctx_get_dim(struct MatchDims_t *self,const char *name);
 
 int default_match_ctx_get_dim_idx(struct MatchDims_t *self,const char *name);
+
+inline int match_get_pad_x_of_tile(MatchTensorTile* tile){
+    return -tile->start_idx>0?-tile->start_idx:0;
+}
+
+inline int match_get_pad_y_of_tile(MatchTensorTile* tile){
+    return tile->dim->size-(tile->dim->curr_max_size+tile->start_idx)<0?-(tile->dim->size-(tile->dim->curr_max_size+tile->start_idx)):0;
+}
 
 #endif

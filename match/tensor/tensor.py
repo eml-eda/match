@@ -37,13 +37,14 @@ class MatchTensor:
             return "0"
         return " + ".join(dims_expr)
     
-    def c_offset_expr_sw_mem(self, mem, node_name):
+    def c_offset_expr_sw_mem(self, mem, schedule, block_idx, loop_idx, node_name):
         dims_expr = []
+        lps_dims = [lp.dim for lp in schedule.blocks[block_idx].loops[:loop_idx]]
         for idx,dim in enumerate(self.dims):
-            global_idx = f"({node_name}_{dim.name}->global_idx - {node_name}_{self.name}_tiles_[{mem}*{self.num_dims}+{idx}].start_idx)"
-            sizes_ = [f"{node_name}_{self.name}_tiles_[{mem}*{self.num_dims}+{inner_idx+idx}].size" for inner_idx,inner_dim in enumerate(self.dims[idx+1:]) if inner_dim.size > 1]
-            if dim.size > 1:
-                if sizes_:
+            if dim.size>1 and ((dim in lps_dims) or (dim.dim_dependency is not None and any([dim_ in dim.dim_dependency.dependencies for dim_ in lps_dims]))):
+                global_idx = f"({node_name}_{dim.name}->global_idx - {node_name}_{self.name}_tiles_[{mem}*{self.num_dims}+{idx}].start_idx)"
+                sizes_ = [f"{node_name}_{self.name}_tiles_[{mem}*{self.num_dims}+{inner_idx+idx+1}].size" for inner_idx,inner_dim in enumerate(self.dims[idx+1:]) if inner_dim.size > 1]
+                if len(sizes_)>0:
                     if self.bits!=8:
                         sizes_.append(f"{self.bits/8}")
                     dims_expr.append(f"{global_idx} * {' * '.join(sizes_)}")

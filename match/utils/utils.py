@@ -42,12 +42,17 @@ def c_friendly_npvalue(arr):
     else:
         return str(arr)
 
-def get_random_np_array(dtype, shape):
+def get_random_np_array(dtype, shape, min_val=None, max_val=None):
+    shape = [int(i) for i in shape]
     if np.issubdtype(dtype, np.floating):
+        if min_val is not None and max_val is not None:
+            return (max_val - min_val) * np.random.rand(*shape).astype(dtype) + min_val
         return np.random.rand(*shape).astype(dtype)
     elif np.issubdtype(dtype, np.integer):
         info = np.iinfo(dtype)
-        return np.random.randint(info.min, info.max, size=shape, dtype=dtype)
+        return np.random.randint(info.min if min_val is None or not isinstance(min_val,float) else min_val,
+                                 info.max if max_val is None or not isinstance(max_val,float) else max_val,
+                                    size=shape, dtype=dtype)
     else:
         raise ValueError(f"Unsupported dtype: {dtype}")
 
