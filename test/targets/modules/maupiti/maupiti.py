@@ -1,17 +1,11 @@
 import os
-from typing import Dict, List
-import match
-from match.model.model import MatchModel
-from match.cost_model.zigzag import ZigZagMatchCostModel
+from typing import List
 from match.target.exec_module import ComputationalApis, ExecModule
 from patterns import maupiti_patterns
 from transform import maupiti_adjust_network, maupiti_network_transformations
 from match.target.memory_inst import MemoryInst
-from match.target.target import MatchTarget
 import tvm
-from pathlib import Path
 import numpy as np
-from typing import Dict
 
 
 class MaupitiKernels(ExecModule):
@@ -109,47 +103,3 @@ class MaupitiKernels(ExecModule):
             "shape":f"[{np.ceil(arguments.shape[0])}]",
             "single_costants":single_constants,
         }
-
-
-DEFAULT_MATCH_LIB = True
-
-
-class MaupitiTarget(MatchTarget):
-    def __init__(self):
-        super(MaupitiTarget, self).__init__(
-            [
-                MaupitiKernels(),
-            ],
-            name="maupiti",
-        )
-        # set here makefile path and others if needed
-        if not DEFAULT_MATCH_LIB:
-            self.makefile_path = ""
-            self.main_template_path = ""
-        self.static_mem_plan = False
-        self.cpu_type = "riscv"
-        self.input_macros = ""
-        self.include_list = ["maupiti"]
-    
-
-
-MAUPITI_RUN_CONV = False
-
-
-def run_model(output_path, fname=None):
-
-    target = MaupitiTarget()
-    match.match(
-        model=MatchModel(filename=fname,model_type="onnx",golden_cpu_model=False),
-        target=target,
-        output_path=output_path,
-    )
-
-
-if __name__ == "__main__":
-    import onnx
-
-    ONNX_FILENAME = "examples/integerized_conv.onnx"
-    onnx_model = onnx.load(ONNX_FILENAME)
-
-    run_model(fname=ONNX_FILENAME, output_path=str(Path(os.path.dirname(__file__)+"/model_build").absolute()))

@@ -193,9 +193,9 @@ def save_schedule_search_res(name,latency,energy,schedule,node):
 #                     \n{schedule}\nhas expected latency {latency} and energy {energy}\n")
 
 def save_all_schedules():
-    with open(f"{get_output_path()}/match_schedules.log","w") as scheds_file:
+    with open(f"{get_output_path()}/schedules.log","w") as scheds_file:
         scheds_file.writelines(schedules)
-    with open(f"{get_output_path()}/match_searched_schedules.log","w") as scheds_file:
+    with open(f"{get_output_path()}/searched_schedules.log","w") as scheds_file:
         scheds_file.writelines(searched_schedules)
     # with open(f"{get_output_path()}/match_searched_tmaps.log","w") as scheds_file:
     #     scheds_file.writelines(tmap_searched)
