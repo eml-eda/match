@@ -6,33 +6,14 @@
     "configurations": [
         {
             "name": "MATCH",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/match/run.py",
+            "program": "${workspaceFolder}/test/test.py",
             "args": [
-                "-t","gap9",
-                //"-i",
-                //"onnx",
-                //"-f","examples/small_mobilenet_V1.onnx",
-                //"relay",
-                "-c",
-                "-o","./output/last_build"
-                //"-f","examples/quant_conv.relay",
-                //"-p","examples/params_quant_conv.txt",
-                
-            ],
-            "console": "integratedTerminal",
-            "justMyCode": false
-        },
-        {
-            "name": "GAP9 SINGLE",
-            "type": "python",
-            "request": "launch",
-            "program": "${workspaceFolder}/docker/gap/gap_run.py",
-            "args": [
-                "-c",
-                "-o","./output/last_build",
-                "--ne16"
+                "--model",
+                "drone_vfe",
+                "--executor",
+                "graph"
             ],
             "console": "integratedTerminal",
             "justMyCode": false

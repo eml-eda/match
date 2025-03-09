@@ -5,10 +5,10 @@ import operator
 import sys
 from typing import Any, Dict, List
 import numpy as np
-from match.target.diana.digital.cost_model import DigitalAcceleratorCostModel
-from match.target.diana.digital.network_transformations import network_transformations as diana_digital_net_trans
-from match.target.diana.digital.network_transformations import adjust_network as diana_digital_adj_net
-from match.target.diana.digital.partitioning_patterns import partitioning_patterns as diana_digital_patterns
+from match.target.examples.diana.digital.cost_model import DigitalAcceleratorCostModel
+from match.target.examples.diana.digital.network_transformations import network_transformations as diana_digital_net_trans
+from match.target.examples.diana.digital.network_transformations import adjust_network as diana_digital_adj_net
+from match.target.examples.diana.digital.partitioning_patterns import partitioning_patterns as diana_digital_patterns
 from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
 import os
 from match.target.memory_inst import MemoryInst

@@ -1,6 +1,6 @@
-from match.target.gap9.ne16 import Gap9NE16
+from match.target.examples.gap9.ne16 import Gap9NE16
 from match.target.target import MatchTarget
-from match.target.gap9.cluster import Gap9Cluster
+from match.target.examples.gap9.cluster import Gap9Cluster
 
 class Gap9(MatchTarget):
     def __init__(self,**kwargs):

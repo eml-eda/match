@@ -1,9 +1,9 @@
 from math import ceil
 from typing import Dict, List
-from match.target.gap9.ne16.cost_model import Gap9NE16CostModel
-from match.target.gap9.ne16.network_transformations import network_transformations as gap9network_transformations
-from match.target.gap9.ne16.network_transformations import adjust_network as pad_adjust
-from match.target.gap9.ne16.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
+from match.target.examples.gap9.ne16.cost_model import Gap9NE16CostModel
+from match.target.examples.gap9.ne16.network_transformations import network_transformations as gap9network_transformations
+from match.target.examples.gap9.ne16.network_transformations import adjust_network as pad_adjust
+from match.target.examples.gap9.ne16.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
 from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
 from match.target.memory_inst import MemoryInst
 import os

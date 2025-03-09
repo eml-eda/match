@@ -2,10 +2,10 @@ from math import ceil, prod
 from typing import Dict, List
 
 import numpy as np
-from match.target.gap9.cluster.cost_model import Gap9ClusterCostModel
-from match.target.gap9.cluster.network_transformations import network_transformations as gap9network_transformations
-from match.target.gap9.cluster.network_transformations import adjust_network as gap_adjust_net
-from match.target.gap9.cluster.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
+from match.target.examples.gap9.cluster.cost_model import Gap9ClusterCostModel
+from match.target.examples.gap9.cluster.network_transformations import network_transformations as gap9network_transformations
+from match.target.examples.gap9.cluster.network_transformations import adjust_network as gap_adjust_net
+from match.target.examples.gap9.cluster.partitioning_patterns import partitioning_patterns as gap9partitioning_patterns
 from match.target.exec_module import ExecModule, PlatformApis, MemoryApis, SyncApis, ComputationalApis, MatchTypes
 from match.target.memory_inst import MemoryInst
 import os

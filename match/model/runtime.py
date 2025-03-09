@@ -36,7 +36,7 @@ class MatchMemoryTensor:
         self.c_value = "{}" if not self.is_constant else c_friendly_npvalue(self.constant_val)
         self.prod_shape = prod(self.shape) 
         self.node_info = node_info
-        self.start_usage = -1
+        self.start_usage = -1 if (int(self.is_intermediate)+int(self.is_output))==0 else self.node_id
         self.used_at = list()
         self.mem_offset_at = dict()
 
@@ -248,7 +248,7 @@ class MatchMemoryPlanner:
             tensor: MatchMemoryTensor=None,
             intermediate_store_fine: bool=False,
             separeted_intermediate_fine: bool=False,
-            tens_size: int=1,
+            tens_size: int=1, time: int=0
         ):
             # allocate a single time
             allocated = False
@@ -279,7 +279,7 @@ class MatchMemoryPlanner:
             tensor: MatchMemoryTensor=None,
             intermediate_store_fine: bool=False,
             separeted_intermediate_fine: bool=False,
-            tens_size: int=1,
+            tens_size: int=1, time: int=0
         ):
             # allocate a single time
             allocated = False
@@ -303,7 +303,7 @@ class MatchMemoryPlanner:
             tensor: MatchMemoryTensor=None,
             intermediate_store_fine: bool=False,
             separeted_intermediate_fine: bool=False,
-            tens_size: int=1,
+            tens_size: int=1, time: int=0
         ):
             # allocate a single time
             allocated = False
@@ -329,31 +329,37 @@ class MatchMemoryPlanner:
             allocated = False
             if max_allocated_tensors_at!=-1:
                 if len(tensors_allocated_at_time[max_allocated_tensors_at])>1:
-                    allocated = try_allocate_congested(tensor=tensor, tens_size=tens_size)
+                    allocated = try_allocate_congested(tensor=tensor, tens_size=tens_size, time=max_allocated_tensors_at)
                     if not allocated:
-                        allocated = try_allocate_congested(tensor=tensor, intermediate_store_fine=True, tens_size=tens_size)
+                        allocated = try_allocate_congested(tensor=tensor, intermediate_store_fine=True, tens_size=tens_size,
+                                                           time=max_allocated_tensors_at)
                     # last try moving around the offset if possible also
                     if not allocated:
                         allocated = try_allocate_congested(tensor=tensor, intermediate_store_fine=True,
-                                                           separeted_intermediate_fine=True, tens_size=tens_size)
+                                                           separeted_intermediate_fine=True, tens_size=tens_size,
+                                                           time=max_allocated_tensors_at)
                 
                 elif len(tensors_allocated_at_time[max_allocated_tensors_at])==1:
-                    allocated = try_allocate_buffer(tensor=tensor, tens_size=tens_size)
+                    allocated = try_allocate_buffer(tensor=tensor, tens_size=tens_size, time=max_allocated_tensors_at)
                     if not allocated:
-                        allocated = try_allocate_buffer(tensor=tensor, intermediate_store_fine=True, tens_size=tens_size)
+                        allocated = try_allocate_buffer(tensor=tensor, intermediate_store_fine=True, tens_size=tens_size,
+                                                        time=max_allocated_tensors_at)
                     # last try moving around the offset if possible also
                     if not allocated:
                         allocated = try_allocate_buffer(tensor=tensor, intermediate_store_fine=True,
-                                                        separeted_intermediate_fine=True, tens_size=tens_size)
+                                                        separeted_intermediate_fine=True, tens_size=tens_size,
+                                                        time=max_allocated_tensors_at)
                 else:
                     # try to allocate at 0
-                    allocated = try_allocate_easy(tensor=tensor, tens_size=tens_size)
+                    allocated = try_allocate_easy(tensor=tensor, tens_size=tens_size, time=max_allocated_tensors_at)
                     if not allocated:
-                        allocated = try_allocate_easy(tensor=tensor, intermediate_store_fine=True, tens_size=tens_size)
+                        allocated = try_allocate_easy(tensor=tensor, intermediate_store_fine=True, tens_size=tens_size,
+                                                      time=max_allocated_tensors_at)
                     # last try moving around the offset if possible also
                     if not allocated:
                         allocated = try_allocate_easy(tensor=tensor, intermediate_store_fine=True,
-                                                      separeted_intermediate_fine=True, tens_size=tens_size)
+                                                      separeted_intermediate_fine=True, tens_size=tens_size,
+                                                      time=max_allocated_tensors_at)
             if not allocated:
                 print(f"[MEMORY PLANNER] Couldnt allocate all the tensors, tensor {tensor.name} allocation was not successfull")
                 raise Exception(f"[MEMORY PLANNER] Couldnt allocate all the tensors, tensor {tensor.name} allocation was not successfull")
