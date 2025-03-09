@@ -1,10 +1,14 @@
 import math
 import os
+from match.node.node import MatchNode
+from match.ops.conv2d import MatchOpConv2D
 from match.partition.utils import add_checks_get_first_op
 from match.schedule.buffer import MatchMemBuffer
-from match.target.exec_module import ExecModule
+from match.schedule.schedule import MatchSchedule
+from match.target.exec_module import ComputationalApis, ExecModule, MemoryApis, PlatformApis, SyncApis
 from match.cost_model.examples.pulp_cluster import PulpClusterCostModel
 from match.target.memory_inst import MemoryInst
+from match.tensor.tensor import MatchTensor
 from match.transform.layout import MatchLayoutNCHWtoNHWC
 from match.transform.requant import MatchRequantRewriter
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
@@ -31,7 +35,7 @@ class PulpCluster(ExecModule):
             # MemoryInst(name="L3_RAM",k_bytes=self.L3_FLASH_KB_SIZE,sw_controlled=True),
         ]
 
-    def zigzag_optimal_spatial_mapping_def(self, match_node=None, pattern_name = "conv_2d"):
+    def zigzag_optimal_spatial_mapping_def(self, match_node: MatchNode=None, pattern_name = "conv2d"):
         if pattern_name == "pointwise_conv2d":
             return [
                 ("OY",8),("OX",2),("K",4)
@@ -68,7 +72,7 @@ class PulpCluster(ExecModule):
             ("layout",MatchLayoutNCHWtoNHWC()),
         ]
 
-    def update_constants(self, match_node, pattern_name):
+    def update_constants(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
         for w_tensor in match_node.const_tensors.values():
             if "dense" in w_tensor.name:
                 if w_tensor.layout!="CN":
@@ -84,11 +88,13 @@ class PulpCluster(ExecModule):
                     w_tensor.dims = [w_tensor.dims[0], w_tensor.dims[2], w_tensor.dims[3], w_tensor.dims[1]]
                 w_tensor.layout = "OHWI"
 
-    def set_buffers_for_schedule(self, match_node, schedule, pattern_name, engine):
-        if engine=="zigzag" and "conv2d" in pattern_name and pattern_name!="pointwise_conv2d":
-            inp_tensor = match_node.var_tensors[match_node.var_names[0]]
-            padding = match_node.ops["conv2d"].padding
-            filter_shape = match_node.ops["conv2d"].kernel_size
+    def set_buffers_for_schedule(self, match_node: MatchNode=None, schedule: MatchSchedule=None,
+                                 pattern_name: str="conv2d", engine: str="ZigZag"):
+        if engine=="ZigZag" and "conv2d" in pattern_name and pattern_name!="pointwise_conv2d":
+            inp_tensor: MatchTensor = match_node.var_tensors[match_node.var_names[0]]
+            conv: MatchOpConv2D = match_node.ops["conv2d"]
+            padding = conv.padding
+            filter_shape = conv.kernel_size
             tile_inp_chs = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[3].size
             im2col_size_l1 = 0
             # im2col size only for std convs
@@ -104,19 +110,19 @@ class PulpCluster(ExecModule):
             # I searched in the pulp_nn lib but also for DW convs the pwt buffer(bufferB in pulp_nn_depthwise_generic declaration)
             # doesnt seem to be used anywhere...
 
-    def platform_apis_def(self, platform_apis = ...):
+    def platform_apis_def(self, platform_apis: PlatformApis=None, pattern_name: str="conv2d"):
         platform_apis.init_platform = "offload_to_pulp_cluster"
         platform_apis.init_module = "cluster_lib_init"
         return platform_apis
     
-    def mem_apis_def(self, memory_apis = ...):
+    def mem_apis_def(self, memory_apis: MemoryApis=None, pattern_name="conv2d"):
         memory_apis.mem_transfer = "handle_dma_transfer"
         memory_apis.alloc_buffer = "cluster_alloc_buffer"
         memory_apis.init_memory["L1_SCRATCHPAD"] = "init_l1_scratchpad_memory"
         memory_apis.free_memory["L1_SCRATCHPAD"] = "free_l1_scrachpad_memory"
         return memory_apis
     
-    def sync_apis_def(self, sync_apis = ...):
+    def sync_apis_def(self, sync_apis: SyncApis=None, pattern_name: str="conv2d"):
         sync_apis.wait_load = "wait_l1_dma_transfers"
         sync_apis.wait_store = "wait_l1_dma_transfers"
         sync_apis.wait_tile_computation = "wait_pulp_nn_computation"
@@ -124,7 +130,7 @@ class PulpCluster(ExecModule):
         sync_apis.must_sync_after_computation = True
         return sync_apis
     
-    def comp_apis_def(self, computational_apis = ...):
+    def comp_apis_def(self, computational_apis: ComputationalApis=None, pattern_name: str="conv2d"):
         computational_apis.compute_tile = "pulp_nn_wrapper"
         return computational_apis
     

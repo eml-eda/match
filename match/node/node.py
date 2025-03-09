@@ -1,22 +1,24 @@
 
 
 
-from typing import Dict
-
+from typing import Dict, List
+from match.ops.op import MatchOp
+from tvm.relay import TypeCall
 from match.dim.dim import MatchDim
+from match.tensor.tensor import MatchTensor
 
 
 class MatchNode:
 
     def __init__(self, ops: Dict = {}, calls: Dict = {}, dims: Dict = {}) -> None:
-        self.ops = dict()
-        self.ops_occurrences = dict()
-        self.calls = dict()
-        self.var_tensors = dict()
-        self.const_tensors = dict()
-        self.output_tensors = dict()
-        self.intermediate_tensors = dict()
-        self.dims = dict()
+        self.ops: Dict[str, MatchOp] = dict()
+        self.ops_occurrences: Dict[str, List[str]] = dict()
+        self.calls: Dict[str, TypeCall] = dict()
+        self.var_tensors: Dict[str, MatchTensor] = dict()
+        self.const_tensors: Dict[str, MatchTensor] = dict()
+        self.output_tensors: Dict[str, MatchTensor] = dict()
+        self.intermediate_tensors: Dict[str, MatchTensor] = dict()
+        self.dims: Dict[str, MatchDim] = dict()
 
     @property
     def var_names(self):

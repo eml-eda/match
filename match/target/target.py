@@ -294,9 +294,8 @@ class MatchTarget(ABC):
             # if supported get latency and energy of pattern
             try:
                 latency,energy=self.evaluate_pattern(node,match_pt)
-                print(f"[PATTERN MATCHER] Node is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}\n")
+                print(f"[PATTERN MATCHER] Node is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}")
             except Exception as exc:
-                print(tb.format_exc(exc))
                 print(f"[PATTERN MATCHER] Node failed to be evaluated with pattern {match_pt.name}")
                 return False
             # check all the patterns that are after me
@@ -313,7 +312,6 @@ class MatchTarget(ABC):
                             other_pt_latency,other_pt_energy=self.evaluate_pattern(node,other_pt)
                             print(f"[PATTERN MATCHER] Node is also supported by {other_pt.name} with expected latency {other_pt_latency} and expected energy {other_pt_energy}\n")
                         except Exception as exc:
-                            print(tb.format_exc(exc))
                             print(f"[PATTERN MATCHER] Node failed to be evaluated with pattern {other_pt.name}")
                             continue
                         # if the result gathered by this other matching pattern is better break all

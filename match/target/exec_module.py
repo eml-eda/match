@@ -13,12 +13,31 @@ import sys
 class MemoryApis:
     """All the memory APIs that are used by MATCH on the templates
     """
-    def __init__(self, pattern_name="conv2d",layout_per_operand={"O":"NCHW","I":"NCHW","W":"NCHW","X":"NCHW","Y":"NCHW"}):
-        self.get_size_of_fused_tensor = ""
-        self.get_pt_of_fused_tensor = ""
+    def __init__(self):
+        # these APIS are used for peculiar layouts of fused tensors
+        # which are not currently supported, for instance if a tensor
+        # needs to be fused and they have to be contiguous or they
+        # split by channels or other stuff these APIS must be implemented
+        # to compute the size of the tensor(ex. redundant data so MATCH cannot get accurate size)
+        # and the pt, since the dimensions are all interleaved
+        self.get_size_of_fused_tensor = "" # TODO: test
+        self.get_pt_of_fused_tensor = "" # TODO: test
+        # API to handle the SW-controlled mem transfers
+        # this API receives all the info about the tensor,
+        # the type of op(LOAD/STORE), the top and lower memories names
+        # and the overall context
         self.mem_transfer = ""
+        # these dict respectively for each SW controlled memory store
+        # allocate the memory first and use it throughout the node
+        # finally deallocating at the end, the memory pt is kept by MATCH
         self.free_memory = dict()
         self.init_memory = dict()
+        # API used to signal to the exec module about a required buffer
+        # MATCH decides the pointer but it doesn't store it
+        # the exec module lib should keep it
+        self.alloc_buffer = ""
+        """
+        APIs and flags from the legacy lib
         DEFAULT_LAYOUT = {"O":"NCHW","I":"NCHW","W":"NCHW","X":"NCHW","Y":"NCHW"}
         self.startup_memory="match_startup_memory"
         self.shutdown_mem="match_shutdown_mem"
@@ -39,72 +58,85 @@ class MemoryApis:
             "Y":"match_mem_transfer_Y",
         }
         self.pattern_constants_loading="match_pattern_constants_loading"
-
-        # testing ones
-        self.var_mem_transfer = ""
-        self.const_mem_transfer = ""
-        self.store_tile = ""
-        self.init_mem_levels = ""
-        self.free_mem_levels = ""
-        self.alloc_buffer = ""
+        """
 
 class ComputationalApis:
     """All the APIs relating to the computational part that are used later by MATCH templates
     """
-    def __init__(self, pattern_name="conv2d"):
+    def __init__(self):
+        # API to handle computation to the specific back-end
+        self.compute_tile = ""
+        """
+        APIs and flags from the legacy lib
         self.init_other_kernel_params="match_init_other_kernel_params"
         self.innermost_computation="match_innermost_computation"
         self.specific_pattern=pattern_name
-
-        # testing ones
-        self.compute_tile = ""
+        """
 
 class PlatformApis:
     """All the APIs for the management of the platform that are used by templates of MATCH
     """
-    def __init__(self, pattern_name="conv2d"):
+    def __init__(self):
+        # API used to pass from the host to the exec module controller
+        # if needed, certain programming modes require this
         self.init_platform=""
-        self.parallelize_task = ""
-        self.get_task_id = ""
-        self.init_platform_need_kernel_data=False
-        self.set_task_id="match_task_id"
-
-        # testing ones
-        self.parallelize_task = ""
+        # API used to differentiate between each parallel
+        # head of the exec module, used if the parallel mode
+        # is enabled with parallelize task
+        self.get_task_id = "" # TODO: test
+        self.parallelize_task = "" # TODO: test
+        # signals to the exec module that it is used
+        # and then freed
         self.init_module = ""
         self.free_module = ""
+
+        """
+        APIs and flags from the legacy lib
+        self.init_platform_need_kernel_data=False
+        self.set_task_id="match_task_id"
+        """
 
 class SyncApis:
     """All the APIs for the synchronization that are used by templates of MATCH
     """
-    def __init__(self, pattern_name="conv2d"):
+    def __init__(self):
+        # flags to signal type of memory system --> async or not
         self.must_sync_after_load = False
         self.must_sync_after_store = False
         self.must_sync_after_computation = False
-        self.wait_parallel_tasks = ""
+        # more complex sync since computation is parallelized
+        self.wait_parallel_tasks = "" # TODO: test
+        # synchronization after the computation of the tile
         self.wait_tile_computation = ""
+        # basic wait for load and store memory movements
+        # they can be the same API
         self.wait_load = ""
         self.wait_store = ""
-        self.wait_buffer_parallel_tasks = ""
-        self.wait_buffer_tile_computation = ""
-        # old ones...
+        # more complex sync since computation is buffered with
+        # memory movement
+        self.wait_buffer_parallel_tasks = "" # TODO: test
+        self.wait_buffer_tile_computation = "" # TODO: test
+        """
+        unused APIs
+        self.wait_prev_tile_computation = "" # not used
+        self.wait_parallel = "" # not used
+        self.wait_store_prev_tile = "" # not used
+        """
+        """
+        APIs from the legacy lib
         self.async_transfers="match_async_transfers"
         self.prev_computation="match_prev_computation"
         self.curr_computation="match_curr_computation"
         self.sync_multilevel_transfer="match_sync_multilevel_transfer"
         self.wait_input_transfers="match_wait_input_transfers"
         self.wait_output_transfers="match_wait_output_transfers"
+        """
 
-        # testing ones
-        self.wait_prev_tile_computation = ""
-        self.wait_parallel = ""
-        self.wait_store_prev_tile = ""
-        self.wait_tile_computation = ""
-
+# unused currently
 class MatchTypes:
     """MACROS and types that can be used by MATCH
     """
-    def __init__(self, pattern_name="conv2d"):
+    def __init__(self):
         self.mem_data_macro_and_type="unsigned int"
         self.kernel_struct="match_kernel"
 
@@ -120,21 +152,14 @@ class ExecModule(ABC):
         self.FULL_DIM = sys.maxsize
         self.zigzag_optimal_spatial_mapping = None
         self.platform_memories = None
-        self.default_include_list=[
-            "match_dimensions.h",
-            "match_kernel.h",
-            "match_tile_indexes.h",
-            "match_mem.h",
-            "match_sync.h",
-            "match_target_params.h",
-        ]
         self.specific_patterns=specific_patterns
         self.specific_pattern=""
-        self.layout_operand=dict()
         self.src_path=src_path
         self.inc_path=inc_path
         self.module_options=dict()
         self.backend = "ZigZag"
+        # currently only ZigZag has been actually tested
+        self.schedule_engine = "ZigZag"
 
     def backend_constraints_check(self,match_node,schedule,block,lp,lp_idx):
         # if any([mt.sw_controlled for mt in lp.mem_transfers]):
@@ -147,39 +172,10 @@ class ExecModule(ABC):
 
 
     def partitioning_patterns(self):
-
-        def conv2d_pattern():
-            """Create pattern for conv2D with optional fused relu."""
-            return is_op("nn.conv2d")(
-                    wildcard(), wildcard()
-            )
-
-
-        def fully_connected_pattern():
-            """Create pattern for nn.dense with optional fused relu."""
-
-            return is_op("nn.dense")(
-                wildcard(), wildcard()
-            )
-        
-        def element_wise_add_pattern():
-            """Create pattern for element-wise-add with optional fused relu."""
-
-            cast_a = is_op("cast")(wildcard()).has_attr({"dtype": "int32"})
-            cast_b = is_op("cast")(wildcard()).has_attr({"dtype": "int32"})
-            return is_op("add")(cast_a, cast_b)
-
-        return [
-            PartitioningPattern(name="default_conv2d",pattern=conv2d_pattern,ordered_operation="nn.conv2d"),
-            PartitioningPattern(name="default_dense",pattern=fully_connected_pattern,ordered_operation="nn.dense"),
-            PartitioningPattern(name="default_add",pattern=element_wise_add_pattern,ordered_operation="add")
-        ]
+        return []
     
     def network_transformations(self,opts):
         return []
-    
-    def hw_aware_template_params(self):
-        raise dict()
 
     def memories_def(self,pattern_name,operands):
         """define the memory hierarchy of the unit by setting self.platform_memories
@@ -254,6 +250,7 @@ class ExecModule(ABC):
         else:
             return optimal_spat   
     
+    # NOTE: not used, remove
     def adjust_dimensions_and_precision(self,loop_dim_size:Dict[str,int]={},pr_loop_dim_size:Dict[str,int]={},
                                         operand_precision:Dict[str,int]={}, strides:List[int]=[1,1], pattern_name:str="conv2d"):
         return loop_dim_size,pr_loop_dim_size,operand_precision,operand_precision
@@ -269,12 +266,10 @@ class ExecModule(ABC):
     def constrain_schedule(self,schedule,match_node):
         return schedule
     
-    def template_data(self):
-        return {}
-    
     def set_buffers_for_schedule(self, match_node, schedule, pattern_name, engine):
         return
 
+    # NOTE: not used, remove
     def weights_and_constants(self,match_node,pattern_name):
         """define how the weights and constants of a layer must be saved in C on the generated code
 
@@ -316,49 +311,45 @@ class ExecModule(ABC):
     def layout_per_operand_def(self,pattern_name,specific_pattern,operands):
         return dict()
 
-    def match_layout_operand(self,pattern_name,specific_pattern,operands):
-        self.layout_operand=self.layout_per_operand_def(pattern_name=pattern_name,specific_pattern=specific_pattern,operands=operands)
-        for operand_ in [op_ for op_ in ["O","I","W","X","Y"] if op_ not in self.layout_operand]:
-            self.layout_operand[operand_]="NCHW"
-        return self.layout_operand 
-
     def types_def(self,match_types: MatchTypes=MatchTypes()):
         return match_types
 
     def match_types(self, pattern_name):
         return self.types_def(MatchTypes(pattern_name=pattern_name))
 
-    def mem_apis_def(self,memory_apis: MemoryApis=MemoryApis()):
+    def mem_apis_def(self,memory_apis: MemoryApis=MemoryApis(), pattern_name: str="conv2d"):
         """Functions that set the memory related APIs of the unit
         """
         return memory_apis
 
+    # all the APIS methods receive the pattern name since there could be
+    # a difference between them(for depthwise conv2d data must be stored in a certain way etc.)
     def match_mem_apis(self,pattern_name):
-        return self.mem_apis_def(MemoryApis(pattern_name=pattern_name,layout_per_operand=self.layout_operand))
+        return self.mem_apis_def(MemoryApis(),pattern_name)
     
-    def sync_apis_def(self,sync_apis: SyncApis=SyncApis()):
+    def sync_apis_def(self,sync_apis: SyncApis=SyncApis(), pattern_name: str="conv2d"):
         """Functions that set the synchronization related APIs of the unit
         """
         return sync_apis
     
     def match_sync_apis(self,pattern_name):
-        return self.sync_apis_def(SyncApis(pattern_name=pattern_name))
+        return self.sync_apis_def(SyncApis(), pattern_name)
     
-    def comp_apis_def(self,computational_apis: ComputationalApis=ComputationalApis()):
+    def comp_apis_def(self,computational_apis: ComputationalApis=ComputationalApis(), pattern_name: str="conv2d"):
         """Functions that set the computation related APIs of the unit
         """
         return computational_apis
     
     def match_comp_apis(self,pattern_name):
-        return self.comp_apis_def(ComputationalApis(pattern_name=pattern_name))
+        return self.comp_apis_def(ComputationalApis(), pattern_name)
     
-    def platform_apis_def(self,platform_apis: PlatformApis=PlatformApis()):
+    def platform_apis_def(self,platform_apis: PlatformApis=PlatformApis(), pattern_name: str="conv2d"):
         """Functions that set the platform related APIs of the unit
         """
         return platform_apis
     
     def match_platform_apis(self,pattern_name):
-        return self.platform_apis_def(PlatformApis(pattern_name=pattern_name))
+        return self.platform_apis_def(PlatformApis(), pattern_name)
 
     def def_include_list(self):
         """Functions that sets the list of headers to include additionally in the template
@@ -367,8 +358,9 @@ class ExecModule(ABC):
     
     def match_include_list(self,pattern_name):
         ex_module_inc_list=self.def_include_list(pattern_name)
-        return self.default_include_list+ex_module_inc_list
+        return ex_module_inc_list
 
+    # NOTE: not used, remove
     def operand_memories(self,operands):
         return {
             operand:[mem.name for mem in self.platform_memories if operand in mem.operands][::-1]

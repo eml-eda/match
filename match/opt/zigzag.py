@@ -372,7 +372,6 @@ class ZigZagEngine(ScheduleEngine):
         self.cost_model=self.exec_module.zigzag_cost_model()
         self.exec_module.match_specific_pattern(match_node=self.match_node,pattern_name=self.pattern_name)
         self.match_node.specific_pattern=self.exec_module.specific_pattern
-        self.exec_module.match_layout_operand(pattern_name=self.pattern_name,specific_pattern=self.exec_module.specific_pattern,operands=self.zigzag_operands)
         self.optimal_spatial_mapping=self.exec_module.zigzag_optimal_spatial_mapping
 
     def generate_schedule(self): 
