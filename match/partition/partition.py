@@ -73,7 +73,7 @@ def partition(mod, params, dpu, opts):
     pipeline.append(MatchSaveRelay("renamed"))
     pipeline.append(transform.InferType())
 
-    for net_transform_name, net_transform in target.network_transformations(opts):
+    for net_transform_name, net_transform in target.transform_before_partitioning(opts):
         pipeline.append(net_transform)
         pipeline.append(MatchSaveRelay(net_transform_name))
         pipeline.append(transform.InferType())
@@ -83,7 +83,7 @@ def partition(mod, params, dpu, opts):
     pipeline.append(transform.AnnotateTarget(["match"]))
     pipeline.append(MatchSaveRelay("merged"))
 
-    for net_transform_name, net_transform in target.adjust_network(opts):
+    for net_transform_name, net_transform in target.transform_after_partitioning(opts):
         pipeline.append(net_transform)
         pipeline.append(MatchSaveRelay(net_transform_name))
         pipeline.append(transform.InferType())

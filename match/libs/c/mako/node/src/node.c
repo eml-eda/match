@@ -92,7 +92,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % endfor
     % for out in match_node.output_tensors.values():
     ${name}_${out.name}->base_pt = out_${out.name}_pt;
-    ${name}_${out.name}->pts[${memory_hierarchy["out"][-1].name}] = out_${out.name}_pt;
+    ${name}_${out.name}->pts[${memory_hierarchy["output"][-1].name}] = out_${out.name}_pt;
     % endfor
     
     % for const_tensor in schedule.tensors.values():
@@ -106,7 +106,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % for intermediate_tensor in schedule.tensors.values():
     % if intermediate_tensor.tensor_type=="intermediate":
     ${name}_${intermediate_tensor.name}->base_pt = ${target.alloc_fn}(${intermediate_tensor.prod_shape}*sizeof(${c_dtype(intermediate_tensor.dtype)}));
-    ${name}_${intermediate_tensor.name}->pts[${memory_hierarchy["inter"][-1].name}] = ${intermediate_tensor.name}->base_pt;
+    ${name}_${intermediate_tensor.name}->pts[${memory_hierarchy["intermediate"][-1].name}] = ${intermediate_tensor.name}->base_pt;
     % endif
     % endfor
 
@@ -154,7 +154,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].start_idx = ${name}_${t_dim.name}->global_idx;
     % endif
     % endfor
-    % if tensor.is_fused and tensor.unsupported_layout:
+    % if tensor.is_fused or tensor.unsupported_layout:
     ${c_ident(loop_idx)}int ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)} = ${mem_apis.get_size_of_fused_tensor}(ctx,${name}_${mem_transfer.tensor.name});
     ${c_ident(loop_idx)}tile_mem_offset = ${mem_apis.get_pt_of_fused_tensor}(ctx,${name}_${mem_transfer.tensor.name});
     ${c_ident(loop_idx)}void* ${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)} = ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.top_mem}] + (tile_mem_offset>0?tile_mem_offset:0);
@@ -307,7 +307,7 @@ int __attribute__ ((noinline)) ${node_fullname}(
     % for tensor_idx,tensor in enumerate({**match_node.var_tensors,**match_node.output_tensors}.values()):
     args[${tensor_idx}] = ${"var_" if tensor.tensor_type=="var" else "out_"}${tensor.name}_pt;
     % endfor	
-    ${platform_apis.init_platform}(${node_fullname}_inner,args);
+    ${platform_apis.init_platform}(${name}_ctx, ${node_fullname}_inner, args);
     return 0;
 }
 % endif

@@ -1,17 +1,21 @@
 from abc import ABC,abstractmethod
+from match.node.node import MatchNode
+from match.schedule.schedule import MatchSchedule
 from match.target.exec_module import ExecModule
 
 class ScheduleEngine(ABC):
     """
     Abstract base class for a temporal engine
     """
-    def __init__(self,exec_module:ExecModule=None,pattern_name:str="",match_node=None):
+    def __init__(self, target=None, exec_module: ExecModule=None,
+                 pattern_name: str="", match_node: MatchNode=None):
+        self.target = target
         self.exec_module = exec_module
         self.pattern_name = pattern_name
         self.match_node = match_node
-        self.schedule=None
-        self.energy=0
-        self.latency=0
+        self.schedule: MatchSchedule = None
+        self.energy = 0
+        self.latency = 0
 
     @abstractmethod
     def transform_schedule_for_engine(self):

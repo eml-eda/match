@@ -4,16 +4,15 @@
 #include <match/ctx.h>
 #include <match/utils.h>
 #include <${target.name}.h>
-#include <${exec_module.name}/${exec_module.name}.h>
+#include <${exec_module.name}.h>
 #include <nodes/${model_name}/${name}_data.h>
+% for inc_lib in exec_module.include_list():
+#include <${inc_lib}.h>
+% endfor
 
 // DIMS
 extern const char* ${name}_dims_names_[];
-% if len(match_node.dims)>0:
-extern MatchDim ${name}_dims_[${len(match_node.dims)}];
-% else:
-extern MatchDim* ${name}_dims_;
-% endif
+extern MatchDim ${name}_dims_[${len(match_node.dims)}+1];
 % for idx,dim in enumerate(match_node.dims.values()):
 extern MatchDim* ${name}_${dim.name};
 % endfor

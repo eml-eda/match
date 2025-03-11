@@ -17,6 +17,8 @@ import tvm
 
 import traceback as tb
 
+HOST_MEM_SIZE = 8192
+
 class PatternResult:
     """Class that stores all the information that may be relevant to cache a result of a node that we want to compile
     """
@@ -233,7 +235,12 @@ class MatchTarget(ABC):
         Returns:
             Number,Number: latency and energy consumption results of the node with the given pattern
         """
-        schedule_gen = ScheduleGenerator(node=node,args_list=[],exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=False,pattern_inst=match_pt)
+        schedule_gen = ScheduleGenerator(node=node,args_list=[],
+                                         target=self,
+                                         exec_module=match_pt.exec_module,
+                                         pattern_name=match_pt.original_name,
+                                         partitioned=False,
+                                         pattern_inst=match_pt)
         schedule_gen.parse()
         match_node=schedule_gen.get_match_node()
         pt_res=PatternResult(match_pt,match_node)
@@ -244,7 +251,7 @@ class MatchTarget(ABC):
             try:
                 schedule_gen.generate()
             except Exception as exc:
-                raise Exception("No valid loop ordering found")
+                raise Exception(f"[TARGET]: No valid loop ordering found, {exc}")
             schedule_gen.apply_constraints()
             schedule=schedule_gen.schedule
             latency=schedule_gen.latency
@@ -367,29 +374,49 @@ class MatchTarget(ABC):
 
     @property
     def host_memory(self):
-        host_mem = ""
-        host_exec_mem = []
-        for exec_module in self.exec_modules:
-            exec_module_mems: List[MemoryInst] = exec_module.get_all_memories()
-            for exec_mem in exec_module_mems[::-1]:
-                if not exec_mem.external:
-                    host_exec_mem.append(exec_mem.name)
-                    break
-        if len(host_exec_mem)==0:
-            return "default_mem"
-        if len(host_exec_mem)==1:
-            return host_exec_mem[0]
-        else:
-            return sorted(set(host_exec_mem), key=host_exec_mem.count, reverse=True)[0]
+        for mem in self.host_memories()[::-1]:
+            if not mem.external:
+                return mem.name
+        return ""
+    
+    def host_memories(self):
+        return [
+            # from lower level to higher level memories
+            MemoryInst(name="HOST_MEM",k_bytes=HOST_MEM_SIZE),
+        ]
+    
+    def memory_hierarchy_for_pt(self, exec_module, pattern_name):
+        host_memories = self.host_memories()
+        module_memories = exec_module.module_memories()
+        module_memories = exec_module.update_memories_for_pt(module_memories, pattern_name=pattern_name)
+        return {
+            "output": [mem for mem in module_memories if "output" in mem.tensor_types]+host_memories,
+            "var": [mem for mem in module_memories if "var" in mem.tensor_types]+host_memories,
+            "const": [mem for mem in module_memories if "const" in mem.tensor_types]+host_memories,
+            "intermediate": [mem for mem in module_memories if "intermediate" in mem.tensor_types]+host_memories,
+        }
+
+    def memory_list_for_pt(self, exec_module, pattern_name):
+        host_memories = self.host_memories()
+        module_memories = exec_module.module_memories()
+        module_memories = exec_module.update_memories_for_pt(module_memories, pattern_name=pattern_name)
+        return module_memories+host_memories
 
     def adjust_network(self,opts):
+        return []
+
+    def transform_after_partitioning(self,opts):
         pipeline=[]
         for exec_module in self.exec_modules:
             pipeline+=exec_module.adjust_network(opts=opts)
+        pipeline+=self.adjust_network(opts=opts)
         return pipeline
     
     def network_transformations(self,opts):
-        pipeline=[]
+        return []
+    
+    def transform_before_partitioning(self,opts):
+        pipeline=self.network_transformations(opts=opts)
         for exec_module in self.exec_modules:
             pipeline+=exec_module.network_transformations(opts=opts)
         return pipeline

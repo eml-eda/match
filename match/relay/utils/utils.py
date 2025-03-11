@@ -262,7 +262,7 @@ def create_random_array(shape: Tuple[int, ...], dtype: str, min_val=None, max_va
 
 def create_build_dir(build_path: str = "./build",
                      match_lib_path: str = "./lib",
-                     target:MatchTarget=DefaultMatchTarget()):
+                     target: MatchTarget=DefaultMatchTarget()):
     """
     param byoc_path: path to import Makefiles and C dependencies from
     """
@@ -285,30 +285,39 @@ def create_build_dir(build_path: str = "./build",
                     dst=build_path / "src" / "match", dirs_exist_ok=True)
     shutil.copytree(src=match_lib_path / "static" / "match" /"include",
                     dst=build_path / "include" / "match", dirs_exist_ok=True)
+
+    libs_found = set()  
     for ex_mod in target.exec_modules:
-        # Copy over src, include folders
-        if os.path.isdir(ex_mod.src_path):
-            shutil.copytree(src=pathlib.Path(ex_mod.src_path), 
-                            dst=build_path / "src" / ex_mod.name, dirs_exist_ok=True)
-        else:
-            print(f"Src directory doesn't exist for exec module {ex_mod.name} path {ex_mod.src_path}!")
-        if os.path.isdir(ex_mod.src_path):
-            shutil.copytree(src=pathlib.Path(ex_mod.inc_path), 
-                            dst=build_path / "include" / ex_mod.name, dirs_exist_ok=True)
-        else:
-            print(f"Include directory doesn't exist for exec module {ex_mod.name} path {ex_mod.inc_path}!")
-    memory_names={ex_mod.name:ex_mod.get_all_memories_names() for ex_mod in target.exec_modules}
+        for lib_name, lib in ex_mod.libs_required.items():
+            if lib_name in libs_found:
+                print(f"[UTILS:: create_build_dir] Skipping {lib.name} as it has already been processed")
+                continue
+            libs_found.add(lib_name)
+            # Copy over src, include folders
+            if os.path.isdir(lib.src_path):
+                shutil.copytree(src=pathlib.Path(lib.src_path), 
+                                dst=build_path / "src" / lib_name, dirs_exist_ok=True)
+            elif os.path.isdir(lib.base_path+"/src"):
+                shutil.copytree(src=pathlib.Path(lib.base_path) / "src",
+                                dst=build_path / "src" / lib_name, dirs_exist_ok=True)
+            else:
+                print(f"[UTILS:: create_build_dir] Could not find src path for {lib_name}")
+            if os.path.isdir(lib.src_path):
+                shutil.copytree(src=pathlib.Path(lib.inc_path), 
+                                dst=build_path / "include" / lib_name, dirs_exist_ok=True)
+            elif os.path.isdir(lib.base_path+"/include"):
+                shutil.copytree(src=pathlib.Path(lib.base_path) / "include",
+                                dst=build_path / "include" / lib_name, dirs_exist_ok=True)
+            else:
+                print(f"[UTILS:: create_build_dir] Could not find include path for {lib_name}")
     patterns_set=set()
-    memories_set=set()
     for exec_module in target.exec_modules:
-        memories_set.update(exec_module.get_all_memories_names())
         patterns_set.update([pt.name for pt in exec_module.partitioning_patterns()])
-        patterns_set.update(exec_module.specific_patterns)
-    template_data={"exec_modules":target.exec_modules,"memory_names":memory_names,"patterns_list":list(patterns_set),"memories_list":list(memories_set)}
+    template_data={"exec_modules":target.exec_modules,"patterns_list":list(patterns_set)}
 
     def translate_filename_and_get_template_data(filename, target):
         if filename == "exec_module":
-            return {exec_module.name+"/"+exec_module.name:{"exec_module":exec_module} for exec_module in target.exec_modules}
+            return {exec_module.name:{"exec_module":exec_module, "exec_module_id":exec_module_id, "target":target} for exec_module_id,exec_module in enumerate(target.exec_modules)}
         if filename == "target":
             return {target.name:{"target":target}}
         return {filename:template_data}

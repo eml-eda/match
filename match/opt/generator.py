@@ -3,12 +3,13 @@ from match.opt.basic import BasicEngine
 from match.opt.basic_plus import BasicPlusEngine
 from match.parser.relay import MatchRelayParser
 # TVM imports
+from match.schedule.schedule import MatchSchedule
 import tvm
 from typing import List
 
 from match.target.exec_module import ExecModule
 
-from match.opt.zigzag import ZigZagEngine
+from match.opt.zigzag.zigzag import ZigZagEngine
 from match.opt.engine import ScheduleEngine
     
 SCHEDULE_ENGINE_MAP={
@@ -26,10 +27,12 @@ def get_schedule_engine(engine_name: str="ZigZag"):
 
 
 class ScheduleGenerator:
-    def __init__(self, node: tvm.ir.IRModule, args_list: List=[], exec_module: ExecModule=None,
+    def __init__(self, node: tvm.ir.IRModule, args_list: List=[],
+                 target=None, exec_module: ExecModule=None,
                  pattern_name: str="conv2d", partitioned: bool=False, pattern_inst=None):
         self.node = node
         self.args_list = args_list
+        self.target = target
         self.exec_module = exec_module
         self.pattern_name = pattern_name
         self.partitioned = partitioned
@@ -42,7 +45,8 @@ class ScheduleGenerator:
         )
         self.schedule_engine_classname = self.exec_module.schedule_engine
         self.schedule_engine_class = get_schedule_engine(self.exec_module.schedule_engine)
-
+        self.schedule: MatchSchedule = None
+        
     def parse(self):
         try:
             self.parser.visit()
@@ -50,7 +54,7 @@ class ScheduleGenerator:
             raise exc
 
     def generate(self):
-        schedule_engine = self.schedule_engine_class(self.exec_module,self.pattern_name,self.match_node)
+        schedule_engine = self.schedule_engine_class(self.target, self.exec_module,self.pattern_name,self.match_node)
         schedule_engine.transform_schedule_for_engine()
         try:
             schedule_engine.generate_schedule()

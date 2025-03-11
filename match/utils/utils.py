@@ -69,6 +69,8 @@ relay_list=[]
 schedules=[]
 searched_schedules=[]
 
+fname_to_node_schedule = {}
+
 def reset_schedules():
     global schedules
     global searched_schedules
@@ -106,6 +108,14 @@ def set_executor(exec_):
 def get_executor():
     global executor
     return executor
+
+def add_fname_node_schedule(fname, node, schedule, node_name):
+    global fname_to_node_schedule
+    fname_to_node_schedule[fname] = (node, schedule, node_name)
+
+def get_fname_node_schedule(fname):
+    global fname_to_node_schedule
+    return fname_to_node_schedule[fname]
 
 def mock_func(*args):
     return None

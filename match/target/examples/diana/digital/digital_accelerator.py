@@ -198,12 +198,6 @@ def transform_key_name(key: str):
 class DigitalAccelerator(ExecModule):
     def __init__(self,**kwargs):
         super(DigitalAccelerator, self).__init__(name="digital",
-                                          specific_patterns=[
-                                              "conv_2d",
-                                              "dense",
-                                              "depthwise_conv_2d",
-                                              "elem_add",
-                                          ],
                                           src_path=os.path.dirname(__file__)+"/src",
                                           inc_path=os.path.dirname(__file__)+"/include",
                                           **kwargs)
@@ -269,12 +263,6 @@ class DigitalAccelerator(ExecModule):
 
     def zigzag_cost_model(self):
         return DigitalAcceleratorCostModel
-    
-    #def layout_per_operand_def(self, pattern_name, specific_pattern, operands):
-    #    return {operand:"NHWC" for operand in operands}
-    
-    #def adjust_network(self, opts):
-    #    return gap_adjust_net(opts=opts)
     
     def weights_and_constants(self, match_node, pattern_name):
         """define how the weights and constants of a layer must be saved in C on the generated code

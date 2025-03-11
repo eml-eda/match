@@ -61,7 +61,6 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.spatial_sizes = self.spatial_mapping.spatial_loop_dim_size
         self.pattern_name = self.layer.layer_attrs["operator_type"]
         self.match_node = self.layer.layer_attrs["match_node"]
-        self.specific_pattern = self.match_node.specific_pattern
 
     def def_innermost_loops_cost(self):
         """This function computes the cost of each single iteration of the kernel

@@ -6,21 +6,30 @@ const char* ${name}_dims_names_[] = {
     ${", " if idx>0 else ""}"${dim}"
     % endfor
 };
-MatchDim ${name}_dims_[${len(match_node.dims)}] = {
+MatchDim ${name}_dims_[${len(match_node.dims)}+1] = {
 % for idx,dim in enumerate(match_node.dims.values()):
-    ${", " if idx>0 else ""}(MatchDim){
+    (MatchDim){
         .size = ${dim.size},
         .dynamic = 0,//${int(dim.is_dynamic)},
         .global_idx = ${dim.start_idx},
         .curr_size = ${dim.size},
         .curr_max_size = ${dim.max_size}
-    }
+    },
 % endfor
+    // default dim
+    (MatchDim){
+        .size = 1,
+        .dynamic = 0,//1,
+        .global_idx = 0,
+        .curr_size = 1,
+        .curr_max_size = 1
+    }
 };
 
 % for idx,dim in enumerate(match_node.dims.values()):
 MatchDim* ${name}_${dim.name} = &(${name}_dims_[${idx}]);
 % endfor
+MatchDim* ${name}_default = &(${name}_dims_[${len(match_node.dims)}]);
 
 MatchDims ${name}_dims_cnt_ = (MatchDims){
     .num_dims = ${len(match_node.dims)},
@@ -37,7 +46,7 @@ MatchTensorTile ${name}_${t_tensor_name}_tiles_[${len(t_tensor_tiles)*t_tensor_t
     % for idx_mem_tile,mem_tile in enumerate(t_tensor_tiles):
     % for idx_mem_tile_dim,tiled_dim in enumerate(mem_tile.tiled_dims):
     ${", " if (idx_mem_tile_dim+idx_mem_tile)>0 else ""}(MatchTensorTile){
-        .dim = &(${name}_dims_[${list(match_node.dims.keys()).index(tiled_dim.dim.name)}]),
+        .dim = &(${name}_dims_[${list(match_node.dims.keys()).index(tiled_dim.dim.name) if tiled_dim.dim.name in match_node.dims else len(match_node.dims)}]),
         .size = ${tiled_dim.size},
         .max_size = ${tiled_dim.max_size},
         .start_idx = ${tiled_dim.dim.start_idx}
@@ -124,7 +133,7 @@ MatchCtx ${name}_ctx_ = (MatchCtx){
     .tensors = &${name}_tensors_cnt_,
     .ops = &${name}_ops_cnt_,
     .dims = &${name}_dims_cnt_,
-    .pattern_family = ${pattern_family},
+    .exec_module = ${exec_module.name.upper()},
     .pattern_name = ${pattern_name}
 };
 

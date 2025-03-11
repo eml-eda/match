@@ -23,6 +23,7 @@ class MatchSchedule:
         self.instrs = instrs
         self.tensor_tiles = tensor_tiles
         self.buffers = buffers
+        self.num_units = 1
 
     def set_default_tensor_tiles(self):
         for tensor in self.tensors.values():

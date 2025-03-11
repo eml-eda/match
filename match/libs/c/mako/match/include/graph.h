@@ -19,7 +19,7 @@ extern "C"
 TVM_DLL int32_t ${node.fn_name}(void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handle);
 % else:
 ${node.fn_name}(
-    % for inp_idx,node_in in enumerate(node.inputs):
+    % for inp_idx,node_in in enumerate([inp__ for inp__ in node.inputs if not inp__.is_constant]):
     ${"" if inp_idx==0 else ","}${node_in.c_type}* ${node_in.name}_pt
     % endfor
     % for tens_out in node.outputs:

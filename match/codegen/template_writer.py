@@ -1,6 +1,7 @@
 
 
 import os
+import pickle
 from match.node.node import MatchNode
 from match.schedule.schedule import MatchSchedule
 from match.target.exec_module import ComputationalApis, ExecModule, MemoryApis, PlatformApis, SyncApis
@@ -8,7 +9,7 @@ from mako.template import Template
 from mako import exceptions
 from pathlib import Path
 from match.target.target import MatchTarget
-from match.utils.utils import get_executor, get_output_path,numpy_dtype_to_c_type,c_friendly_npvalue
+from match.utils.utils import add_fname_node_schedule, get_executor, get_output_path,numpy_dtype_to_c_type,c_friendly_npvalue
 import tvm
 
 class TemplateWriter:
@@ -31,13 +32,12 @@ class TemplateWriter:
         #self.template_data["pattern_name"]=self.exec_module.specific_pattern
         self.template_data["pattern_name"]=self.pattern_name
         self.template_data["c_ident"]=lambda x: "\t"*x
-        self.template_data["pattern_family"]=self.pattern_name
         self.template_data["latency"]=self.latency
         self.template_data["energy"]=self.energy
         self.template_data["exec_module"]=self.exec_module
         self.template_data["target"]=self.target
         self.template_data["schedule"]=self.schedule
-        self.template_data["memory_hierarchy"]=self.exec_module.mem_hierarchy
+        self.template_data["memory_hierarchy"]=self.target.memory_hierarchy_for_pt(exec_module=self.exec_module, pattern_name=self.pattern_name)
         self.template_data["match_node"]=self.match_node
         self.template_data["mod"] = self.mod
         self.template_data["model_name"] = "_".join(self.mod.attrs.global_symbol.split("_")[1:-3])
@@ -47,8 +47,6 @@ class TemplateWriter:
         self.template_data["node_fullname"] = self.template_data["fullname"]
         self.template_data["node_idx"] = int(self.template_data["fullname"].split("_")[::-1][0])
         self.template_data["async_computation"] = False
-        self.template_data["top_level_memory_vars"] = "L2_CACHE"
-        self.template_data["top_level_memory_out"] = "L2_CACHE"
         self.template_data["mem_apis"] = self.exec_module.match_mem_apis(self.pattern_name)
         self.template_data["sync_apis"] = self.exec_module.match_sync_apis(self.pattern_name)
         self.template_data["platform_apis"] = self.exec_module.match_platform_apis(self.pattern_name)
@@ -56,7 +54,7 @@ class TemplateWriter:
         self.template_data["executor"] = get_executor()
 
         last_transfer_of_tensor_block = {(tensor.name,block_idx):\
-                                         (0, self.exec_module.mem_hierarchy[tensor.tensor_type if tensor.tensor_type!="output" else "out"][-1].name)\
+                                         (0, self.template_data["memory_hierarchy"][tensor.tensor_type][-1].name)\
                                             for tensor in self.schedule.tensors.values() for block_idx in range(len(self.schedule.blocks))}
         unique_tile_counter = {tensor: 0 for tensor in self.schedule.tensors}
 
@@ -77,6 +75,10 @@ class TemplateWriter:
     def write_layer_files(self):
         # write layer files
         out_path = get_output_path()
+        # add logs
+        pickle.dump(self.match_node, open(out_path+"/"+self.template_data["node_name"]+"_node.pickle", "wb"))
+        pickle.dump(self.schedule, open(out_path+"/"+self.template_data["node_name"]+"_schedule.pickle", "wb"))
+        add_fname_node_schedule(self.template_data["node_fullname"], self.match_node, self.schedule, self.template_data["node_name"])
         node_path = "nodes/"+self.template_data["model_name"]
         Path(out_path).mkdir(parents=True,exist_ok=True)
         Path(out_path+"/src").mkdir(parents=True,exist_ok=True)

@@ -5,12 +5,10 @@ from match.ops.conv2d import MatchOpConv2D
 from match.partition.utils import add_checks_get_first_op
 from match.schedule.buffer import MatchMemBuffer
 from match.schedule.schedule import MatchSchedule
-from match.target.exec_module import ComputationalApis, ExecModule, MemoryApis, PlatformApis, SyncApis
+from match.target.exec_module import ComputationalApis, ExecModule, MemoryApis, ModuleLib, PlatformApis, SyncApis
 from match.cost_model.examples.pulp_cluster import PulpClusterCostModel
 from match.target.memory_inst import MemoryInst
 from match.tensor.tensor import MatchTensor
-from match.transform.layout import MatchLayoutNCHWtoNHWC
-from match.transform.requant import MatchRequantRewriter
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
 from match.partition.partitioning_pattern import PartitioningPattern
 
@@ -18,21 +16,25 @@ class PulpCluster(ExecModule):
     def __init__(self, num_cores: int=8, l1_kb_size: int=64, l2_kb_size: int=512,
                  l3_kb_size: int=8912, async_dma: bool=False):
         super(PulpCluster, self).__init__(name="pulp_cluster",
-                                          src_path=os.path.dirname(__file__)+"/src",
-                                          inc_path=os.path.dirname(__file__)+"/include")
-        self.host_memory = "L2_SHARED_MEM"
+                                          libs_required={
+                                              "pulp_nn": ModuleLib(name="pulp_nn", base_path=os.path.dirname(__file__)+"/../libs/pulp_nn"),
+                                              "pulp_cluster": ModuleLib(name="pulp_cluster", base_path=os.path.dirname(__file__)+"/../libs/pulp_cluster"),
+                                              "pulp_mem": ModuleLib(name="pulp_mem", base_path=os.path.dirname(__file__)+"/../libs/pulp_mem"),
+                                              "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/../libs/pulp_utils"),
+                                          })
         self.NUM_CORES = num_cores
         self.L1_SCRATCHPAD_KB_SIZE = l1_kb_size
         self.L2_SHARED_MEM_KB_SIZE = l2_kb_size
         self.L3_FLASH_KB_SIZE = l3_kb_size
         self.ASYNC_DMA = async_dma
 
-    def memories_def(self, pattern_name, operands):
+    def def_include_list(self):
+        return ["pulp_cluster/cluster"]
+
+    def module_memories(self):
         return [
             # from lower level to higher level memories
-            MemoryInst(name="L1_SCRATCHPAD",operands=["I","W","O"],k_bytes=self.L1_SCRATCHPAD_KB_SIZE,sw_controlled=True),
-            MemoryInst(name="L2_SHARED_MEM",operands=["I","W","O"],k_bytes=self.L2_SHARED_MEM_KB_SIZE),
-            # MemoryInst(name="L3_RAM",k_bytes=self.L3_FLASH_KB_SIZE,sw_controlled=True),
+            MemoryInst(name="L1_SCRATCHPAD",k_bytes=self.L1_SCRATCHPAD_KB_SIZE,sw_controlled=True),
         ]
 
     def zigzag_optimal_spatial_mapping_def(self, match_node: MatchNode=None, pattern_name = "conv2d"):
@@ -65,12 +67,6 @@ class PulpCluster(ExecModule):
 
     def zigzag_cost_model(self):
         return PulpClusterCostModel
-
-    def network_transformations(self, opts):
-        return [
-            ("requant",MatchRequantRewriter()),
-            ("layout",MatchLayoutNCHWtoNHWC()),
-        ]
 
     def update_constants(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
         for w_tensor in match_node.const_tensors.values():
@@ -113,6 +109,7 @@ class PulpCluster(ExecModule):
     def platform_apis_def(self, platform_apis: PlatformApis=None, pattern_name: str="conv2d"):
         platform_apis.init_platform = "offload_to_pulp_cluster"
         platform_apis.init_module = "cluster_lib_init"
+        platform_apis.free_module = "cluster_lib_cleanup"
         return platform_apis
     
     def mem_apis_def(self, memory_apis: MemoryApis=None, pattern_name="conv2d"):
@@ -218,7 +215,7 @@ class PulpCluster(ExecModule):
         
         def only_dw_convs(node):
             conv = add_checks_get_first_op(node, "nn.conv2d")
-            out_chs = conv.args[1].checked_type.shape[0]
+            out_chs = conv.args[1].checked_type.shape[3]
             if not only_out_uint8(node):
                 return False
             if conv.attrs.groups!=out_chs:

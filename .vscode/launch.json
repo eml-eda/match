@@ -12,6 +12,8 @@
             "args": [
                 "--model",
                 "drone_vfe",
+                // "--microbench",
+                // "conv",
                 "--executor",
                 "graph"
             ],

@@ -2,11 +2,14 @@
 
 // DLTensor declarations
 % for mem_tensor in mem_tensors:
+% if mem_tensor.used_by_tvm:
 DLTensor ${mem_tensor.name}_dltensor;
+% endif
 % endfor
 // params of nodes
 // void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handle
 % for node in nodes:
+% if node.fallback:
 // node ${node.name}
 TVMValue ${node.name}_args_[${len(node.inputs)+len(node.outputs)}];
 int* ${node.name}_arg_type_ids_;
@@ -14,6 +17,7 @@ int ${node.name}_num_args_ = ${len(node.inputs)+len(node.outputs)};
 void* ${node.name}_out_ret_value_;
 int* ${node.name}_out_ret_tcode_;
 void* ${node.name}_resource_handle_;
+% endif
 % endfor
 
 int match_${model_name}_run_graph(
@@ -80,8 +84,11 @@ int match_${model_name}_run_graph(
     if( ${node.fn_name}(${node.name}_args_, ${node.name}_arg_type_ids_, ${node.name}_num_args_,
                         ${node.name}_out_ret_value_, ${node.name}_out_ret_tcode_, ${node.name}_resource_handle_)) return -1;
     % else:
+    % for node_in in [inp__ for inp__ in node.inputs if inp__.is_constant]:
+    ${node_in.name}_data = ${node_in.name}_pt;
+    % endfor
     if( ${node.fn_name}(
-            % for inp_idx,node_in in enumerate(node.inputs):
+            % for inp_idx,node_in in enumerate([inp__ for inp__ in node.inputs if not inp__.is_constant]):
             ${"" if inp_idx==0 else ","}${node_in.name}_pt
             % endfor
             % for tens_out in node.outputs:

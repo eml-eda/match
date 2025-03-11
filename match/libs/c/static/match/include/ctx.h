@@ -137,7 +137,7 @@ typedef struct{
 
     MatchDims* dims;
 
-    int pattern_family;
+    int exec_module;
     int pattern_name;
 }MatchCtx;
 

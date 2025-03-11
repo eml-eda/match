@@ -2,6 +2,11 @@
 #define __MATCH_${model_name}_PARAMS_DATA_H__
 
 #include <match/types.h>
+% for node in nodes:
+% if not node.fallback:
+#include <nodes/${model_name}/${node.node_name}_data.h>
+% endif
+% endfor
 
 % for mem_tensor in mem_tensors:
 % if mem_tensor.is_constant and not mem_tensor.stored_in_external_memory:

@@ -6,8 +6,9 @@ import numpy as np
 from numpy import typing as npt
 import mako
 
+from match.node.node import MatchNode
 from match.target.target import MatchTarget
-from match.utils.utils import c_friendly_npvalue, numpy_dtype_to_c_type
+from match.utils.utils import c_friendly_npvalue, get_fname_node_schedule, numpy_dtype_to_c_type
 
 
 class MatchMemoryTensor:
@@ -39,6 +40,7 @@ class MatchMemoryTensor:
         self.start_usage = -1 if (int(self.is_intermediate)+int(self.is_output))==0 else self.node_id
         self.used_at = list()
         self.mem_offset_at = dict()
+        self.used_by_tvm = False
 
     @property
     def lifetime(self):
@@ -88,6 +90,7 @@ class MatchMemoryPlanner:
                 self.output_memory_usage += tensor.elems * tensor.dtype.itemsize
         self.total_memory_needed_bytes = self.input_memory_usage + self.output_memory_usage + self.constant_memory_usage + max(self.intermediate_memory_usage)
         self.total_memory_needed_bytes_w_consts = self.input_memory_usage + self.output_memory_usage + max(self.overall_intermediate_memory_usage)
+        self.available_soc_bytes -= (self.input_memory_usage + self.output_memory_usage)
     
     @property
     def external_memory_needed(self):
@@ -268,11 +271,15 @@ class MatchMemoryPlanner:
                 # check if theres enough space from the last tensor to the end of the memory
                 tens_ = tensors_allocated_at_time[time][-1]
                 end_tens = tens_.mem_offset_at[time]+tens_.prod_shape*tens_.dtype.itemsize
-                if self.available_soc_bytes-end_tens >= tens_size:
+                while self.available_soc_bytes-end_tens >= tens_size:
                     allocated = try_to_allocate(tensor=tensor,allocation_time=time,offset=end_tens,
                                                 intermediate_store_fine=intermediate_store_fine,
                                                 separeted_intermediate_fine=separeted_intermediate_fine,
                                                 tens_size=tens_size)
+                    if allocated:
+                        break
+                    else:
+                        end_tens+=tens_size
             return allocated
         
         def try_allocate_buffer(
@@ -315,7 +322,8 @@ class MatchMemoryPlanner:
                                             tens_size=tens_size)
             return allocated
 
-        for tensor in sorted_mem_tensors:
+        def allocate_tensor(
+            tensor: MatchMemoryTensor=None):
             tens_size = tensor.prod_shape * tensor.dtype.itemsize
             max_allocated_tensors_at = -1
             less_free_mem_at = -1
@@ -366,6 +374,9 @@ class MatchMemoryPlanner:
         
             for time_ in tensor.mem_offset_at:
                 free_size_at_time[time_] -= tensor.prod_shape * tensor.dtype.itemsize
+            
+        for tensor in sorted_mem_tensors:
+            allocate_tensor(tensor=tensor)
         
         # now with everything setupped lets check which constants cannot be stored in the soc memory
         for tensor in sorted_mem_tensors[::-1]:
@@ -384,13 +395,25 @@ class MatchMemoryPlanner:
                 else:
                     tensor.stored_in_external_memory=True
                     tensor.load_from_ext_mem_at.append(tensor.used_at[0])
-        
+        # remove constants allocated in the SoC already
+        for tensor in sorted_mem_tensors:
+            if tensor.is_constant and not tensor.stored_in_external_memory:
+                self.available_soc_bytes -= tensor.prod_shape*tensor.dtype.itemsize
+            tensor.mem_offset_at = dict()
+        sorted_mem_tensors = [m_t for m_t in sorted_mem_tensors if m_t.is_intermediate or (m_t.is_constant and m_t.stored_in_external_memory)]
+        tensors_allocated_at_time = {key:[] for key in self.calls_idxs}
+        free_size_at_time = {key:self.available_soc_bytes for key in self.calls_idxs}
+        # reallocate these intermediate and tensors who may have to stay in SoC memory
+        for tensor in sorted_mem_tensors:
+            tensor.stored_in_external_memory = False
+            allocate_tensor(tensor=tensor)
+
         # compute external memory needed
         for tensor in sorted_mem_tensors:
             if len(tensor.load_from_ext_mem_at)>0:
                 ext_mem_needed+=tensor.prod_shape*tensor.dtype.itemsize
             tensor.mem_offset = tensor.mem_offset_at[tensor.used_at[0]]
-        
+
         soc_mem_needed = self.available_soc_bytes-min([val for val in free_size_at_time.values()])
         return soc_mem_needed, ext_mem_needed
 
@@ -403,7 +426,9 @@ class MatchMemoryPlanner:
             raise Exception("Not enough SoC memory available")
     
 class MatchGraphRuntimeNodeCall:
-    def __init__(self, inputs=None, outputs=None, fn_name="default_lib_1", name="default_lib_1", node_info={}, node_id: int=0):
+    def __init__(self, inputs=None, outputs=None, fn_name="default_lib_1",
+                 name="default_lib_1", node_info={}, node_id: int=0, 
+                 node_name: str=None, schedule=None, match_node=None):
         self.inputs = inputs
         self.outputs = outputs
         self.fn_name = fn_name
@@ -411,6 +436,9 @@ class MatchGraphRuntimeNodeCall:
         self.node_info = node_info
         self.fallback = "match" not in self.fn_name
         self.node_id = node_id
+        self.node_name = node_name
+        self.schedule = schedule
+        self.match_node = match_node
 
 
 class MatchTVMGraphRuntime:
@@ -468,8 +496,24 @@ class MatchTVMGraphRuntime:
                     if len(inputs)==1:
                         nop_maps[node["name"]] = inputs[0]
                     continue
+                
+                match_node, schedule, match_node_name = (None, None, None)
+                if "match" in node["name"]:
+                    match_node, schedule, match_node_name = get_fname_node_schedule(node["name"])
+                    for w_tensor in match_node.const_tensors.values():
+                        if w_tensor.name in schedule.tensors:
+                            w_tensor = schedule.tensors[w_tensor.name]
+                            mem_tensor = MatchMemoryTensor(name=match_node_name+"_"+w_tensor.name,is_constant=True,
+                                                           constant_val=w_tensor.data,shape=w_tensor.data.shape,
+                                                           dtype=w_tensor.dtype,node_id=node_id,
+                                                           node_info=node)
+                            mem_tensors.append(mem_tensor)
+                            tensor_map[w_tensor.name] = mem_tensor
+                            inputs.append(mem_tensor)
                 # inputs = [mem_tensors[inp_node_idx] for inp_node_idx in [inp_node_idxs[0] for inp_node_idxs in node["inputs"]]]
                 for inp in inputs:
+                    if "match" not in node["name"]:
+                        inp.used_by_tvm = True
                     inp.update_last_usage(node_id)
                 id_out = -1
                 tens_name = self.model_name+"_node_"+str(node_id)+"_out"
@@ -482,13 +526,16 @@ class MatchTVMGraphRuntime:
                                                is_intermediate=id_out==-1,
                                                 shape=tuple(shapes[node_id]),dtype=np.dtype(dtypes[node_id]),
                                                 node_id=node_id)
+                if "match" not in node["name"]:
+                    mem_tensor.used_by_tvm = True
                 mem_tensors.append(mem_tensor)
                 tensor_map[node["name"]+"_out"] = mem_tensor
                 outputs = [mem_tensor]
                 call_node = MatchGraphRuntimeNodeCall(inputs=inputs, outputs=outputs,
                                                       name=self.model_name+"_node_"+str(node_id),
                                                       fn_name=node["name"], node_info=node,
-                                                      node_id=node_id)
+                                                      node_id=node_id, node_name=match_node_name,
+                                                      schedule=schedule, match_node=match_node)
                 nodes.append(call_node)
                 nodes_map[node["name"]] = call_node
         

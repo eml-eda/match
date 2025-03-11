@@ -27,7 +27,7 @@
 #include <pmsis.h>
 #include <pulp_cluster/cluster_dev.h>
 #endif
-#include <pulp_cluster/malloc_wrapper.h>
+#include <pulp_mem/malloc_wrapper.h>
 
 #ifdef __cplusplus
 extern "C" {

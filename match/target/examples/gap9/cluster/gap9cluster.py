@@ -14,15 +14,6 @@ import tvm
 class Gap9Cluster(ExecModule):
     def __init__(self,**kwargs):
         super(Gap9Cluster, self).__init__(name="cluster",
-                                          specific_patterns=[
-                                              "pointwise_conv2d",
-                                              "depthwise_conv2d_less_4",
-                                              "depthwise_conv2d",
-                                              "conv2d",
-                                              "elemwise_add",
-                                              "dense",
-                                              "dense_out"
-                                          ],
                                           src_path=os.path.dirname(__file__)+"/src",
                                           inc_path=os.path.dirname(__file__)+"/include",
                                           **kwargs)
@@ -189,9 +180,6 @@ class Gap9Cluster(ExecModule):
 
     def zigzag_cost_model(self):
         return Gap9ClusterCostModel
-    
-    def layout_per_operand_def(self, pattern_name, specific_pattern, operands):
-        return {operand:"NHWC" for operand in operands}
     
     def adjust_network(self, opts):
         return gap_adjust_net(opts=opts)

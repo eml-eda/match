@@ -40,12 +40,17 @@ def no_buffer(*args):
 class MemoryInst:
     """Class that represents a memory instance on MATCH.
     """
-    def __init__(self,name:str="l1_mem",k_bytes:int=1,
-                 r_bw:int=32,w_bw:int=32,r_ports:int=0,w_ports:int=0,rw_ports:int=1,
-                 operands:List[str]=[],double_buffering_support:bool=False,
-                 sw_controlled:bool=False,page_size:int=1,
-                 buffer_for_layer_func:Callable=no_buffer,used_ports:Dict[str,Tuple[PortConnection]]={},
-                 external:bool=False):
+    def __init__(self, name: str="l1_mem", k_bytes: int=1,
+                 r_bw: int=32, w_bw: int=32, r_ports: int=0,
+                 w_ports: int=0, rw_ports: int=1,
+                 tensor_types: List[str]=["var", "const", "output", "intermediate"],
+                 double_buffering_support: bool=False,
+                 sw_controlled: bool=False,
+                 page_size: int=1,
+                 buffer_for_layer_func: Callable=no_buffer,
+                 used_ports: Dict[str,Tuple[PortConnection]]={},
+                 external: bool=False
+                 ):
         """_summary_
 
         Args:
@@ -73,17 +78,17 @@ class MemoryInst:
         self.r_ports=r_ports
         self.w_ports=w_ports
         self.rw_ports=rw_ports
-        self.operands=operands
+        self.tensor_types = tensor_types
         self.double_buffering_support=double_buffering_support
         self.buffer_for_layer_func=buffer_for_layer_func
         self.used_ports=dict()
         assert ((bool(self.r_ports) + bool(self.w_ports)) == 2) or bool(self.rw_ports)
-        for port_op in [op for op in self.operands if op not in self.used_ports]:
-            self.used_ports[port_op]=(
+        for port_t_type in [t_type for t_type in self.tensor_types if t_type not in self.used_ports]:
+            self.used_ports[port_t_type]=(
                 PortConnection(rw_port_number=1 if rw_ports>0 else 0,r_port_number=1 if r_ports>0 else 0,w_port_number=1 if w_ports>0 else 0),
                 PortConnection(rw_port_number=1 if rw_ports>0 else 0,r_port_number=1 if r_ports>0 else 0,w_port_number=1 if w_ports>0 else 0),
             )
-        for port_op in self.operands:
-            self.used_ports[port_op][0].define_ports(r_ports=r_ports,w_ports=w_ports,rw_ports=rw_ports)
-            if port_op=="O":
-                self.used_ports[port_op][1].define_ports(r_ports=r_ports,w_ports=w_ports,rw_ports=rw_ports)
+        for port_t_type in self.tensor_types:
+            self.used_ports[port_t_type][0].define_ports(r_ports=r_ports,w_ports=w_ports,rw_ports=rw_ports)
+            if port_t_type=="output":
+                self.used_ports[port_t_type][1].define_ports(r_ports=r_ports,w_ports=w_ports,rw_ports=rw_ports)

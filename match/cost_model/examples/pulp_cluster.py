@@ -173,7 +173,7 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
                     IN_CHANNELS_L2 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][1]
 
                     # HWC TO CHW
-                    if self.specific_pattern in ['depthwise_conv2d','depthwise_conv2d_less_4']:
+                    if self.pattern_name in ['depthwise_conv2d','depthwise_conv2d_less_4']:
                         BYTES_PER_CYCLE = 1
                         OVERHEAD_BETWEEN_TRANSFERS = 12
                         NUM_TRANSFERS = IN_CHANNELS_L1
@@ -229,8 +229,8 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         kernel_size_x = self.loop_sizes['FX']
         kernel_size_y = self.loop_sizes['FY']
         output_shape=[1,ch_out,self.size_per_mem_level["O"]["OY"][0],self.size_per_mem_level["O"]["OX"][0]]
-        if self.specific_pattern in ["conv2d","pointwise_conv2d"]:
-            IS_POINTWISE = self.specific_pattern=="pointwise_conv2d"
+        if self.pattern_name in ["conv2d","pointwise_conv2d"]:
+            IS_POINTWISE = self.pattern_name=="pointwise_conv2d"
             # define scalar costs
             COST_SCALAR_MAC = 14
             COST_SCALAR_LOAD = 3
@@ -269,7 +269,7 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
                 latency = iterations * ((_floor(int(ch_out), 4) * (matmul+leftover_matmul)) + (leftover_out_ch_channels * (leftover_out_ch_matmul+leftover_out_ch_matmul_im2col))) +\
                     iterations * leftover_width_hoparallel * (ch_out * (leftover_width_matmul + leftover_width_matmul_im2col) )
 
-        elif self.specific_pattern in ['depthwise_conv2d','depthwise_conv2d_less_4']:
+        elif self.pattern_name in ['depthwise_conv2d','depthwise_conv2d_less_4']:
             # define scalar costs
             COST_SCALAR_MAC = 2
             COST_SCALAR_LOAD = 2
@@ -282,7 +282,7 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
             scalar_matmul = (5 + ((kernel_size_x * kernel_size_y) % 4) * ((2*COST_SCALAR_LOAD) + (1*COST_SCALAR_MAC)) + 10)
             im2col = self.size_per_mem_level["I"]["OY"][0] * kernel_size_y
             latency = iterations * (im2col + output_shape[2] * (scalar_matmul + vec_matmul + COST_QUANT))
-        elif self.specific_pattern=='dense':
+        elif self.pattern_name=='dense':
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)
         else:
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)

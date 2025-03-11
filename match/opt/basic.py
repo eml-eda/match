@@ -8,8 +8,11 @@ from match.target.exec_module import ExecModule
 
 
 class BasicEngine(ScheduleEngine):
-    def __init__(self,exec_module:ExecModule,pattern_name:str,match_node:MatchNode):
-        super().__init__(exec_module=exec_module,pattern_name=pattern_name,match_node=match_node)
+    def __init__(self, target=None, exec_module: ExecModule=None,
+                 pattern_name: str="", match_node: MatchNode=None
+                 ):
+        super(BasicEngine, self).__init__(target=target, exec_module=exec_module,
+                                           pattern_name=pattern_name, match_node=match_node)
     
     def generate_schedule(self):
         # import pdb; pdb.set_trace()

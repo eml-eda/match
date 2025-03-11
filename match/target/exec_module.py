@@ -3,7 +3,9 @@ from abc import ABC,abstractmethod
 from math import ceil
 from typing import Any, Dict,List,Type
 from match.cost_model.zigzag import ZigZagMatchCostModel, ZigZagMatchNoTilingCostModel
+from match.node.node import MatchNode
 from match.partition.partitioning_pattern import PartitioningPattern
+from match.schedule.schedule import MatchSchedule
 from match.target.memory_inst import MemoryInst
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
 import tvm
@@ -140,27 +142,34 @@ class MatchTypes:
         self.mem_data_macro_and_type="unsigned int"
         self.kernel_struct="match_kernel"
 
+EXEC_MODULE_SCRATCHPAD_CACHE_SIZE = 128
+
+class ModuleLib:
+    def __init__(self, name: str, base_path: str="", src_path: str="", inc_path: str=""):
+        self.name = name
+        self.base_path = base_path
+        self.src_path = src_path
+        self.inc_path = inc_path
+
 class ExecModule(ABC):
     """Unit that will handle the compuation of a layer
     """
-    def __init__(self,name:str="default_exec_module",
-                 specific_patterns=[],
-                 src_path:str="",
-                 inc_path:str="",
+    def __init__(self,
+                 name: str="default_module",
+                 libs_required: Dict[str, ModuleLib] = {},
                  **kwargs):
         self.name=name
         self.FULL_DIM = sys.maxsize
         self.zigzag_optimal_spatial_mapping = None
-        self.platform_memories = None
-        self.specific_patterns=specific_patterns
-        self.specific_pattern=""
-        self.src_path=src_path
-        self.inc_path=inc_path
+        self.libs_required = libs_required
         self.module_options=dict()
         self.backend = "ZigZag"
         # currently only ZigZag has been actually tested
         self.schedule_engine = "ZigZag"
 
+    def include_libs(self):
+        return []
+    
     def backend_constraints_check(self,match_node,schedule,block,lp,lp_idx):
         # if any([mt.sw_controlled for mt in lp.mem_transfers]):
             # return False
@@ -177,41 +186,16 @@ class ExecModule(ABC):
     def network_transformations(self,opts):
         return []
 
-    def memories_def(self,pattern_name,operands):
+    def module_memories(self):
         """define the memory hierarchy of the unit by setting self.platform_memories
-
-        Args:
-            operands (List[Str]): list of operands
         """
         return [
             # from lower level to higher level memories
-            # TEST: set now L1 to 9 kB just to force TILING 
-            MemoryInst(name="l1_mem",k_bytes=90,operands=operands,double_buffering_support=True),
-            MemoryInst(name="l2_mem",k_bytes=1408,operands=operands,r_ports=1,w_ports=1,rw_ports=0),
+            MemoryInst(name="EXEC_MODULE_SCRATCHPAD_CACHE", k_bytes=EXEC_MODULE_SCRATCHPAD_CACHE_SIZE),
         ]
-
-    @property
-    def mem_hierarchy(self):
-        memories_ = self.get_all_memories()
-        return {
-            "out":memories_,
-            "var":memories_,
-            "const":memories_,
-            "inter":memories_,
-        }
-
-    def get_all_memories_names(self):
-        return [m.name for m in self.memories_def(pattern_name="conv2d",operands=["O","I","W"])]
     
-    def get_all_memories(self):
-        return [m for m in self.memories_def(pattern_name="conv2d",operands=["O","I","W"])]
-    
-    @property
-    def memories(self):
-        return self.get_all_memories_names()
-    
-    def match_memories(self,pattern_name,operands):
-        self.platform_memories=self.memories_def(pattern_name,operands)
+    def update_memories_for_pt(self, memories, pattern_name):
+        return memories
 
     def limit_spatial_mapping_to(self,dim_size:int=1,optimal_spat:int=1):
         # find greater common denominator that is smaller than the optimal spatial mapping
@@ -223,7 +207,7 @@ class ExecModule(ABC):
                     break
         return spatial_dim
 
-    def zigzag_optimal_spatial_mapping_def(self, match_node = None, pattern_name: str = "conv_2d"):
+    def zigzag_optimal_spatial_mapping_def(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
         """Define the optimal spatial mapping for the current node
 
         Args:
@@ -233,27 +217,16 @@ class ExecModule(ABC):
         """
         return [ ("K",1), ("OY",1) ]
 
-    def zigzag_set_optimal_spatial_mapping(self, match_node = None, pattern_name: str = "conv_2d",):
+    def zigzag_set_optimal_spatial_mapping(self, match_node: MatchNode=None, pattern_name: str="conv2d",):
         self.zigzag_optimal_spatial_mapping=self.zigzag_optimal_spatial_mapping_def(match_node=match_node,pattern_name=pattern_name)
         if self.zigzag_optimal_spatial_mapping is None:
             self.zigzag_optimal_spatial_mapping = [ ("K",1), ]
 
-    def specific_pattern_def(self, match_node = None, pattern_name: str = "conv_2d"):
-        return pattern_name
-
-    def match_specific_pattern(self, match_node = None, pattern_name: str = "conv_2d"):
-        self.specific_pattern=self.specific_pattern_def(match_node=match_node,pattern_name=pattern_name)
-        
     def get_optimal_spat_size(self,optimal_spat:int=1,dim_size:int=1):
         if optimal_spat==self.FULL_DIM:
             return dim_size
         else:
             return optimal_spat   
-    
-    # NOTE: not used, remove
-    def adjust_dimensions_and_precision(self,loop_dim_size:Dict[str,int]={},pr_loop_dim_size:Dict[str,int]={},
-                                        operand_precision:Dict[str,int]={}, strides:List[int]=[1,1], pattern_name:str="conv2d"):
-        return loop_dim_size,pr_loop_dim_size,operand_precision,operand_precision
     
     def zigzag_cost_model(self):
         """Function that defines the used cost model to guide the schedule search
@@ -263,114 +236,65 @@ class ExecModule(ABC):
         """
         return ZigZagMatchCostModel if len(self.memories)>1 else ZigZagMatchNoTilingCostModel
     
-    def constrain_schedule(self,schedule,match_node):
+    def constrain_schedule(self, schedule: MatchSchedule=None, match_node: MatchNode=None):
         return schedule
     
-    def set_buffers_for_schedule(self, match_node, schedule, pattern_name, engine):
+    def set_buffers_for_schedule(self, match_node: MatchNode=None, schedule: MatchSchedule=None,
+                                 pattern_name: str="conv2d", engine: str="ZigZag"):
         return
-
-    # NOTE: not used, remove
-    def weights_and_constants(self,match_node,pattern_name):
-        """define how the weights and constants of a layer must be saved in C on the generated code
-
-        Args:
-            layer_arguments (List, optional): Dict of the arguments(parameters) for the node. Defaults to [].
-        """
-        def c_friendly_npvalue(arr):
-            # params: arr is expected to be a numpy version of the value, it should be an array but it may be also just a single value
-            if len(arr.shape)>0:
-                # this is actually an array and not a single value
-                arr=arr.reshape([arr.shape[0]]).astype(np.uint8)
-                return f'{{{str(list(arr))[1:len(str(list(arr)))-1]}}}'
-            else:
-                return str(arr)
-        def bytaze(value):
-            return np.frombuffer(value.tobytes(),dtype='uint8')
-        arguments=np.array([],dtype=np.uint8)
-        single_constants=dict()
-        for (layer_arg_name,layer_arg_val) in match_node.const_tensors.items():
-            if isinstance(layer_arg_val, tvm.relay.Constant):
-                if len(layer_arg_val.data.shape)==0:
-                    single_constants[layer_arg_name]=str(layer_arg_val.data)
-                else:
-                    constbytes=bytaze(layer_arg_val.data.numpy())
-                    arguments=np.concatenate((arguments,constbytes))
-        return {
-            "value":c_friendly_npvalue(arguments),
-            "len":arguments.shape[0],
-            "shape":f"[{ceil(arguments.shape[0])}]",
-            "single_costants":single_constants,
-        }
     
-    def update_constants(self, match_node, pattern_name):
+    def update_constants(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
         pass
-
-    def additional_kernel_parameters(self,pattern_name):
-        return dict()
-    
-    def layout_per_operand_def(self,pattern_name,specific_pattern,operands):
-        return dict()
 
     def types_def(self,match_types: MatchTypes=MatchTypes()):
         return match_types
 
-    def match_types(self, pattern_name):
+    def match_types(self, pattern_name: str="conv2d"):
         return self.types_def(MatchTypes(pattern_name=pattern_name))
 
-    def mem_apis_def(self,memory_apis: MemoryApis=MemoryApis(), pattern_name: str="conv2d"):
+    def mem_apis_def(self, memory_apis: MemoryApis=MemoryApis(), pattern_name: str="conv2d"):
         """Functions that set the memory related APIs of the unit
         """
         return memory_apis
 
     # all the APIS methods receive the pattern name since there could be
     # a difference between them(for depthwise conv2d data must be stored in a certain way etc.)
-    def match_mem_apis(self,pattern_name):
-        return self.mem_apis_def(MemoryApis(),pattern_name)
+    def match_mem_apis(self, pattern_name: str="conv2d"):
+        return self.mem_apis_def(memory_apis=MemoryApis(), pattern_name=pattern_name)
     
-    def sync_apis_def(self,sync_apis: SyncApis=SyncApis(), pattern_name: str="conv2d"):
+    def sync_apis_def(self, sync_apis: SyncApis=SyncApis(), pattern_name: str="conv2d"):
         """Functions that set the synchronization related APIs of the unit
         """
         return sync_apis
     
-    def match_sync_apis(self,pattern_name):
-        return self.sync_apis_def(SyncApis(), pattern_name)
+    def match_sync_apis(self, pattern_name: str="conv2d"):
+        return self.sync_apis_def(sync_apis=SyncApis(), pattern_name=pattern_name)
     
-    def comp_apis_def(self,computational_apis: ComputationalApis=ComputationalApis(), pattern_name: str="conv2d"):
+    def comp_apis_def(self, computational_apis: ComputationalApis=ComputationalApis(), pattern_name: str="conv2d"):
         """Functions that set the computation related APIs of the unit
         """
         return computational_apis
     
-    def match_comp_apis(self,pattern_name):
-        return self.comp_apis_def(ComputationalApis(), pattern_name)
+    def match_comp_apis(self, pattern_name:str="conv2d"):
+        return self.comp_apis_def(computational_apis=ComputationalApis(), pattern_name=pattern_name)
     
-    def platform_apis_def(self,platform_apis: PlatformApis=PlatformApis(), pattern_name: str="conv2d"):
+    def platform_apis_def(self, platform_apis: PlatformApis=PlatformApis(), pattern_name: str="conv2d"):
         """Functions that set the platform related APIs of the unit
         """
         return platform_apis
     
-    def match_platform_apis(self,pattern_name):
-        return self.platform_apis_def(PlatformApis(), pattern_name)
+    def match_platform_apis(self, pattern_name: str="conv2d"):
+        return self.platform_apis_def(platform_apis=PlatformApis(), pattern_name=pattern_name)
 
-    def def_include_list(self):
+    def include_list(self):
         """Functions that sets the list of headers to include additionally in the template
         """
         return []
     
-    def match_include_list(self,pattern_name):
-        ex_module_inc_list=self.def_include_list(pattern_name)
-        return ex_module_inc_list
-
-    # NOTE: not used, remove
-    def operand_memories(self,operands):
-        return {
-            operand:[mem.name for mem in self.platform_memories if operand in mem.operands][::-1]
-            for operand in operands
-        }
-    
     def add_option_to_module(self,option,value):
         self.module_options[option]=value
 
-    def adjust_network(self,opts):
+    def adjust_network(self, opts):
         return []
 
     def zigzag_architecture(self, optimal_spatial_mapping = None, platform_memories = None, match_node = None):

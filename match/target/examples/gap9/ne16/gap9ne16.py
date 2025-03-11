@@ -15,10 +15,6 @@ import tvm
 class Gap9NE16(ExecModule):
     def __init__(self,**kwargs):
         super(Gap9NE16, self).__init__(name="NE16",
-                                          specific_patterns=[
-                                              "conv2d",
-                                              "depthwise_conv2d",
-                                          ],
                                           src_path=os.path.dirname(__file__)+"/src",
                                           inc_path=os.path.dirname(__file__)+"/include",
                                           **kwargs)
@@ -103,9 +99,6 @@ class Gap9NE16(ExecModule):
 
     def zigzag_cost_model(self):
         return Gap9NE16CostModel
-    
-    def layout_per_operand_def(self, pattern_name, specific_pattern, operands):
-        return {operand:"NHWC" for operand in operands}
     
     @staticmethod
     def weightEncode(

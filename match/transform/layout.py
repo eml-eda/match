@@ -62,7 +62,7 @@ class MatchLayoutNCHWtoNHWC(relay.ExprMutator):
         if var.name_hint in self.new_vars:
             return self.new_vars[var.name_hint]
         else:
-            return super.visit_var(var)
+            return super().visit_var(var)
 
     def modify_axis_to_bias_add(self, call, new_args):
         updated_attrs = {key: getattr(call.attrs, key) for key in call.attrs.keys()}
