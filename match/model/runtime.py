@@ -329,9 +329,9 @@ class MatchMemoryPlanner:
             less_free_mem_at = -1
             for time in range(tensor.start_usage, tensor.last_usage+1):
                 if time in self.calls_idxs:
-                    if len(tensors_allocated_at_time[time])>max_allocated_tensors_at:
+                    if max_allocated_tensors_at==-1 or len(tensors_allocated_at_time[time])>len(tensors_allocated_at_time[max_allocated_tensors_at]):
                         max_allocated_tensors_at = time
-                    if free_size_at_time[time]<less_free_mem_at or less_free_mem_at==-1:
+                    if less_free_mem_at==-1 or free_size_at_time[time]<free_size_at_time[less_free_mem_at]:
                         less_free_mem_at = time
             # found the most congested spot
             allocated = False

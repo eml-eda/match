@@ -19,12 +19,14 @@ void cluster_lib_init_dma_transfers(){
 }
 
 void cluster_lib_init(MatchCtx* ctx){
+    #ifdef GAP_SDK
     pi_team_config_offload(NUM_CORES);
+    #endif
     cluster_lib_init_dma_transfers();
 }
 
 void* init_l1_scratchpad_memory(MatchCtx* ctx){
-    return pi_cl_l1_malloc(NULL, 92700);
+    return pi_cl_l1_malloc(NULL, L1_SCRATCHPAD_SIZE);
 }
 
 void cluster_lib_cleanup(MatchCtx* ctx){
@@ -32,7 +34,7 @@ void cluster_lib_cleanup(MatchCtx* ctx){
 }
 
 void free_l1_scrachpad_memory(MatchCtx* ctx, void* l1_memory_pt){
-    pi_cl_l1_free(NULL, l1_memory_pt, 92700);
+    pi_cl_l1_free(NULL, l1_memory_pt, L1_SCRATCHPAD_SIZE);
 }
 
 void* cluster_alloc_buffer(const char* name, int tensor_l1_pt, int size, int mem, int buffer_idx){
@@ -303,14 +305,17 @@ void wait_l1_dma_transfers(MatchCtx* ctx){
 }
 
 void wait_pulp_nn_computation(MatchCtx* ctx){
+    #ifdef GAP_SDK
     pi_team_offload_wait();
+    #endif
 }
 
 void pulp_nn_dense_wrapper(void* args){
     MatchCtx* ctx = (MatchCtx*)args;
     MatchTensor* tensors = ctx->tensors->tensors;
+    int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
-    int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[2].attrs)->right_shift;
+    int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     pulp_nn_linear(
         // activations pt  
         tensors[0].pts[L1_SCRATCHPAD], // acts pt
@@ -535,8 +540,9 @@ void pulp_nn_hoparallel_conv2d_wrapper(void* args){
 void pulp_nn_add_wrapper(void* args){
     MatchCtx* ctx = (MatchCtx*)args;
     MatchTensor* tensors = ctx->tensors->tensors;
+    int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
-    int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[2].attrs)->right_shift;
+    int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     // out
     int out_width = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+2].size; // out width
     int out_height = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+1].size; // out height
@@ -557,25 +563,55 @@ void pulp_nn_add_wrapper(void* args){
 void pulp_nn_wrapper(MatchCtx* ctx){
     switch(ctx->pattern_name){
         case dense:
-            pi_team_offload_preset(pulp_nn_dense_wrapper, ctx);
+            #ifdef GAP_SDK
+            pi_team_offload_preset(
+            #else
+            pi_cl_team_fork(NUM_CORES,
+            #endif
+                pulp_nn_dense_wrapper, ctx);
             break;
         case conv2d:
-            pi_team_offload_preset(pulp_nn_hoparallel_conv2d_wrapper, ctx);
+            #ifdef GAP_SDK
+            pi_team_offload_preset(
+            #else
+            pi_cl_team_fork(NUM_CORES,
+            #endif
+                pulp_nn_hoparallel_conv2d_wrapper, ctx);
             break;
         case dense_out:
-            pi_team_offload_preset(pulp_nn_dense_out_int_wrapper, ctx);
+            #ifdef GAP_SDK
+            pi_team_offload_preset(
+            #else
+            pi_cl_team_fork(NUM_CORES,
+            #endif
+                pulp_nn_dense_out_int_wrapper, ctx);
             break;
         // case pulp_nn_dw_conv2d_less_4_pattern:
         //     pi_team_offload_preset(pulp_nn_dw_conv2d_less_4_wrapper, ctx);
         //     break;
         case depthwise_conv2d:
-            pi_team_offload_preset(pulp_nn_dw_conv2d_wrapper, ctx);
+            #ifdef GAP_SDK
+            pi_team_offload_preset(
+            #else
+            pi_cl_team_fork(NUM_CORES,
+            #endif
+                pulp_nn_dw_conv2d_wrapper, ctx);
             break;
         case pointwise_conv2d:
-            pi_team_offload_preset(pulp_nn_pw_conv2d_wrapper, ctx);
+            #ifdef GAP_SDK
+            pi_team_offload_preset(
+            #else
+            pi_cl_team_fork(NUM_CORES,
+            #endif
+                pulp_nn_pw_conv2d_wrapper, ctx);
             break;
         case add_requant:
-            pi_team_offload_preset(pulp_nn_add_wrapper, ctx);
+            #ifdef GAP_SDK
+            pi_team_offload_preset(
+            #else
+            pi_cl_team_fork(NUM_CORES,
+            #endif
+                pulp_nn_add_wrapper, ctx);
             break;
         default:
             break;

@@ -20,6 +20,8 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         #MATCH cost model params
         self.MATCH_ITERATION_LATENCY = 300 # TODO: profile MATCH latency
         self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY = 200 # default value
+        self.COMPUTE_CONSTANTS_ALLOCATION = True
+        self.HAS_ANY_ADDITIONAL_BUFFER = True
         temporal_mapping_dict=temporal_mapping.mapping_dic_stationary
         operands_=temporal_mapping.operand_list
         constrained_temporal_mapping_dict,valid=self.adjust_temporal_mapping(temporal_mapping_dict,operands_,layer)
@@ -30,6 +32,9 @@ class ZigZagMatchCostModel(CostModelEvaluation):
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=constrained_temporal_mapping,
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
+        
+        if self.COMPUTE_CONSTANTS_ALLOCATION:
+            self.final_cleanup()
 
     def is_temporal_mapping_valid(self,temporal_mapping_dict,unordered_loops):
         loops_at_outer_level=[lp[0] for lp in temporal_mapping_dict["O"][1]]
@@ -189,6 +194,53 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.calc_innermost_loops_cost()
         self.def_overall_execution()
     
+    def check_constants_alloc(self):
+        constant_mem_key = "I2"
+        if constant_mem_key not in self.mem_hierarchy_dict:
+            constant_mem_key = "I1"
+        lowest_const_mem = self.mem_hierarchy_dict[constant_mem_key][0]
+        mem_bytes = lowest_const_mem.memory_instance.size//8
+        for operand in self.operands:
+            if self.layer.memory_operand_links[operand] in lowest_const_mem.operands:
+                mem_bytes-=prod([val[0] for val in self.size_per_mem_level[operand].values()])
+        
+        for w_tensor in self.match_node.const_tensors.values():
+            if w_tensor!=self.layer.layer_attrs["w_tensor"]:
+                mem_bytes-=w_tensor.prod_shape_int*w_tensor.dtype.itemsize
+        
+        if mem_bytes<0:
+            return False
+        
+        var_mem_key = "I1"
+        lowest_var_mem = self.mem_hierarchy_dict[var_mem_key][0]
+        var_mem_bytes = lowest_var_mem.memory_instance.size//8
+        if lowest_const_mem==lowest_var_mem:
+            var_mem_bytes-=mem_bytes
+
+        if self.HAS_ANY_ADDITIONAL_BUFFER:
+            schedule = self.layer.layer_attrs["get_match_schedule"](self)
+            self.layer.layer_attrs["exec_module"].set_buffers_for_schedule(match_node=self.match_node,
+                schedule=schedule,
+                pattern_name=self.pattern_name,
+                engine="ZigZag"
+            )
+            for buff_tensor in schedule.buffers:
+                var_mem_bytes-=buff_tensor.num_bytes
+        
+        if var_mem_bytes<0:
+            return False
+        
+        return True
+
+    def final_cleanup(self):
+        self.layer = None
+        self.temporal_mapping.layer_node = None
+        self.spatial_mapping.layer_node = None
+        self.mapping.layer_node = None
+        self.mapping_int.layer_node = None
+        self.mapping_int.spatial_mapping = None
+        # pass
+
     def calc_overall_latency(self):
         # use default ZigZag implementation (just to compute some necessary parameters)
         super().calc_overall_latency()
@@ -196,6 +248,9 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.calc_match_overall_latency()
         # set overall latency
         self.latency_total2=self.match_overall_latency
+        # check thta constants and buffers can actually fit in memory
+        if self.COMPUTE_CONSTANTS_ALLOCATION:
+            self.is_tm_valid = self.is_tm_valid and self.check_constants_alloc()
 
 class ZigZagMatchNoTilingCostModel(ZigZagMatchCostModel):
     def __init__(

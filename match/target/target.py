@@ -48,7 +48,7 @@ class PatternResult:
         self.energy=energy
 
     def __eq__(self,other):
-        return self.match_target_pattern==other.match_target_pattern and self.match_node==other.match_node
+        return self.match_target_pattern.name==other.match_target_pattern.name and self.match_node==other.match_node
 
 def mock_func(pattern):
     return True
@@ -191,7 +191,12 @@ class MatchTarget(ABC):
         """
         node=mod.body.op.body
         match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{exec_module_name}.{pattern_name}")
-        schedule_gen = ScheduleGenerator(node=node,args_list=mod.body.args,exec_module=match_pt.exec_module,pattern_name=match_pt.original_name,partitioned=True,pattern_inst=match_pt)
+        schedule_gen = ScheduleGenerator(node=node,args_list=mod.body.args,
+                                         target=self,
+                                         exec_module=match_pt.exec_module,
+                                         pattern_name=match_pt.original_name,
+                                         partitioned=True,
+                                         pattern_inst=match_pt)
         schedule_gen.parse()
         match_node=schedule_gen.get_match_node()
         pt_res=PatternResult(match_pt,match_node)

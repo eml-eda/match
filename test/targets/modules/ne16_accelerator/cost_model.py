@@ -439,3 +439,5 @@ class NE16AcceleratorCostModel(ZigZagMatchCostModel):
                 self.SOFTWARE_SLICING_COST = self.loop_sizes["OY"] * self.loop_sizes["OX"] * (self.loop_sizes[SOFTWARE_DIM_TO_PAD]+(16-self.loop_sizes[SOFTWARE_DIM_TO_PAD]%16))*1.5
         # add software costs
         self.match_overall_latency += self.SOFTWARE_PAD_COST + self.SOFTWARE_SLICING_COST
+        # if self.pattern_name=="dense":
+        #     self.match_overall_latency = 0

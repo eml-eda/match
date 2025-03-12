@@ -22,13 +22,11 @@
 % endfor
 % endfor
 
-% for exec_module in target.exec_modules:
-% for pat_idx, pat in enumerate(exec_module.partitioning_patterns()):
+% for pat_idx, pat in enumerate([pt for exec_module in target.exec_modules for pt in exec_module.partitioning_patterns()]):
 #ifndef __${pat.name.upper()}__
 #define __${pat.name.upper()}__
 #define ${pat.name} ${pat_idx}
 #endif
-% endfor
 % endfor
 
 #endif

@@ -43,9 +43,9 @@ class NE16Accelerator(ExecModule):
     def update_constants(self, match_node = None, pattern_name = "conv2d"):
         for w_tensor in match_node.const_tensors.values():
             if "dense" in w_tensor.name:
-                w_tensor.data = w_tensor.data.reshape((w_tensor.dims[0], w_tensor[1]) + (1, 1))
+                w_tensor.data = w_tensor.data.reshape((w_tensor.dims[0].size, w_tensor.dims[1].size) + (1, 1))
                 w_tensor.layout = "NCHW"
-                w_tensor.dims = [w_tensor.dims[0], match_node.default_dim, w_tensor.dims[1]]
+                w_tensor.dims = [w_tensor.dims[0], w_tensor.dims[1], match_node.default_dim, match_node.default_dim]
             elif "conv2d" in w_tensor.name:
                 if w_tensor.layout=="HWIO":
                     w_tensor.data = w_tensor.data.transpose(3,2,0,1)
@@ -95,6 +95,20 @@ class NE16Accelerator(ExecModule):
             cast = is_op("cast")(clip)
             return cast
         
+        def dense_pt_requant():
+            """Create pattern for conv2D with optional fused relu."""
+            dense = is_op("nn.dense")(
+                wildcard(), wildcard()
+            )
+            dense = is_op("cast")(dense) | dense
+            bias_add = is_op("nn.bias_add")(dense, wildcard())
+            scale = is_op("multiply")(dense, wildcard()) | is_op("multiply")(wildcard(), dense)
+            bias = is_op("add")(scale, wildcard()) | is_op("add")(wildcard(), scale)
+            right_shift = is_op("right_shift")(bias_add | bias, is_constant())
+            clip = is_op("clip")(right_shift)
+            cast = is_op("cast")(clip)
+            return cast
+
         def only_out_uint8(node):
             return add_checks_get_first_op(node, "cast").attrs.dtype=="uint8"
 
@@ -146,6 +160,7 @@ class NE16Accelerator(ExecModule):
         return [
             PartitioningPattern(name="conv2d",pattern=conv_pt_requant,additional_checks=only_std_convs),
             PartitioningPattern(name="depthwise_conv2d",pattern=conv_pt_requant,additional_checks=only_dw_convs),
+            PartitioningPattern(name="dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
         ]
     
     def platform_apis_def(self, platform_apis: PlatformApis=None, pattern_name: str="conv2d"):
