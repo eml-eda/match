@@ -2,10 +2,19 @@
 #define __PULP_CLUSTER_LIB_H__
 
 #include <match/ctx.h>
+#ifdef GAP_SDK
+#include <GAP9.h>
+#else
 #include <pulp_platform.h>
+#endif
 #include <pulp_mem/dma.h>
 #include <pulp_cluster/cluster_dev.h>
 
+#ifdef GAP_SDK
+#define L1_SCRATCHPAD_SIZE 92700
+#else
+#define L1_SCRATCHPAD_SIZE 32768
+#endif
 // #define CLUSTER_LIB_DEBUG
 
 void offload_to_pulp_cluster(MatchCtx* ctx, void (inner_function)(unsigned int* args_inner_function),unsigned int* args);

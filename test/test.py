@@ -5,8 +5,9 @@ from pathlib import Path
 from typing import List
 
 
-from targets.pulp_platform import PulpPlatform
+from targets.pulp_open import PulpOpen
 from targets.default import DefaultExample
+from targets.GAP9 import GAP9
 from utils import get_default_inputs
 from microbench import get_microbench_mod, get_network_single_nodes
 from tvm import relay
@@ -16,7 +17,8 @@ from match.model.model import MatchModel
 import onnx
 
 TEST_TARGET = {
-    "pulp_platform": PulpPlatform,
+    "pulp_open": PulpOpen,
+    "GAP9": GAP9,
     "default": DefaultExample,
 }
 
@@ -188,9 +190,9 @@ if __name__=="__main__":
         "-t",
         "--target",
         dest="target",
-        default="pulp_platform",
+        default="pulp_open",
         type=str,
-        choices=["default","pulp_platform"],
+        choices=["default", "pulp_open", "GAP9"],
         help="Choose the target to run the test on"
     )
 

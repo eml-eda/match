@@ -28,14 +28,18 @@ void neural_engine_lib_init(MatchCtx* ctx){
     }
     // Init nnx task(/s can be buffered later)
     ne16_task_init(match_ne16_get_nnx_task(0));
-    ne16_task_set_op_to_conv(match_ne16_get_nnx_task(0),
-            filter_height,
-            ctx->pattern_name==depthwise_conv2d,
-            stride_height);
-    ne16_task_set_bits(match_ne16_get_nnx_task(0),
-            inp_bits,
-            out_bits,
-            weights_bits);
+    ne16_task_set_op_to_conv(
+        match_ne16_get_nnx_task(0),
+        filter_height,
+        ctx->pattern_name==depthwise_conv2d,
+        stride_height
+    );
+    ne16_task_set_bits(
+        match_ne16_get_nnx_task(0),
+        inp_bits,
+        out_bits,
+        weights_bits
+    );
     ne16_task_set_norm_quant(
         match_ne16_get_nnx_task(0),
         (ne16_quant_t) {
@@ -102,7 +106,7 @@ void neural_engine_compute_tile(MatchCtx* ctx){
         pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
         pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
     }
-    if(stride_height){
+    if(stride_height==1){
         ne16_task_set_dims(
             match_ne16_get_nnx_task(0),
             inp_width, inp_ch,

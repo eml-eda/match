@@ -140,6 +140,10 @@ class MatchTensor:
     def prod_shape(self):
         return str(np.prod([dim.size for dim in self.dims]))
     
+    @property
+    def prod_shape_int(self):
+        return int(np.prod([dim.size for dim in self.dims]))
+    
 class MatchTensorTile:
     def __init__(self,tensor: MatchTensor=MatchTensor(),tiled_dims: List[MatchTiledDim]=[]) -> None:
         self.tiled_dims = tiled_dims

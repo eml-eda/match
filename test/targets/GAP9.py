@@ -8,14 +8,14 @@ from .modules.pulp_cluster.pulp_cluster import PulpCluster
 
 # pulp config
 PULP_CORES = 8
-L1_SCRATCHPAD_KB_SIZE = 64
-L2_SHARED_MEM_KB_SIZE = 512
-L3_FLASH_KB_SIZE = 8912
+L1_SCRATCHPAD_KB_SIZE = 90
+L2_SHARED_MEM_KB_SIZE = 1496
+L3_FLASH_KB_SIZE = 89128
 ASYNC_DMA = False
 
-class PulpPlatform(MatchTarget):
+class GAP9(MatchTarget):
     def __init__(self):
-        super(PulpPlatform,self).__init__([
+        super(GAP9,self).__init__([
             PulpCluster(
                 num_cores=PULP_CORES,
                 l1_kb_size=L1_SCRATCHPAD_KB_SIZE,
@@ -30,7 +30,7 @@ class PulpPlatform(MatchTarget):
                 l3_kb_size=L3_FLASH_KB_SIZE,
                 async_dma=ASYNC_DMA
             )
-        ],name="pulp_platform")
+        ],name="GAP9")
         self.set_target_host()
         self.set_paths()
         self.set_apis()
@@ -40,7 +40,7 @@ class PulpPlatform(MatchTarget):
         self.cpu_type = "riscv_cpu"
 
     def set_paths(self):
-        self.makefile_path = os.path.dirname(__file__)+"/pulp_config_lib/Makefile"
+        self.makefile_path = os.path.dirname(__file__)+"/pulp_config_lib/Makefile.GAP9"
         self.tvm_runtime_include_path = os.path.dirname(__file__)+"/pulp_config_lib/tvm_runtime.h"
         self.tvm_runtime_src_path = os.path.dirname(__file__)+"/pulp_config_lib/tvm_runtime.c"
         self.crt_config_path = os.path.dirname(__file__)+"/pulp_config_lib/crt_config.h"

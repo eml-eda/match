@@ -10,12 +10,15 @@
             "request": "launch",
             "program": "${workspaceFolder}/test/test.py",
             "args": [
-                "--model",
-                "drone_vfe",
-                // "--microbench",
-                // "conv",
-                "--executor",
-                "graph"
+                "--executor"
+                ,"graph"
+                // "--model",
+                // "drone_vfe",
+                ,"--microbench"
+                ,"conv"
+                ,"--golden"
+                // ,"--target"
+                // ,"GAP9"
             ],
             "console": "integratedTerminal",
             "justMyCode": false
