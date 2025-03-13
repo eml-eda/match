@@ -234,7 +234,7 @@ class ExecModule(ABC):
         Returns:
             Class: class itself(not an instance) of the used cost model
         """
-        return ZigZagMatchCostModel if len(self.memories)>1 else ZigZagMatchNoTilingCostModel
+        return ZigZagMatchCostModel if len(self.module_memories())>0 else ZigZagMatchNoTilingCostModel
     
     def constrain_schedule(self, schedule: MatchSchedule=None, match_node: MatchNode=None):
         return schedule

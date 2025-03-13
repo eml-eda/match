@@ -83,7 +83,9 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         super(PulpClusterCostModel,self).__init__(
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=temporal_mapping,
-            access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
+            access_same_data_considered_as_no_access=access_same_data_considered_as_no_access,
+            has_any_additional_buffer=True
+        )
     
     def def_transfer_cost(self):
         USE_SIMPLER_MODEL = False

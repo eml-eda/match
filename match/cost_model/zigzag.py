@@ -16,12 +16,14 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         spatial_mapping,
         temporal_mapping,
         access_same_data_considered_as_no_access=True,
+        compute_constants_allocation=True,
+        has_any_additional_buffer=False,
     ):
         #MATCH cost model params
         self.MATCH_ITERATION_LATENCY = 300 # TODO: profile MATCH latency
         self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY = 200 # default value
-        self.COMPUTE_CONSTANTS_ALLOCATION = True
-        self.HAS_ANY_ADDITIONAL_BUFFER = True
+        self.COMPUTE_CONSTANTS_ALLOCATION = compute_constants_allocation
+        self.HAS_ANY_ADDITIONAL_BUFFER = has_any_additional_buffer
         temporal_mapping_dict=temporal_mapping.mapping_dic_stationary
         operands_=temporal_mapping.operand_list
         constrained_temporal_mapping_dict,valid=self.adjust_temporal_mapping(temporal_mapping_dict,operands_,layer)
