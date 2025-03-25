@@ -2,44 +2,69 @@
 import os
 from match.target.exec_module import ExecModule, ModuleLib
 from match.partition.partitioning_pattern import PartitioningPattern
-from match.target.exec_module import ComputationalApis, MemoryApis
-from match_arcane.match.target.memory_inst import MemoryInst
-from tvm.relay.dataflow_pattern import wildcard, is_op
+from match.target.exec_module import ComputationalApis
+from match.node.node import MatchNode
+from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
 
 class Carus(ExecModule):
     def __init__(self):
         super().__init__(
             name = "carus",
             libs_required = {
-                "carus_helper": ModuleLib(name="carus_helper", base_path=os.path.dirname(__file__)+"/../libs/carus_helper")
+                "carus_helper": ModuleLib(name="carus_helper", base_path=os.path.dirname(__file__)+"/../libs/carus_helper"),
             },
         )
-    
-    def zigzag_optimal_spatial_mapping_def(self, match_node = None, pattern_name = "conv2d"):
-        return [("K", 128)]
+
+    def module_memories(self):
+        return []
     
     def partitioning_patterns(self):
-        def dense_int32_pt():
-            return is_op("nn.dense")(wildcard(), wildcard())
+
+        def dense_bnrom_fake_requant_pt():
+            """Create pattern for conv2D with optional fused relu."""
+            dense = is_op("nn.dense")(
+                wildcard(), wildcard()
+            )
+            scale = is_op("multiply")(dense, wildcard()) | is_op("multiply")(wildcard(), dense)
+            bias = is_op("add")(scale, is_constant()) | is_op("add")(is_constant(), scale)
+            right_shift = is_op("right_shift")(bias, is_constant())
+            clip = is_op("clip")(right_shift)
+            return clip
+
+        def dense_add_pt():
+            """Create pattern for conv2D with optional fused relu."""
+            dense = is_op("nn.dense")(
+                wildcard(), wildcard()
+            )
+            bias = is_op("add")(dense, is_constant()) | is_op("add")(is_constant(), dense)
+            return bias
+
+        def additional_checks_fake_requant(node):
+            return False
         
-        def check_int32_only(node):
-            dense = node
-            return dense.args[1].checked_type.dtype=="int32"
+        def additional_checks_dense_add(node):
+            return False
 
         return [
-            PartitioningPattern(name="dense", pattern=dense_int32_pt, additional_checks=check_int32_only)
-        ]
-    
-    def module_memories(self):
-        return [
-            MemoryInst(name="ARCANE_L1_MEM", size=self.ARCANE_L1_MEMORY_SIZE),
+            PartitioningPattern(name="DENSE_BNORM_FAKE_REQUANT_PT", pattern=dense_bnrom_fake_requant_pt,
+                                # additional_checks=additional_checks_fake_requant
+                                ),
+            PartitioningPattern(name="DENSE_ADD_PT", pattern=dense_add_pt,
+                                # additional_checks=additional_checks_dense_add
+                                ),
         ]
 
     def comp_apis_def(self, computational_apis: ComputationalApis=None, pattern_name = "conv2d"):
         computational_apis.compute_tile = "carus_compute_wrapper"
         return computational_apis
     
-    def mem_apis_def(self, memory_apis: MemoryApis=None, pattern_name = "conv2d"):
-        memory_apis.mem_transfer = "carus_mem_transfer"
-        memory_apis.init_memory["L1_MEM"] = "carus_l1_mem_init"
-        return memory_apis
+    def update_constants(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
+        for w_tensor in match_node.const_tensors.values():
+            if "dense" in w_tensor.name:
+                if w_tensor.layout!="CN":
+                    w_tensor.data = w_tensor.data.transpose(1,0)
+                    w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]
+                w_tensor.layout = "CN"
+                
+    def include_list(self):
+        return ["carus_helper/carus_helper"]

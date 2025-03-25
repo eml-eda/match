@@ -4,6 +4,7 @@ import json
 from math import prod
 import os
 from pathlib import Path
+import re
 import subprocess
 
 import numpy as np
@@ -26,8 +27,8 @@ EXCUTOR_COMPILER_CLS = {"aot":MatchCompilerCAoT, "graph":MatchCompilerCGraph}
 class MatchModel:
 
     def __init__(self, relay_mod=None, relay_params=None, filename="model.onnx", params_filename="params.data",
-                 model_type="onnx", model_name="default", golden_cpu_model=True, benchmark_model=True, executor="aot",
-                 default_inputs=None, is_model_dynamic=False, dynamic_algorithm="cuts", dynamic_dims=None):
+                 model_type="onnx", model_name="default", golden_cpu_model=True, benchmark_model=False, executor="aot",
+                 default_inputs=None, is_model_dynamic=False, dynamic_algorithm="cuts", dynamic_dims=None, handle_out_fn=""):
         self.relay_mod = relay_mod
         self.relay_params = relay_params
         self.filename = filename
@@ -51,6 +52,7 @@ class MatchModel:
         # self.name = model_name if (not self.dynamic or self.dyn_is_max) else "_".join(f"{dyn_name.replace(' ', '_')}_{dyn_val}" for dyn_name, dyn_val in dynamic_sizes.items())    
         # may be used for dynamic models in case c executor is used
         self.other_models = dict()
+        self.handle_out_fn = handle_out_fn
 
     @staticmethod
     def get_path(out_path,model_name):
@@ -265,9 +267,18 @@ class MatchModel:
                                                                      shape=tuple([int(v) for v in inp_.type_annotation.shape])))
                                                 for inp_ in relay_inputs]
         # format inputs and outputs data structure as C templates expect
+        def to_c_variable_name(name):
+            """Convert Relay variable name to C-compliant name."""
+            # Remove invalid characters
+            name = re.sub(r'[^0-9a-zA-Z_]', '_', name)
+            if len(name)==0:
+                name = "match_inp"
+            if name.isdigit() or name[0].isdigit():
+                name = "match_inp_"+str(name)
+            return name        
         match_inputs={
-            inp_.name_hint:{
-                "name":inp_.name_hint,
+            to_c_variable_name(inp_.name_hint):{
+                "name":to_c_variable_name(inp_.name_hint),
                 "c_arr_size":int(prod(inp_.type_annotation.shape)),
                 "c_type":numpy_dtype_to_c_type(inp_.type_annotation.dtype),
                 "prod_shape":int(prod(inp_.type_annotation.shape)),

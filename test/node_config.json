@@ -6,8 +6,8 @@
     "inp_ch":22,
     "out_ch":24,
     "right_shift":13,
-    "inp_features":42,
-    "out_features":88,
+    "inp_features":48,
+    "out_features":16,
     "activation":true,
     "requant_pattern":true
 }

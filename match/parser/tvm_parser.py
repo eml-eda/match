@@ -126,10 +126,10 @@ class MatchTVMParser:
                 axeses.append(dim_idx)
             dim_idx += 1
 
-        other_tensor = inp_tensor if broadcasted_tensor==w_tensor else w_tensor
+        other_tensor = inp_tensor if broadcasted_tensor is None or broadcasted_tensor==w_tensor else w_tensor
         if broadcasted_tensor is None:
             for dim_idx in range(len(inp_tensor.dims)):
-                self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[dim_idx], new_dim_name=inp_tensor.dims[dim_idx])
+                self.update_all_dim_names_occurrences_with(old_dim_name=w_tensor.dims[dim_idx].name, new_dim_name=inp_tensor.dims[dim_idx].name)
         else:
             sum_sizes_other_tensor = sum([dim.size for dim in other_tensor.dims])
             for dim_idx in range(len(broadcasted_tensor.dims)):
