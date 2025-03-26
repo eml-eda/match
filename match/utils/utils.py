@@ -2,10 +2,24 @@ import os
 import pathlib
 import json
 import subprocess
+from typing import List
 from mako.template import Template
 import numpy as np
 from tvm import relay as relay_tvm
 import match
+from tvm.ir import IRModule
+
+def get_default_inputs(mod: IRModule=None, input_files: List[str]=[], min_input_val=None, max_input_val=None):
+    default_inputs = []
+    if input_files is not None and len(input_files)==len(mod["main"].params):
+        default_inputs = [ np.loadtxt(input_files[param_idx], delimiter=',',
+                            dtype=np.dtype(param.type_annotation.dtype),
+                            usecols=[0]).reshape([int(i) for i in param.type_annotation.shape])
+                            for param_idx, param in enumerate(mod["main"].params)]
+    else:
+        default_inputs = [get_random_np_array(dtype=param.type_annotation.dtype, shape=param.type_annotation.shape, min_val=min_input_val, max_val=max_input_val)
+                           for param in mod["main"].params]
+    return default_inputs
 
 def numpy_dtype_to_c_type(dtype):
     """Translate NumPy dtype to corresponding C type."""

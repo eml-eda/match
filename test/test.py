@@ -9,7 +9,7 @@ from targets.arcane import Arcane
 from targets.pulp_open import PulpOpen
 from targets.default import DefaultExample
 from targets.GAP9 import GAP9
-from utils import get_default_inputs
+from match.utils.utils import get_default_inputs
 from microbench import get_microbench_mod, get_network_single_nodes
 from tvm import relay
 
