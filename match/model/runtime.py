@@ -421,6 +421,7 @@ class MatchMemoryPlanner:
         try:
             return self.match_mem_planner_impl()
         except Exception as exc:
+            breakpoint()
             print(f"[MEMORY PLANNER] Error during memory planner {exc}")
             # raise Exception("Not enough SoC memory available")
     

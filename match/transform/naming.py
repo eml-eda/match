@@ -9,8 +9,10 @@ class MatchRenameIO:
         # Remove invalid characters
         import re
         name = re.sub(r'[^0-9a-zA-Z_]', '_', name)
-        if name[0].isdigit():
-            name = '_' + name
+        if len(name)==0:
+            name = "match_inp"
+        if name.isdigit() or name[0].isdigit():
+            name = "match_inp_"+str(name)
         return name
 
     def transform_module(self, mod, ctx):

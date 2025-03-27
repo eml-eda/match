@@ -2,53 +2,8 @@ from tvm.relay.dataflow_pattern import DFPatternCallback, is_op, rewrite, wildca
 from tvm import relay
 import tvm
 import numpy as np
-
-class DivFloorPlinioOnnx(DFPatternCallback):
-    """Rewriter for digital requant pattern
-    """
-    def __init__(self, require_type=False):
-        super().__init__(require_type)
-
-        self.div = is_op("divide")(wildcard(),is_constant())
-        self.floor = is_op("floor")(self.div)
-        self.clip = is_op("clip")(self.floor)
-        self.cast = is_op("cast")(self.clip)
-        self.pattern = self.cast
-
-    def callback(self, pre, post, node_map):
-        div = node_map[self.div][0]
-        cast = node_map[self.cast][0]
-        clip = node_map[self.clip][0]
-
-        shift_factor = int(np.log2(abs(int(div.args[1].data.numpy()))))
-
-        x = relay.op.right_shift(div.args[0], relay.const(shift_factor))
-        x = relay.op.clip(x, a_min=int(clip.attrs.a_min), a_max=int(clip.attrs.a_max))
-        return relay.op.cast(x, cast.attrs["dtype"])
     
-class DivReqPlinioOnnx(DFPatternCallback):
-    """Rewriter for digital requant pattern
-    """
-    def __init__(self, require_type=False):
-        super().__init__(require_type)
-
-        self.div = is_op("divide")(wildcard(),is_constant())
-        self.clip = is_op("clip")(self.div)
-        self.cast = is_op("cast")(self.clip)
-        self.pattern = self.cast
-
-    def callback(self, pre, post, node_map):
-        div = node_map[self.div][0]
-        cast = node_map[self.cast][0]
-        clip = node_map[self.clip][0]
-
-        shift_factor = int(np.log2(abs(int(div.args[1].data.numpy()))))
-
-        x = relay.op.right_shift(div.args[0], relay.const(shift_factor))
-        x = relay.op.clip(x, a_min=int(clip.attrs.a_min), a_max=int(clip.attrs.a_max))
-        return relay.op.cast(x, cast.attrs["dtype"])
-    
-class FloorDivCastOnnx(DFPatternCallback):
+class FloorDivToRightShiftRewriter(DFPatternCallback):
     """Rewriter for digital requant pattern
     """
     def __init__(self, require_type=False):
@@ -59,11 +14,25 @@ class FloorDivCastOnnx(DFPatternCallback):
 
     def callback(self, pre, post, node_map):
         div = node_map[self.div][0]
-
+        floor = node_map[self.floor][0]
         shift_factor = int(np.log2(abs(int(div.args[1].data.numpy()))))
 
-        x = relay.op.right_shift(div.args[0].args[0], relay.const(shift_factor))
-        return x
+        return relay.op.right_shift(floor.args[0], relay.const(shift_factor))
+    
+class DivFloorToRightShiftRewriter(DFPatternCallback):
+    """Rewriter for digital requant pattern
+    """
+    def __init__(self, require_type=False):
+        super().__init__(require_type)
+        self.div = is_op("divide")(wildcard(),is_constant())
+        self.floor = is_op("floor")(self.div)
+        self.pattern = self.floor
+
+    def callback(self, pre, post, node_map):
+        div = node_map[self.div][0]
+        shift_factor = int(np.log2(abs(int(div.args[1].data.numpy()))))
+
+        return relay.op.right_shift(div.args[0], relay.const(shift_factor))
 
 @tvm.ir.transform.module_pass(opt_level=0)
 class MatchRequantRewriter:
@@ -75,10 +44,8 @@ class MatchRequantRewriter:
         self, mod: tvm.ir.IRModule, ctx: tvm.ir.transform.PassContext
     ) -> tvm.ir.IRModule:
         for global_var, func in mod.functions.items():
-            # TODO: why they are all used, whats different? fuse into a single rewriter!
-            func = rewrite(DivFloorPlinioOnnx(), func)
-            func = rewrite(DivReqPlinioOnnx(), func)
-            func = rewrite(FloorDivCastOnnx(), func)
+            func = rewrite(DivFloorToRightShiftRewriter(), func)
+            func = rewrite(FloorDivToRightShiftRewriter(), func)
             mod.update_func(global_var, func)
         return mod
 

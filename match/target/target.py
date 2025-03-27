@@ -160,6 +160,7 @@ class MatchTarget(ABC):
             "golden_cpu_model":models_[default_model].golden_cpu_model,
             "benchmarking":models_[default_model].benchmark_model,
             "bench_iterations":int(models_[default_model].benchmark_model),
+            "handle_out_fn":models_[default_model].handle_out_fn,
             "app":"match",
         }
         with open(abs_out_path+f"/include/{default_model}/default_inputs.h","w") as inp_file:
@@ -308,6 +309,7 @@ class MatchTarget(ABC):
                 latency,energy=self.evaluate_pattern(node,match_pt)
                 print(f"[PATTERN MATCHER] Node is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}")
             except Exception as exc:
+                breakpoint()
                 print(f"[PATTERN MATCHER] Node failed to be evaluated with pattern {match_pt.name}")
                 breakpoint()
                 return False

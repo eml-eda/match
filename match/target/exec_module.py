@@ -191,7 +191,6 @@ class ExecModule(ABC):
         """
         return [
             # from lower level to higher level memories
-            MemoryInst(name="EXEC_MODULE_SCRATCHPAD_CACHE", k_bytes=EXEC_MODULE_SCRATCHPAD_CACHE_SIZE),
         ]
     
     def update_memories_for_pt(self, memories, pattern_name):

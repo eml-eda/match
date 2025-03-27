@@ -7,13 +7,14 @@ import numpy as np
 from networks import RESNET_18_MAPPER, RESNET_18_NODES, VIT_MAPPER, VIT_NODES
 
 from quants import create_conv_ex, create_dense_ex
-from mini import create_dense_conv_dense_ex
+from mini import create_dense_conv_dense_ex, create_easy_dense_int32_ex
 
 
 MICROBENCH_MAPPER = {
     "conv":create_conv_ex,
     "dense":create_dense_ex,
     "dense_conv_dense":create_dense_conv_dense_ex,
+    "easy_dense_int32":create_easy_dense_int32_ex,
 }
 
 NETWORK_MAPPER = {
