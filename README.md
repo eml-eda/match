@@ -52,8 +52,9 @@ $ git clone --recursive https://github.com/eml-eda/match
 $ cd match
 $ python3 -m venv venv
 $ source venv/bin/activate
-$ pip install -r requirements.txt
+$ pip3 install -r requirements.txt
 $ make install_tvm
+$ python3 setup.py install
 ```
 
 When using a new fresh terminal, users can run `source sourceme.sh` on the repository to correctly set the environment. 
