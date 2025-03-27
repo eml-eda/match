@@ -66,7 +66,7 @@ To use MATCH directly, the end user can execute the run.py script, setting the t
 Considering an ONNX network the user that should be compiled for a pulp platform, the user shall execute the following command
 
 ```
-$ python3 match/test.py --model onnx image_classification --executor graph
+$ python3 test/test.py --model onnx image_classification --executor graph
 ```
 
 <!--Additionally there are 2 predefined networks, that can be used to test a newly built target, that can be accessed from MATCH directly.
