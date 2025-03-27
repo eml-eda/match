@@ -1,10 +1,11 @@
 import os
 from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
-from match.transform.layout import MatchLayoutNCHWtoNHWC
+from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM
 from match.transform.requant import MatchRequantRewriter
 from .modules.ne16_accelerator.accelerator import NE16Accelerator
 from .modules.pulp_cluster.pulp_cluster import PulpCluster
+from tvm import relay
 
 # pulp config
 PULP_CORES = 8
@@ -75,7 +76,8 @@ class GAP9(MatchTarget):
     def network_transformations(self, opts):
         return [
             ("requant", MatchRequantRewriter()),
-            ("layout", MatchLayoutNCHWtoNHWC()),
+            ("layout", MatchLayoutNCHWtoNHWCTVM),
+            ("folding", relay.transform.FoldConstant())
         ]
     
     def host_memories(self):

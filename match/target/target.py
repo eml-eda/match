@@ -309,6 +309,7 @@ class MatchTarget(ABC):
                 print(f"[PATTERN MATCHER] Node is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}")
             except Exception as exc:
                 print(f"[PATTERN MATCHER] Node failed to be evaluated with pattern {match_pt.name}")
+                breakpoint()
                 return False
             # check all the patterns that are after me
             for other_pt in self.match_patterns[match_pt.idx+1:]:
@@ -325,6 +326,7 @@ class MatchTarget(ABC):
                             print(f"[PATTERN MATCHER] Node is also supported by {other_pt.name} with expected latency {other_pt_latency} and expected energy {other_pt_energy}\n")
                         except Exception as exc:
                             print(f"[PATTERN MATCHER] Node failed to be evaluated with pattern {other_pt.name}")
+                            breakpoint()
                             continue
                         # if the result gathered by this other matching pattern is better break all
                         # this is due to the fact that this pattern will be matched later and finally

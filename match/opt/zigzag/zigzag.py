@@ -29,7 +29,7 @@ class ZigZagEngine(ScheduleEngine):
                  ):
         super(ZigZagEngine, self).__init__(target=target, exec_module=exec_module,
                                            pattern_name=pattern_name, match_node=match_node)
-        self.lpf_limit=13
+        self.lpf_limit=11
         self.zigzag_temporal_mapping=dict()
         self.zigzag_parser = MatchNodeToZigZagParser(match_node=self.match_node, pattern_name=self.pattern_name)
         self.workload = dict()

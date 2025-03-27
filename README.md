@@ -39,7 +39,7 @@ These instructions will consider a Ubuntu installation including:
 This can be achieved with
 
 ```
-$ sudo apt install -y llvm cmake python3 python3-pip 
+$ xargs -a system_requirements.txt sudo apt install -y
 ```
 
 A fresh install of Ubuntu 22.04 should satify all requirements.
@@ -52,7 +52,8 @@ $ git clone --recursive https://github.com/eml-eda/match
 $ cd match
 $ python3 -m venv venv
 $ source venv/bin/activate
-$ make all
+$ pip install -r requirements.txt
+$ make install_tvm
 ```
 
 When using a new fresh terminal, users can run `source sourceme.sh` on the repository to correctly set the environment. 

@@ -1,15 +1,16 @@
 import os
 from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
-from match.transform.layout import MatchLayoutNCHWtoNHWC
+from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM
 from match.transform.requant import MatchRequantRewriter
 from .modules.ne16_accelerator.accelerator import NE16Accelerator
 from .modules.pulp_cluster.pulp_cluster import PulpCluster
+from tvm import relay
 
 # pulp config
 PULP_CORES = 8
 L1_SCRATCHPAD_KB_SIZE = 32
-L2_SHARED_MEM_KB_SIZE = 512
+L2_SHARED_MEM_KB_SIZE = 4096
 L3_FLASH_KB_SIZE = 8912
 ASYNC_DMA = False
 
@@ -68,7 +69,8 @@ class PulpOpen(MatchTarget):
     def network_transformations(self, opts):
         return [
             ("requant", MatchRequantRewriter()),
-            # ("layout", MatchLayoutNCHWtoNHWC()),
+            ("layout", MatchLayoutNCHWtoNHWCTVM),
+            ("folded", relay.transform.FoldConstant()),
         ]
     
     def host_memories(self):

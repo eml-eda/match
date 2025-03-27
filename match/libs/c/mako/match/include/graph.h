@@ -11,6 +11,11 @@
 // void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handle
 // MATCH signature
 // type* inp_A, ..., type* inp_Z, type* out_A, ..., type* out_N
+% for mem_tensor in mem_tensors:
+% if mem_tensor.is_input or mem_tensor.is_output:
+#define __${model_name}_GRAPH_${mem_tensor.name}_FROM_EXTERNAL_MEM__ ${int(mem_tensor.stored_in_external_memory)}
+% endif
+% endfor
 % for node in nodes:
 % if node.fallback:
 #ifdef __cplusplus

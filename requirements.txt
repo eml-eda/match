@@ -1,0 +1,18 @@
+setuptools>=65.5
+pyyaml
+numpy<2.0
+mako
+# TVM specific
+typing-extensions
+psutil
+scipy
+decorator
+attrs
+pybind11
+# ZigZag specific
+networkx
+sympy
+matplotlib
+onnx
+tqdm
+multiprocessing_on_dill

@@ -19,7 +19,9 @@ def get_depth_arr_pattern(pattern_inst_):
         return [(pattern_inst_.op.expr.name,get_depth_arr_pattern(arg_)) for arg_ in pattern_inst_.args]
     else:
         return 0
-    
+
+LAYOUTS_RESHAPES_AND_TRANSFORMS_OF_CONSTANTS_OPS = ("reshape","transpose","expand_dims","squeeze","cast","reshape_like","transpose_like","layout_transform")
+
 class MatchTVMParser:
     def __init__(self, node:tvm.ir.IRModule, args_list:List=[],
                  exec_module:ExecModule=None, pattern_name:str="",
@@ -56,9 +58,19 @@ class MatchTVMParser:
             new_args = []
             for idx,arg in enumerate(self.args_list):
                 new_arg = arg
-                while isinstance(new_arg, tvm.relay.Call):
-                    new_arg = new_arg.args[0]
-                if new_arg!=arg and isinstance(new_arg, tvm.relay.Var):
+                # its actually a function
+                if isinstance(new_arg, tvm.relay.Call) and not hasattr(new_arg.op, "name"):
+                    new_arg = params_[idx]
+                # its actually a function
+                elif isinstance(new_arg, tvm.relay.Call) and isinstance(new_arg, tvm.relay.Function):
+                    new_arg = params_[idx]
+                elif isinstance(new_arg, tvm.relay.Call):
+                    while isinstance(new_arg, tvm.relay.Call) and new_arg.op.name in LAYOUTS_RESHAPES_AND_TRANSFORMS_OF_CONSTANTS_OPS:
+                        new_arg = new_arg.args[0]
+                        if isinstance(new_arg, tvm.relay.Var) or isinstance(new_arg, tvm.relay.Constant) or (isinstance(new_arg, tvm.relay.Call) and not hasattr(new_arg.op, "name")):
+                            new_arg = params_[idx]
+                            break
+                if not isinstance(new_arg, tvm.relay.Var) and not isinstance(new_arg, tvm.relay.Constant):
                     new_arg = params_[idx]
                 new_args.append(new_arg)
             self.args_list = new_args
@@ -290,6 +302,8 @@ class MatchTVMParser:
                             self.tensor_name_mapping[a.name_hint] = v_name
                             var_and_consts_not_unrolled[v_name] = self.args_list[len(var_and_consts_not_unrolled)]
                             const_  = self.args_list[len(var_and_consts_not_unrolled)-1]
+                            if isinstance(const_.checked_type, tvm.ir.type.TupleType):
+                                breakpoint()
                             shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in const_.checked_type.shape]
                             dtype = const_.checked_type.dtype
                             const_dims=[MatchDim(name=v_name+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
