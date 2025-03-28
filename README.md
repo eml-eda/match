@@ -30,7 +30,7 @@ If you use MATCH, please acknowledge our paper:
 
 # Docker
 
-Additionally it is possible to utilize docker instead of building locally all the required dependencies, this can be achieved with:
+The easiest way to use MATCH is through a Ubuntu22.04 docker container, which ensures all dependencies (especially for TVM) are met. This can be achieved with:
 ```
 $ docker build -t match -f docker/Dockerfile .
 $ docker start -it --rm match
