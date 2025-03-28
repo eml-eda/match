@@ -28,7 +28,16 @@ If you use MATCH, please acknowledge our paper:
 }
 ```
 
-# Requirements
+# Docker
+
+Additionally it is possible to utilize docker instead of building locally all the required dependencies, this can be achieved with:
+```
+$ docker build -t match -f docker/Dockerfile .
+$ docker start -it --rm match
+```
+
+# Local Installation
+## Requirements
 These instructions will consider a Ubuntu installation including:
 - LLVM
 - a C++ compiler with C++17 support, like GCC 7.1 or Clang 5.0
@@ -41,8 +50,6 @@ This can be achieved by running the following command on a fresh Ubuntu 22.04 in
 ```
 $ xargs -a system_requirements.txt sudo apt install -y
 ```
-
-# Local Installation
 To install the latest release (with pip):
 
 ```
@@ -51,19 +58,11 @@ $ cd match
 $ python3 -m venv venv
 $ source venv/bin/activate
 $ pip3 install -r requirements.txt
-$ make build_tvm -j$(nproc)
+$ TVM_NCORES_INSTALL=$(nproc) make build_tvm
 $ python3 setup.py install
 ```
 
 Due to some environment dependencies it is reccomended to either set the correct environment running `source sourceme.sh` on the new terminal or by exporting directly on the user .bashrc the correct environment. 
-
-# Docker
-
-Additionally it is possible to utilize docker instead of building locally all the required dependencies, this can be achieved with:
-```
-$ docker build -t match_img -f docker/Dockerfile .
-$ docker start -it --rm match
-```
 
 # Usage
 

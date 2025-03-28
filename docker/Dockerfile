@@ -1,4 +1,4 @@
-ARG TVM_NCORES_INSTALL=8
+ARG TVM_NCORES_INSTALL=1
 # Starting from Ubuntu 22.04
 FROM ubuntu:22.04
 SHELL ["/bin/bash", "-c"]
@@ -9,7 +9,9 @@ RUN apt update
 # utility
 RUN apt install -y vim git
 
-COPY . /match
+WORKDIR /
+
+RUN git clone --recursive https://github.com/eml-eda/match.git
 
 WORKDIR /match
 
@@ -19,7 +21,7 @@ RUN xargs -a system_requirements.txt apt install -y
 
 RUN pip3 install -r requirements.txt
 
-RUN make build_tvm -j${TVM_NCORES_INSTALL}
+RUN TVM_NCORES_INSTALL=${TVM_NCORES_INSTALL} make build_tvm
 
 RUN python3 setup.py install
 

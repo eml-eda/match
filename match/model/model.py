@@ -27,7 +27,7 @@ EXCUTOR_COMPILER_CLS = {"aot":MatchCompilerCAoT, "graph":MatchCompilerCGraph}
 class MatchModel:
 
     def __init__(self, relay_mod=None, relay_params=None, filename="model.onnx", params_filename="params.data",
-                 model_type="onnx", model_name="default", golden_cpu_model=True, benchmark_model=False, executor="aot",
+                 model_type="onnx", model_name="default", golden_cpu_model=False, benchmark_model=False, executor="aot",
                  default_inputs=None, is_model_dynamic=False, dynamic_algorithm="cuts", dynamic_dims=None, handle_out_fn=""):
         self.relay_mod = relay_mod
         self.relay_params = relay_params
