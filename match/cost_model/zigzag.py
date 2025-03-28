@@ -268,6 +268,14 @@ class ZigZagMatchNoTilingCostModel(ZigZagMatchCostModel):
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=temporal_mapping,
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
+        # we consider no cost at all for no tiling schedules
+        self.match_overall_latency = 0
+        self.energy_total = 0
+        self.MAC_energy = 0
+        self.mem_energy = 0
+        self.latency_total2 = 0
+        self.latency_total1 = 0
+        self.latency_total0 = 0
         
     def adjust_temporal_mapping(self, temporal_mapping_dict, operand_list, layer):
         return temporal_mapping_dict,True
