@@ -5,7 +5,7 @@
 ---
 **MATCH** (**M**odel-**A**ware **T**VM-based **C**ompiler for **H**eterogeneous hardware) is a DNN compiler that exploits [Apache TVM](https://tvm.apache.org/)'s BYOC framework, targeting the optimized deployment of DNN applications onto heterogeneous edge System-on-Chip (SoC) platforms.
 
-MATCH partitions a DNN isolating (or _matching_) patterns supported by each hardware module in the target system. It then manages the compilation process for layers supported by the available accelerators, and exploits the baseline TVM to generate code for unsupported layers on the main host core. Compilation in MATCH is guided by a temporal mapping engine, which searches for the optimal schedule (i.e. loop ordering and memory allocation) of each layer. MATCH currently supports [ZigZag](https://github.com/KULeuven-MICAS/zigzag) as the default temporal mapping engine. At the end of the compilation process, MATCH produces C code to execute all layers of the network, which users can invoke from their own "main" program to implement a complete inference.
+MATCH partitions a DNN isolating (or _matching_) patterns supported by each executional module in the target system. It then manages the compilation process for nodes supported by the available accelerators, and exploits the baseline TVM to generate code for unsupported nodes on the main host core. Compilation in MATCH is guided by a temporal mapping engine, which searches for the optimal schedule (i.e. loop ordering and memory allocation) of each layer. MATCH currently supports [ZigZag](https://github.com/KULeuven-MICAS/zigzag) as the default temporal mapping engine. At the end of the compilation process, MATCH produces C code to execute all nodes of the network, which users can invoke from their own "main" program to implement a complete inference.
 
 Currently, MATCH supports the following targets:
 - [DIANA](https://ieeexplore.ieee.org/document/9731716), a multi-accelerator SoC by KU Leuven.
@@ -36,15 +36,13 @@ These instructions will consider a Ubuntu installation including:
 - python3
 - pip3
 
-This can be achieved with
+This can be achieved by running the following command on a fresh Ubuntu 22.04 install:
 
 ```
 $ xargs -a system_requirements.txt sudo apt install -y
 ```
 
-A fresh install of Ubuntu 22.04 should satify all requirements.
-
-# Installation
+# Local Installation
 To install the latest release (with pip):
 
 ```
@@ -53,11 +51,19 @@ $ cd match
 $ python3 -m venv venv
 $ source venv/bin/activate
 $ pip3 install -r requirements.txt
-$ make install_tvm
+$ make build_tvm -j$(nproc)
 $ python3 setup.py install
 ```
 
-When using a new fresh terminal, users can run `source sourceme.sh` on the repository to correctly set the environment. 
+Due to some environment dependencies it is reccomended to either set the correct environment running `source sourceme.sh` on the new terminal or by exporting directly on the user .bashrc the correct environment. 
+
+# Docker
+
+Additionally it is possible to utilize docker instead of building locally all the required dependencies, this can be achieved with:
+```
+$ docker build -t match_img -f docker/Dockerfile .
+$ docker start -it --rm match
+```
 
 # Usage
 
@@ -114,7 +120,7 @@ match.match(
 To define a new target (i.e.,  a new heterogeneous SoC), users shall extend the `MatchTarget` class.
 The extension process is quite simple, since the only thing that the user must provide is a list of _execution modules_, passed to the constructor of the base `MatchTarget` class.
 Additionally with the host memory hierarchy definition and a set of paths and APIs.
-Execution modules are classes that represent all hardware modules in the target SoC that MATCH should consider to implement the inference of DNN layers, except for the main host CPU (which is handled by TVM). So, execution modules might include GPUs, dataflow accelerators, slave CPU clusters, etc.
+Execution modules are classes that represent all hardware modules in the target SoC that MATCH should consider to implement the inference of DNN nodes, except for the main host CPU (which is handled by TVM). So, execution modules might include GPUs, dataflow accelerators, slave CPU clusters, etc.
 
 For example to define a target SoC which contains a digital accelerator and an analog one, a user could use the following code:
 ```python

@@ -1,9 +1,6 @@
 [submodule "match-tvm"]
 	path = match-tvm
-	url = git@github.com:eml-eda/match-tvm.git
+	url = https://github.com/eml-eda/match-tvm.git
 [submodule "zigzag"]
 	path = zigzag
-	url = git@github.com:eml-eda/zigzag.git
-[submodule "gap"]
-	path = docker/gap
-	url = git@github.com:eml-eda/match_gap9.git
+	url = https://github.com/eml-eda/zigzag.git
