@@ -10,10 +10,9 @@ This class saves also sizes of the loops into `self.loop_sizes`, and also the as
 
 Importantly, `def_transfer_cost` is always called prior to `def_innermost_loops_cost`, so the user can set some parameters in the former, and use them later for the loops cost calculation.
 
-For example, the following code defines the cost model of an accelerator, for which each transfer has an overhead of 100 cycles w.r.t. the cycles lost on the transfer itself, and where the number of cycles lost on the innemorst computations equals to the nunmber of output channels("K"):
+For example, the following code defines the cost model of an accelerator, for which each transfer has an overhead of 100 cycles w.r.t. the cycles lost on the transfer itself, and where the number of cycles lost on the innemorst computations equals to 10000:
 ```python
-from match.target.cost_model import ZigZagMatchCostModel
-from math import prod,ceil,floor
+from match.cost_model.zigzag import ZigZagMatchCostModel
 
 class ExampleCostModel(ZigZagMatchCostModel):
     def __init__(
@@ -28,11 +27,18 @@ class ExampleCostModel(ZigZagMatchCostModel):
         super(ExampleCostModel,self).__init__(
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=temporal_mapping,
-            access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
+            access_same_data_considered_as_no_access=access_same_data_considered_as_no_access,
+            has_any_additional_buffer=True
+        )
     
     def def_transfer_cost(self):
-        return {operand:input_transfer_costs[operand][0]+100 if operand!="O" else self.self.output_transfer_costs[0]+100 for operand in self.operands}
+        return {operand:100 for operand in self.operands}
     
     def def_innermost_loops_cost(self):
-        return self.loop_sizes['K']
+        return 10000
+
+class ExampleDigitalModule(ExecModule):
+    ...
+    def zigzag_cost_model(self):
+        return ExampleCostModel
 ```

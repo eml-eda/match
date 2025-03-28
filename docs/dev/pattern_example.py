@@ -1,10 +1,6 @@
 from tvm.relay.dataflow_pattern import wildcard, is_op
 from match.partition.partitioning_pattern import PartitioningPattern
-
-def match_get_op_from_node(node,op_name:str="nn.conv2d"):
-    while node.op.name!=op_name:
-        node=node.args[0]
-    return node
+from match.partition.utils import add_checks_get_first_op
 
 def fused_conv_pt():
     # Create pattern for a 2D Conv block, with bias and ReLU.
@@ -17,7 +13,7 @@ def fused_conv_pt():
 
 def additional_checks_conv2d(node):
     # get conv2d from the node
-    conv2d = match_get_op_from_node(node,"nn.conv2d")
+    conv2d = add_checks_get_first_op(node,"nn.conv2d")
     k_size = conv2d.attrs["kernel_size"]
     # if filter is not 3x3 don't match
     if k_size[0]!=3 or k_size[1]!=3:
