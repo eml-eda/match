@@ -1,4 +1,4 @@
-ARG TVM_NCORES_INSTALL = 8
+ARG TVM_NCORES_INSTALL=8
 # Starting from Ubuntu 22.04
 FROM ubuntu:22.04
 SHELL ["/bin/bash", "-c"]
