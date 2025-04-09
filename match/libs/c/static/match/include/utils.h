@@ -4,4 +4,6 @@
 
 int match_strcmp(const char* s1, const char* s2);
 
+int match_byte_checksum_check(const char* data, int size, int checksum);
+
 #endif

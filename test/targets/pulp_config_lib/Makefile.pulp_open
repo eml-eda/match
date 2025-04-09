@@ -46,6 +46,9 @@ GAP8_DEFAULT_RAM_TYPE = HYPERRAM
 PULP_DEFAULT_FLASH_TYPE = HYPERFLASH
 PULP_DEFAULT_RAM_TYPE = HYPERRAM
 
+CONFIG_HYPERRAM = 1
+CONFIG_HYPERFLASH = 1
+
 FLASH_TYPE ?= $($(TARGET_CHIP_FAMILY)_DEFAULT_FLASH_TYPE)
 RAM_TYPE ?= $($(TARGET_CHIP_FAMILY)_DEFAULT_RAM_TYPE)
 
@@ -65,6 +68,7 @@ FLASH_FILES = $(foreach model, $(MODELS_PATHS), $(wildcard $(model)/parameters/*
 
 READFS_FILES := $(FLASH_FILES)
 APP_CFLAGS += -DFS_READ_FS
+PLPBRIDGE_FLAGS += -f
 ################################### SPECIAL ####################################
 
 # The special rule modifiers (.PHONY etc...) go here

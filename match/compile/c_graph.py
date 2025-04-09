@@ -59,7 +59,7 @@ def match_tvmc_graph_compile_wrapper(model: TVMCModel, target: str = "match, c",
     if not fuse_layers:
         pass_context_configs.append('relay.FuseOps.max_depth=1')
 
-    tvm.driver.tvmc.compiler.compile_model(tvmc_model=model,
+    tvmc_pkg = tvm.driver.tvmc.compiler.compile_model(tvmc_model=model,
         target=target,
         opt_level=3,
         executor=tvm.relay.backend.Executor("graph",

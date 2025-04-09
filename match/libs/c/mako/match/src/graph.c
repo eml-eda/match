@@ -25,7 +25,7 @@ int match_${model_name}_run_graph(
     ${rt_i.c_type}* ${rt_i.name}_pt,
     % endfor
     % for rt_o_idx,rt_o in enumerate(rt_outputs):
-    ${"" if rt_o_idx==0 else ","}${rt_o.c_type}* ${rt_o.name}_pt
+    ${"" if rt_o_idx==0 else ","} ${rt_o.c_type}* ${rt_o.name}_pt
     % endfor
 ){
     % if ext_mem_needed_bytes>0:
@@ -49,6 +49,14 @@ int match_${model_name}_run_graph(
     % endif
     % elif mem_tensor.is_constant and not mem_tensor.stored_in_external_memory:
     void* ${mem_tensor.name}_pt = ${mem_tensor.name}_data_;
+    % endif
+    % endfor
+    % for mem_tensor in mem_tensors:
+    % if (mem_tensor.is_input or mem_tensor.is_output) and (mem_tensor.stored_in_external_memory):
+    void* ${mem_tensor.name}_ext_pt = match_ext_mem+ext_mem_offset;
+    ext_mem_offset += ${mem_tensor.elems * mem_tensor.dtype.itemsize};
+    ${target.load_file_to_ext_mem_fn}(${mem_tensor.name}_pt, ${mem_tensor.name}_ext_pt, ${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    ${mem_tensor.name}_pt = match_mem+${mem_tensor.mem_offset};
     % endif
     % endfor
     % for node in nodes:
@@ -87,6 +95,9 @@ int match_${model_name}_run_graph(
     % for node_in in [inp__ for inp__ in node.inputs if inp__.is_constant]:
     ${node_in.name}_data = ${node_in.name}_pt;
     % endfor
+    #ifdef __${model_name}_GRAPH_DEBUG__
+    printf("[${model_name} GRAPH] Running node ${node.name}\n");
+    #endif
     if( ${node.fn_name}(
             % for inp_idx,node_in in enumerate([inp__ for inp__ in node.inputs if not inp__.is_constant]):
             ${"" if inp_idx==0 else ","}${node_in.name}_pt
@@ -96,6 +107,9 @@ int match_${model_name}_run_graph(
             % endfor
         )
     ) return -1;
+    #ifdef __${model_name}_GRAPH_DEBUG__
+    printf("[${model_name} GRAPH] Node ${node.name} done, checksum is correct? %d\n", match_byte_checksum_check(${node.outputs[0].name}_pt, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+    #endif
     % endif
     % endfor
     // final cleanup

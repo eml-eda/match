@@ -11,6 +11,7 @@ from pathlib import Path
 from match.target.target import MatchTarget
 from match.utils.utils import add_fname_node_schedule, get_executor, get_output_path,numpy_dtype_to_c_type,c_friendly_npvalue
 import tvm
+from tvm import relay
 
 class TemplateWriter:
     def __init__(self,mod: tvm.ir.IRModule,target: MatchTarget,exec_module: ExecModule,
@@ -78,7 +79,19 @@ class TemplateWriter:
         # add logs
         pickle.dump(self.match_node, open(out_path+"/"+self.template_data["node_name"]+"_node.pickle", "wb"))
         pickle.dump(self.schedule, open(out_path+"/"+self.template_data["node_name"]+"_schedule.pickle", "wb"))
-        add_fname_node_schedule(self.template_data["node_fullname"], self.match_node, self.schedule, self.template_data["node_name"])
+        def update_global_symbol(mod):
+            # Retrieve the GlobalVar for the given name.
+            gv = mod.get_global_var("main")
+            # Get the function corresponding to that GlobalVar.
+            func = mod[gv]
+            # Create a new function with the updated "global_symbol" attribute.
+            new_func = func.with_attr("global_symbol", "main")
+            # Update the module mapping with the new function.
+            mod.update({gv: new_func})
+            return mod
+        cpu_only_c_lib = relay.build(tvm.ir.IRModule({"main":self.mod.body.op}), target="c")
+        cpu_only_llvm_lib = relay.build(tvm.ir.IRModule({"main":self.mod.body.op}), target="llvm")
+        add_fname_node_schedule(self.template_data["node_fullname"], self.match_node, self.schedule, self.template_data["node_name"], cpu_only_c_lib, cpu_only_llvm_lib)
         node_path = "nodes/"+self.template_data["model_name"]
         Path(out_path).mkdir(parents=True,exist_ok=True)
         Path(out_path+"/src").mkdir(parents=True,exist_ok=True)

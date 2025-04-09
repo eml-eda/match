@@ -17,15 +17,26 @@ Importantly, MATCH is designed to make the process of supporting new targets as 
 
 If you use MATCH, please acknowledge our paper:
 ```
-@misc{hamdi2024matchmodelawaretvmbasedcompilation,
-      title={MATCH: Model-Aware TVM-based Compilation for Heterogeneous Edge Devices}, 
-      author={Mohamed Amine Hamdi and Francesco Daghero and Giuseppe Maria Sarda and Josse Van Delm and Arne Symons and Luca Benini and Marian Verhelst and Daniele Jahier Pagliari and Alessio Burrello},
-      year={2024},
-      eprint={2410.08855},
-      archivePrefix={arXiv},
-      primaryClass={cs.DC},
-      url={https://arxiv.org/abs/2410.08855}, 
-}
+@ARTICLE{10946988,
+
+  author={Hamdi, Mohamed Amine and Daghero, Francesco and Sarda, Giuseppe Maria and Delm, Josse Van and Symons, Arne and Benini, Luca and Verhelst, Marian and Pagliari, Daniele Jahier and Burrello, Alessio},
+
+  journal={IEEE Transactions on Computer-Aided Design of Integrated Circuits and Systems}, 
+
+  title={MATCH: Model-Aware TVM-Based Compilation for Heterogeneous Edge Devices}, 
+
+  year={2025},
+
+  volume={},
+
+  number={},
+
+  pages={1-1},
+
+  keywords={Hardware;Artificial neural networks;Artificial intelligence;Memory management;Tensors;Design automation;Single instruction multiple data;Integrated circuit modeling;Computational modeling;Pattern matching;AI Compilers;Deep Neural Networks;Heterogeneous Computing;Deep Learning Accelerators},
+
+  doi={10.1109/TCAD.2025.3556967}}
+
 ```
 
 # Docker

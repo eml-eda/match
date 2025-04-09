@@ -28,7 +28,7 @@
 
 void pulp_nn_linear(
       uint8_t *pInBuffer,
-      int8_t *bias,
+      int *bias,
       uint8_t *pOutBuffer,
       int8_t *pWeights,
       int32_t *k,

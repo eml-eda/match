@@ -16,7 +16,19 @@
 #define __${model_name}_GRAPH_${mem_tensor.name}_FROM_EXTERNAL_MEM__ ${int(mem_tensor.stored_in_external_memory)}
 % endif
 % endfor
+
+#define __${model_name}_GRAPH_DEBUG__ ${int(debug)}
+#if __${model_name}_GRAPH_DEBUG__
+% for activation_name, activation_checksum in checksums.items():
+% if map_names[activation_name][2] in nodes_map and not nodes_map[map_names[activation_name][2]].fallback:
+#define __${model_name}_GRAPH_${map_names[activation_name][0]}_CHECKSUM__ ${activation_checksum}
+#define __${model_name}_GRAPH_${map_names[activation_name][0]}_BYTES__ ${tensor_map[map_names[activation_name][1]].elems * tensor_map[map_names[activation_name][1]].dtype.itemsize}
+% endif
+% endfor
+#endif
+
 % for node in nodes:
+#ifndef __MATCH_${model_name}_RUN_GRAPH_${node.fn_name}__
 % if node.fallback:
 #ifdef __cplusplus
 extern "C"
@@ -32,6 +44,7 @@ ${node.fn_name}(
     % endfor
 );
 % endif
+#endif
 % endfor
 
 int match_${model_name}_run_graph(

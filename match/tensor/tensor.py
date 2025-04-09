@@ -6,7 +6,7 @@ from numpy import typing as npt
 SUPPORTED_TENSOR_LAYOUTS = (
     "NHWC", "NCHW", "HWIO", "OHWI", "OIHW",
     "HWC", "CHW", "WHC", "WCH",
-    "NC", "HW", "WH", "WC", "CW", 
+    "NC", "CN", "HW", "WH", "WC", "CW", 
     "H", "W", "C", "N"
 )
 

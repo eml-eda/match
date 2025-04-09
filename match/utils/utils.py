@@ -2,23 +2,24 @@ import os
 import pathlib
 import json
 import subprocess
-from typing import List
+from typing import Dict, List
 from mako.template import Template
 import numpy as np
 from tvm import relay as relay_tvm
 import match
 from tvm.ir import IRModule
+import tvm
 
-def get_default_inputs(mod: IRModule=None, input_files: List[str]=[], min_input_val=None, max_input_val=None):
+def get_default_inputs(mod: IRModule=None, params: Dict[str, tvm.runtime.ndarray.NDArray]={}, input_files: List[str]=[], min_input_val=None, max_input_val=None):
     default_inputs = []
     if input_files is not None and len(input_files)==len(mod["main"].params):
         default_inputs = [ np.loadtxt(input_files[param_idx], delimiter=',',
                             dtype=np.dtype(param.type_annotation.dtype),
                             usecols=[0]).reshape([int(i) for i in param.type_annotation.shape])
-                            for param_idx, param in enumerate(mod["main"].params)]
+                            for param_idx, param in enumerate(mod["main"].params) if params.name_hint not in params]
     else:
         default_inputs = [get_random_np_array(dtype=param.type_annotation.dtype, shape=param.type_annotation.shape, min_val=min_input_val, max_val=max_input_val)
-                           for param in mod["main"].params]
+                           for param in mod["main"].params if param.name_hint not in params]
     return default_inputs
 
 def numpy_dtype_to_c_type(dtype):
@@ -64,8 +65,8 @@ def get_random_np_array(dtype, shape, min_val=None, max_val=None):
         return np.random.rand(*shape).astype(dtype)
     elif np.issubdtype(dtype, np.integer):
         info = np.iinfo(dtype)
-        return np.random.randint(info.min if min_val is None or not isinstance(min_val,float) else min_val,
-                                 info.max if max_val is None or not isinstance(max_val,float) else max_val,
+        return np.random.randint(info.min if min_val is None or not isinstance(min_val,int) else min_val,
+                                 info.max if max_val is None or not isinstance(max_val,int) else max_val,
                                     size=shape, dtype=dtype)
     else:
         raise ValueError(f"Unsupported dtype: {dtype}")
@@ -123,9 +124,9 @@ def get_executor():
     global executor
     return executor
 
-def add_fname_node_schedule(fname, node, schedule, node_name):
+def add_fname_node_schedule(fname, node, schedule, node_name, cpu_only_c_lib, cpu_only_llvm_lib):
     global fname_to_node_schedule
-    fname_to_node_schedule[fname] = (node, schedule, node_name)
+    fname_to_node_schedule[fname] = (node, schedule, node_name, cpu_only_c_lib, cpu_only_llvm_lib)
 
 def get_fname_node_schedule(fname):
     global fname_to_node_schedule

@@ -3,11 +3,20 @@
 static void* im2col_pt_ = NULL;
 static void* pwt_pt_ = NULL;
 static DmaTransfer dma_transfer_;
+#ifndef GAP_SDK
+static void* pulp_open_l1_pt_ = NULL;
+#endif
 
 void offload_to_pulp_cluster(MatchCtx* ctx, void (inner_function)(unsigned int* args_inner_function),
                                 unsigned int* args){
+    #ifndef GAP_SDK
+    pulp_open_l1_pt_ = pmsis_l1_malloc(L1_SCRATCHPAD_SIZE);
+    #endif
     pi_cluster_task(&cluster_task,inner_function,args);
     pi_cluster_send_task_to_cl(&cluster_dev, &cluster_task);
+    #ifndef GAP_SDK
+    pmsis_l1_malloc_free( pulp_open_l1_pt_, L1_SCRATCHPAD_SIZE);
+    #endif
 }
 
 void cluster_lib_cleanup_dma_transfers(){
@@ -26,7 +35,11 @@ void cluster_lib_init(MatchCtx* ctx){
 }
 
 void* init_l1_scratchpad_memory(MatchCtx* ctx){
+    #ifdef GAP_SDK
     return pi_cl_l1_malloc(NULL, L1_SCRATCHPAD_SIZE);
+    #else
+    return pulp_open_l1_pt_;
+    #endif
 }
 
 void cluster_lib_cleanup(MatchCtx* ctx){
@@ -34,7 +47,9 @@ void cluster_lib_cleanup(MatchCtx* ctx){
 }
 
 void free_l1_scrachpad_memory(MatchCtx* ctx, void* l1_memory_pt){
+    #ifdef GAP_SDK
     pi_cl_l1_free(NULL, l1_memory_pt, L1_SCRATCHPAD_SIZE);
+    #endif
 }
 
 void* cluster_alloc_buffer(const char* name, int tensor_l1_pt, int size, int mem, int buffer_idx){

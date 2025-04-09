@@ -1,4 +1,5 @@
 # TVM imports
+from tvm import relay
 from match.codegen.template_writer import TemplateWriter
 from match.utils.utils import add_fname_node_schedule
 import tvm
@@ -14,9 +15,6 @@ def schedule_to_code(mod: tvm.ir.IRModule,exec_module_name:str="",pattern_name:s
     return tempengine.get_code()
 
 def codegen(mod: tvm.ir.IRModule):
-    if isinstance(mod.body, tvm.relay.Var):
-        add_fname_node_schedule(mod.attrs.global_symbol,None,None,mod.attrs.global_symbol)
-        return "\nint "+str(mod.attrs.global_symbol)+"(void* var__){ return 0; }\n"
     _,exec_module_name,pattern_name = mod.body.op.attrs["Composite"].split(".")[1:]
     try:
         code = schedule_to_code(mod=mod,exec_module_name=exec_module_name,pattern_name=pattern_name)

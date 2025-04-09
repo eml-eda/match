@@ -10,15 +10,14 @@
             "request": "launch",
             "program": "${workspaceFolder}/test/test.py",
             "args": [
-                // "--executor"
-                // ,"graph"
-                // "--model",
-                // "drone_vfe",
-                "--microbench"
-                ,"easy_dense_int32"
-                ,"--golden"
-                ,"--target"
-                ,"arcane"
+                "--executor"
+                , "graph"
+                , "--model"
+                , "yolo_pruned"
+                // , "--microbench"
+                // , "dense"
+                , "--target"
+                , "pulp_open"
             ],
             "console": "integratedTerminal",
             "justMyCode": false

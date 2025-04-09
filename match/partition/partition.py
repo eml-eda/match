@@ -16,6 +16,7 @@
 """
 Operations to support a MATCH Target with one or more ExecModule.
 """
+from match.transform.dead import MatchRemoveIdentityBYOC
 from match.transform.naming import MatchRenameIO
 from match.transform.save import MatchSaveModule, MatchSaveRelay
 from match.utils.utils import get_model_name
@@ -92,6 +93,11 @@ def partition(mod, params, dpu, opts):
     pipeline.append(transform.PartitionGraph(get_model_name()))
     pipeline.append(transform.InferType())
     pipeline.append(MatchSaveRelay("partitioned"))
+    
+    pipeline.append(MatchRemoveIdentityBYOC())
+    pipeline.append(transform.DeadCodeElimination())
+    pipeline.append(transform.RemoveUnusedFunctions())
+    pipeline.append(MatchSaveRelay("cleaned"))
     
     pipeline.append(MatchSaveModule())
     seq = tvm.transform.Sequential(pipeline)

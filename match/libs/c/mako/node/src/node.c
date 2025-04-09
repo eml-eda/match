@@ -156,7 +156,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].start_idx = ${name}_${t_dim.name}->global_idx;
     % endif
     % endfor
-    % if mem_transfer.tensor.is_fused or mem_transfer.tensor.unsupported_layout:
+    % if (mem_transfer.tensor.is_fused or mem_transfer.tensor.unsupported_layout) and mem_apis.get_size_of_fused_tensor!="" and mem_apis.get_pt_of_fused_tensor!="":
     ${c_ident(loop_idx)}int ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)} = ${mem_apis.get_size_of_fused_tensor}(ctx,${name}_${mem_transfer.tensor.name});
     ${c_ident(loop_idx)}tile_mem_offset = ${mem_apis.get_pt_of_fused_tensor}(ctx,${name}_${mem_transfer.tensor.name});
     ${c_ident(loop_idx)}void* ${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)} = ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.top_mem}] + (tile_mem_offset>0?tile_mem_offset:0);
@@ -274,7 +274,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     ${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr};
     % endfor
     % for mem_level in set([mem_ for k,v in memory_hierarchy.items() for mem_ in v]):
-    % if mem_level.sw_controlled and mem_level.name!=target.host_memory and mem_level in mem_apis.free_memory:
+    % if mem_level.sw_controlled and mem_level.name!=target.host_memory and mem_level.name in mem_apis.free_memory:
     ${mem_apis.free_memory[mem_level.name]}(ctx,${mem_level.name}_base_pt);
     % endif
     % endfor

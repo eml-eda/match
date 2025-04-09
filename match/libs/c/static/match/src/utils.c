@@ -14,3 +14,14 @@ int match_strcmp(const char* s1, const char* s2) {
     // Return difference of mismatched characters (or 0 if equal)
     return *p1 - *p2;
 }
+
+int match_byte_checksum_check(const char* data, int size, int checksum) {
+    // Calculate checksum
+    int sum = 0;
+    for (int i = 0; i < size; ++i) {
+        sum += (unsigned char)data[i];
+    }
+
+    // Check if checksum matches
+    return sum == checksum;
+}

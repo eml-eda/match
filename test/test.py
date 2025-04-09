@@ -47,7 +47,7 @@ def run_nodes_of_network(target_name: str="default", network: str="conv", output
     for node in single_node_mod_params:
         node_name, mod, params = node[0], node[1], node[2]
         output_path = str(Path(f"{output_path}/{network}/{node_name}").absolute())
-        default_inputs = get_default_inputs(mod=mod, input_files=input_files[idx_inp_file:],
+        default_inputs = get_default_inputs(mod=mod, params=params,  input_files=input_files[idx_inp_file:],
                                                 min_input_val=min_input_val, max_input_val=max_input_val)
         match.match(
             model=MatchModel(
@@ -77,7 +77,7 @@ def run_microbench(target_name: str="default", microbench: str="conv", output_pa
         model=MatchModel(
            relay_mod=mod, relay_params=params,
            model_name=microbench, executor=executor,
-           default_inputs=get_default_inputs(mod=mod, input_files=input_files,
+           default_inputs=get_default_inputs(mod=mod, params=params, input_files=input_files,
                                              min_input_val=min_input_val, max_input_val=max_input_val),
            golden_cpu_model=golden_cpu_model,
            handle_out_fn=handle_out_fn,
@@ -102,7 +102,7 @@ def run_model(target_name: str="pulp_platform", model: str="keyword_spotting", o
     onnx_model = onnx.load(onnx_model_filepath)
     try:
         onnx.checker.check_model(onnx_model)
-        mod, _ = relay.frontend.from_onnx(onnx_model)
+        mod, params = relay.frontend.from_onnx(onnx_model)
     except Exception as e:
         # this is a line to sanitize plinio-typed onnx
         # cartoonnyx.cartoonnyx.plinio.sanitize_to_mps(onnx_model_filepath)
@@ -113,7 +113,7 @@ def run_model(target_name: str="pulp_platform", model: str="keyword_spotting", o
            filename=onnx_model_filepath,
            model_type="onnx",
            model_name=model, executor=executor,
-           default_inputs=get_default_inputs(mod=mod, input_files=input_files,
+           default_inputs=get_default_inputs(mod=mod, params=params,  input_files=input_files,
                                              min_input_val=min_input_val, max_input_val=max_input_val),
            golden_cpu_model=golden_cpu_model,
            handle_out_fn=handle_out_fn
@@ -131,15 +131,19 @@ def run_relay_saved_model_at(target_name: str="pulp_platform", mod_file: str="./
         raise Exception(f"{target_name} target is not available, the targets available are {[k for k in TEST_TARGET.keys()]}")
     target = TEST_TARGET[target_name]()
     # just to set the desired inputs and check that there is an actual model there
+    mod_text=""
+    params_bytes=bytes("","utf8")
     with open(mod_file,"r") as mod_file:
         mod_text=mod_file.read()
+    with open(params_file,"rb") as params_file:
+        params_bytes=params_file.read()
     mod=relay.fromtext(mod_text)
-
+    params=relay.load_param_dict(params_bytes)
     match.match(
         model=MatchModel(
            filename=mod_file, params_filename=params_file,
            model_type="relay", model_name="default", executor=executor,
-           default_inputs=get_default_inputs(mod=mod, input_files=input_files,
+           default_inputs=get_default_inputs(mod=mod, params=params,  input_files=input_files,
                                              min_input_val=min_input_val, max_input_val=max_input_val),
            golden_cpu_model=golden_cpu_model,
            handle_out_fn=handle_out_fn
@@ -194,7 +198,7 @@ if __name__=="__main__":
     parser.add_argument(
         "--executor",
         dest="executor",
-        default="aot",
+        default="graph",
         type=str,
         choices=["aot","graph"],
         help="Choose the executor to use within MATCH",

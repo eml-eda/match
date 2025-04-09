@@ -302,6 +302,8 @@ class MatchTarget(ABC):
         print(f"-------------------\n[PATTERN MATCHER] Node matched pattern {match_pt.name}, checking additional conditions")
         # is pattern fully supported?
         # node_add_checks = tvm.relay.transform.InferType()(tvm.ir.IRModule().from_expr(match_pt.pattern().partition(node)))["main"].body.op.body
+        if not isinstance(node, tvm.relay.Call):
+            print(f"[PATTERN MATCHER] Node is not a call, weird behaviour")
         node_add_checks = node
         if match_pt.additional_checks(node_add_checks):
             # if supported get latency and energy of pattern
