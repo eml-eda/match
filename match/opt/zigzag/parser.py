@@ -52,12 +52,18 @@ class MatchNodeToZigZagParser:
         self.operand_source_dimension_mapping = dict()
         if self.num_vars>1:
             if self.x_tensor is not None:
+                self.first_inp_prec = self.x_tensor.bits
                 self.operand_source_dimension_mapping["X"] = {"IX": "OX", "IY": "OY", "C": "K"}
             if self.y_tensor is not None:
+                self.second_inp_prec = self.y_tensor.bits
                 self.operand_source_dimension_mapping["Y"] = {"IX": "OX", "IY": "OY", "C": "K"}
         else:
             if self.i_tensor is not None:
+                self.first_inp_prec = self.i_tensor.bits
                 self.operand_source_dimension_mapping["I"] = {"IX": "OX", "IY": "OY"}
+            if self.w_tensor is not None:
+                self.second_inp_prec = self.w_tensor.bits
+        self.o_prec = self.o_tensor.bits
         self.operand_precision = {
             "O": self.o_intermediate_prec,
             "O_final": self.o_prec,
