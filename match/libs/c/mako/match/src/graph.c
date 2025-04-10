@@ -95,7 +95,7 @@ int match_${model_name}_run_graph(
     % for node_in in [inp__ for inp__ in node.inputs if inp__.is_constant]:
     ${node_in.name}_data = ${node_in.name}_pt;
     % endfor
-    #ifdef __${model_name}_GRAPH_DEBUG__
+    #if __${model_name}_GRAPH_DEBUG__
     printf("[${model_name} GRAPH] Running node ${node.name}\n");
     #endif
     if( ${node.fn_name}(
@@ -107,7 +107,7 @@ int match_${model_name}_run_graph(
             % endfor
         )
     ) return -1;
-    #ifdef __${model_name}_GRAPH_DEBUG__
+    #if __${model_name}_GRAPH_DEBUG__
     printf("[${model_name} GRAPH] Node ${node.name} done, checksum is correct? %d\n", match_byte_checksum_check(${node.outputs[0].name}_pt, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
     #endif
     % endif

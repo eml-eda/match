@@ -376,7 +376,6 @@ class MatchMemoryPlanner:
                 free_size_at_time[time_] -= tensor.num_bytes
         
         print(f"[MEMORY PLANNER] Allocating tensors with {self.available_soc_bytes} bytes of on-chip memory")
-
         for tensor in sorted_mem_tensors:
             allocate_tensor(tensor=tensor)
         
@@ -439,7 +438,7 @@ class MatchMemoryPlanner:
                 else:
                     self.stored_in_external_memory = True
             
-        sorted_mem_tensors = [m_t for m_t in sorted_mem_tensors if m_t.name not in real_constant_tensors and not ((tensor.is_input or tensor.is_output) and not tensor.stored_in_external_memory)]
+        sorted_mem_tensors = [m_t for m_t in sorted_mem_tensors if m_t.name not in real_constant_tensors and not ((m_t.is_input or m_t.is_output) and not m_t.stored_in_external_memory)]
         tensors_allocated_at_time = {key:[] for key in self.calls_idxs}
         free_size_at_time = {key:self.available_soc_bytes for key in self.calls_idxs}
 

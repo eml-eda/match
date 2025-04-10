@@ -175,15 +175,10 @@ class PulpCluster(ExecModule):
             cast_b = is_op("cast")(wildcard())
             add = is_op("add")(cast_a, cast_b)
             # pattern cast cast add clip cast cast multiply right shift cast
-            clip = is_op("clip")(add)
-            cast_c = is_op("cast")(clip)
-            cast_d = is_op("cast")(cast_c)
-            mul = is_op("multiply")(is_constant(),cast_d)
+            mul = is_op("multiply")(is_constant(), add) | is_op("multiply")(add, is_constant())
             rshift = is_op("right_shift")(mul, is_constant())
-            # pattern cast cast add right shif clip cast
-            rshift_clip = is_op("clip")(is_op("right_shift")(add,is_constant()))
             # cast for both paths
-            pt = is_op("cast")(rshift | rshift_clip)
+            pt = is_op("cast")(is_op("clip")(rshift))
             return pt
 
         def only_out_uint8(node):

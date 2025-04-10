@@ -88,3 +88,29 @@ def create_dense_ex(inp_features:int=256,out_features:int=128,
     mod = tvm.ir.IRModule()
     mod = mod.from_expr(x)
     return mod, params
+
+def create_simple_sum_ex(inp_shape:Tuple=(32,32),**kwargs):
+    x = relay.var("input_0", relay.TensorType((1,3)+inp_shape, "uint8"))
+    y = relay.var("input_1", relay.TensorType((1,3)+inp_shape, "uint8"))
+    # Get or generate scale values
+    scale = create_random_array((1, 3, 1, 1), "int32", min_val=1, max_val=1)
+    scale_name = "simple_sum_scale"
+
+    # define relay input vars
+    sc_ = relay.var(scale_name, relay.TensorType(scale.shape, scale.dtype))
+
+    # define weights and bias values in params
+    params = {scale_name: scale, }
+
+    # define operations
+    x = relay.cast(x, "int32")
+    y = relay.cast(y, "int32")
+    x = relay.op.add(x,y)
+    x = relay.op.multiply(x, sc_)
+    x = relay.op.right_shift(x, relay.const(0))
+    x = relay.op.clip(x, a_min=0, a_max=255)
+    x = relay.op.cast(x, "uint8")
+    # create an IR module from the relay expression
+    mod = tvm.ir.IRModule()
+    mod = mod.from_expr(x)
+    return mod, params

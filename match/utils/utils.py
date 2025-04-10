@@ -16,7 +16,7 @@ def get_default_inputs(mod: IRModule=None, params: Dict[str, tvm.runtime.ndarray
         default_inputs = [ np.loadtxt(input_files[param_idx], delimiter=',',
                             dtype=np.dtype(param.type_annotation.dtype),
                             usecols=[0]).reshape([int(i) for i in param.type_annotation.shape])
-                            for param_idx, param in enumerate(mod["main"].params) if params.name_hint not in params]
+                            for param_idx, param in enumerate(mod["main"].params) if param.name_hint not in params]
     else:
         default_inputs = [get_random_np_array(dtype=param.type_annotation.dtype, shape=param.type_annotation.shape, min_val=min_input_val, max_val=max_input_val)
                            for param in mod["main"].params if param.name_hint not in params]
@@ -65,8 +65,8 @@ def get_random_np_array(dtype, shape, min_val=None, max_val=None):
         return np.random.rand(*shape).astype(dtype)
     elif np.issubdtype(dtype, np.integer):
         info = np.iinfo(dtype)
-        return np.random.randint(info.min if min_val is None or not isinstance(min_val,int) else min_val,
-                                 info.max if max_val is None or not isinstance(max_val,int) else max_val,
+        return np.random.randint(info.min if min_val is None or not isinstance(min_val,(int, float)) else min_val,
+                                 info.max if max_val is None or not isinstance(max_val,(int, float)) else max_val+1,
                                     size=shape, dtype=dtype)
     else:
         raise ValueError(f"Unsupported dtype: {dtype}")

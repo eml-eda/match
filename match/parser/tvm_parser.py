@@ -95,7 +95,7 @@ class MatchTVMParser:
     def update_match_node(self,op=None,call=None,name:str="conv2d_3"):
         self.match_node.ops[name] = op
         self.match_node.calls[name] = call
-        self.match_node.ops_occurrences[self.op_name(call)] = [name] if self.op_name(call) not in self.match_node.ops_occurrences else self.match_node.ops_occurrences[self.op_name(call)].append(name)
+        self.match_node.ops_occurrences[self.op_name(call)] = [name] if self.op_name(call) not in self.match_node.ops_occurrences else [*self.match_node.ops_occurrences[self.op_name(call)], name]
 
     def op_name(self,call):
         return "_".join([n for n in call.op.name.split(".") if n not in {"nn","op","relay"}])

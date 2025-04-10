@@ -34,7 +34,7 @@ class MatchTensor:
         return self.layout not in SUPPORTED_TENSOR_LAYOUTS and self.layout not in SUPPORTED_DIVIDED_TENSOR_LAYOUTS
 
     def __eq__(self, other):
-        return self.name == other.name and self.dtype == other.dtype and self.dims == other.dims
+        return other is not None and (self.name == other.name and self.dtype == other.dtype and self.dims == other.dims)
     
     def c_offset_expr(self, node_name):
         dims_expr = []

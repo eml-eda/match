@@ -207,7 +207,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                 mem_bytes-=prod([val[0] for val in self.size_per_mem_level[operand].values()])
         
         for w_tensor in self.match_node.const_tensors.values():
-            if w_tensor!=self.layer.layer_attrs["w_tensor"]:
+            if self.layer.layer_attrs["w_tensor"] is not None and w_tensor!=self.layer.layer_attrs["w_tensor"]:
                 mem_bytes-=w_tensor.prod_shape_int*w_tensor.dtype.itemsize
         
         if mem_bytes<0:
