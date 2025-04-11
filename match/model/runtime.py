@@ -526,10 +526,17 @@ class MatchTVMGraphRuntime:
                 if node["name"] in self.params:
                     param = self.params[node["name"]]
                     # store this into the weights to store
-                    mem_tensor = MatchMemoryTensor(name=node["name"],is_constant=True,
-                                                   constant_val=param.numpy(),shape=param.shape,
-                                                   dtype=np.dtype(param.dtype),node_id=node_id,
-                                                   node_info=node)
+                    const_val = param.numpy()
+                    mem_tensor = MatchMemoryTensor(
+                        name=node["name"],
+                        is_constant=True,
+                        constant_val=const_val,
+                        original_constant_val=const_val,
+                        shape=param.shape,
+                        dtype=np.dtype(param.dtype),
+                        node_id=node_id,
+                        node_info=node
+                    )
                     mem_tensors.append(mem_tensor)
                     tensor_map[node["name"]] = mem_tensor
                     map_names[node["name"]] = (mem_tensor.name, mem_tensor.name, mem_tensor.name)
@@ -565,11 +572,15 @@ class MatchTVMGraphRuntime:
                         for w_tensor in match_node.const_tensors.values():
                             if w_tensor.name in schedule.tensors:
                                 w_tensor = schedule.tensors[w_tensor.name]
-                                mem_tensor = MatchMemoryTensor(name=match_node_name+"_"+w_tensor.name,is_constant=True,
-                                                            constant_val=w_tensor.data,original_constant_val=w_tensor.original_data,
-                                                            shape=w_tensor.data.shape,
-                                                            dtype=w_tensor.dtype,node_id=node_id,
-                                                            node_info=node)
+                                mem_tensor = MatchMemoryTensor(
+                                    name=match_node_name+"_"+w_tensor.name,
+                                    is_constant=True,
+                                    constant_val=w_tensor.data,
+                                    original_constant_val=w_tensor.original_data,
+                                    shape=w_tensor.data.shape,
+                                    dtype=w_tensor.dtype,node_id=node_id,
+                                    node_info=node
+                                )
                                 mem_tensors.append(mem_tensor)
                                 tensor_map[w_tensor.name] = mem_tensor
                                 inputs.append(mem_tensor)
