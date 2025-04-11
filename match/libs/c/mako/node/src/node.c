@@ -179,7 +179,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     ${c_ident(loop_idx)}// sync after each single load as the SW transfer require...
     ${c_ident(loop_idx)}${sync_apis.wait_load}(ctx);
     % else:
-    block_${block_idx}_loads++;
+    ${c_ident(loop_idx)}block_${block_idx}_loads++;
     % endif
     % endif
     <% add_tile_to_tensor_at_block_and_loop(mem_transfer.tensor.name, block_idx, loop_idx, mem_transfer.mem)%>

@@ -415,7 +415,7 @@ void pulp_nn_dw_conv2d_wrapper(void* args){
         num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
-        inp_height, // input width
+        inp_width, // input width
         inp_height, // input height
         inp_ch, // input channels
         out_width, // out width
@@ -474,7 +474,7 @@ void pulp_nn_pw_conv2d_wrapper(void* args){
         num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
-        inp_height, // input width
+        inp_width, // input width
         inp_height, // input height
         inp_ch, // input channels
         out_width, // out width
@@ -533,7 +533,7 @@ void pulp_nn_hoparallel_conv2d_wrapper(void* args){
         num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
-        inp_height, // input width
+        inp_width, // input width
         inp_height, // input height
         inp_ch, // input channels
         out_width, // out width

@@ -87,6 +87,16 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
             has_any_additional_buffer=True
         )
     
+    def adjust_temporal_mapping(self, temporal_mapping_dict, operand_list, layer):
+        temporal_mapping_dict,valid = super().adjust_temporal_mapping(temporal_mapping_dict, operand_list, layer)
+        if valid and "I" in operand_list:
+            min_innermost_loops=min([len(temporal_mapping_dict[operand][0]) for operand in operand_list])
+            temporal_mapping_dict["I"][1]=temporal_mapping_dict["I"][0][min_innermost_loops:]+temporal_mapping_dict["I"][1]
+            temporal_mapping_dict["I"][0]=temporal_mapping_dict["I"][0][:min_innermost_loops]
+            return temporal_mapping_dict,valid
+        else:
+            return temporal_mapping_dict,valid
+
     def def_transfer_cost(self):
         USE_SIMPLER_MODEL = False
         if USE_SIMPLER_MODEL:

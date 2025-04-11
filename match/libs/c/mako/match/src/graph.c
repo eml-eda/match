@@ -60,6 +60,15 @@ int match_${model_name}_run_graph(
     % endif
     % endfor
     % for node in nodes:
+    #if __${model_name}_GRAPH_DEBUG__
+    % if node.fallback:
+    #if __${model_name}_FALLBACK_GRAPH_DEBUG__
+    % endif
+    printf("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}\n");
+    % if node.fallback:
+    #endif
+    % endif
+    #endif
     % for mem_tensor in mem_tensors:
     % if node.node_id in mem_tensor.move_temp_to_ext_mem:
     ${target.load_to_ext_mem_fn}(${mem_tensor.name}_pt, ${mem_tensor.name}_ext_pt,${mem_tensor.elems * mem_tensor.dtype.itemsize});
@@ -95,9 +104,6 @@ int match_${model_name}_run_graph(
     % for node_in in [inp__ for inp__ in node.inputs if inp__.is_constant]:
     ${node_in.name}_data = ${node_in.name}_pt;
     % endfor
-    #if __${model_name}_GRAPH_DEBUG__
-    printf("[${model_name} GRAPH] Running node ${node.name}\n");
-    #endif
     if( ${node.fn_name}(
             % for inp_idx,node_in in enumerate([inp__ for inp__ in node.inputs if not inp__.is_constant]):
             ${"" if inp_idx==0 else ","}${node_in.name}_pt
@@ -107,10 +113,16 @@ int match_${model_name}_run_graph(
             % endfor
         )
     ) return -1;
+    % endif
     #if __${model_name}_GRAPH_DEBUG__
-    printf("[${model_name} GRAPH] Node ${node.name} done, checksum is correct? %d\n", match_byte_checksum_check(${node.outputs[0].name}_pt, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+    % if node.fallback:
+    #if __${model_name}_FALLBACK_GRAPH_DEBUG__
+    % endif
+    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, checksum is correct? %d\n", match_byte_checksum_check(${node.outputs[0].name}_pt, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+    % if node.fallback:
     #endif
     % endif
+    #endif
     % endfor
     // final cleanup
     % if mem_needed_bytes>0:

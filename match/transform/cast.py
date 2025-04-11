@@ -28,3 +28,29 @@ class MatchAddCastInMain:
 
     def __call__(self, mod):
         return self.transform_module(mod)
+
+@tvm.relay.transform.function_pass(opt_level=0)
+class MatchRemoveFakeOutDtypeCasts(tvm.relay.expr_functor.ExprMutator):
+    """Cast linear layers in graph to integers and insert the necessary cast operations (from MATCH ONNX file)
+    """
+    def __init__(self):
+        super().__init__()
+
+    def transform_function(self, func, mod, ctx):
+        return self.visit(func)
+
+    def visit_call(self, call):
+        """Rewrite ops
+        """
+        new_fn = self.visit(call.op)
+        new_args = [self.visit(arg) for arg in call.args]
+        # Default case
+        new_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
+        span_name = "" if not hasattr(call.span, "source_name") else call.span.source_name.name
+
+        if span_name=="FAKE_CAST_TVM_OUT_DTYPE" and call.op.name=="cast":
+            new_args_attrs=dict(new_args[0].attrs)
+            new_args_attrs["out_dtype"]=call.attrs.dtype
+            new_args[0]=relay.frontend.common.get_relay_op(new_args[0].op.name)(*new_args[0].args, **new_args_attrs)
+            new_call=new_args[0]
+        return new_call

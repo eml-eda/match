@@ -459,7 +459,11 @@ class MatchMemoryPlanner:
                 tensor.start_usage = original_start_usage_tensors[tensor.name]
                 tensor.last_usage = original_last_usage_tensors[tensor.name]
 
-        soc_mem_needed = max([sum([m_t.num_bytes for m_t in tensors]) for tensors in tensors_allocated_at_time.values()])
+        soc_mem_needed = 0
+        for time_,tensors in tensors_allocated_at_time.items():
+            max_tensor = None if len(tensors)==0 else tensors[-1]
+            if max_tensor is not None and (max_tensor.mem_offset_at[time_]+max_tensor.num_bytes)>soc_mem_needed:
+                soc_mem_needed = max_tensor.mem_offset_at[time_]+max_tensor.num_bytes
         return soc_mem_needed, ext_mem_needed
 
     def generate(self):

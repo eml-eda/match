@@ -18,11 +18,18 @@
 % endfor
 
 #define __${model_name}_GRAPH_DEBUG__ ${int(debug)}
+#define __${model_name}_FALLBACK_GRAPH_DEBUG__ ${int(debug)}
 #if __${model_name}_GRAPH_DEBUG__
 % for activation_name, activation_checksum in checksums.items():
-% if map_names[activation_name][2] in nodes_map and not nodes_map[map_names[activation_name][2]].fallback:
+% if map_names[activation_name][2] in nodes_map:
+% if nodes_map[map_names[activation_name][2]].fallback:
+#if __${model_name}_FALLBACK_GRAPH_DEBUG__
+% endif
 #define __${model_name}_GRAPH_${map_names[activation_name][0]}_CHECKSUM__ ${activation_checksum}
 #define __${model_name}_GRAPH_${map_names[activation_name][0]}_BYTES__ ${tensor_map[map_names[activation_name][1]].elems * tensor_map[map_names[activation_name][1]].dtype.itemsize}
+% if nodes_map[map_names[activation_name][2]].fallback:
+#endif
+% endif
 % endif
 % endfor
 #endif

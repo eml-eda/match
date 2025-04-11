@@ -28,7 +28,9 @@ void pulp_cluster_init() {
     if (pi_cluster_open(&cluster_dev))
         return;
     #ifdef GAP_SDK
+    #ifndef TARGET_CHIP_FAMILY_GAP9
     cluster_task.stack_size = 3500;
+    #endif
     cluster_task.slave_stack_size = 3400;
     #else
     cluster_task.stack_size = 4096;

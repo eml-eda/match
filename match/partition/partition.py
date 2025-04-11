@@ -16,6 +16,7 @@
 """
 Operations to support a MATCH Target with one or more ExecModule.
 """
+# from match.transform.cast import MatchRemoveFakeOutDtypeCasts
 from match.transform.dead import MatchRemoveIdentityBYOC
 from match.transform.naming import MatchRenameIO
 from match.transform.save import MatchSaveModule, MatchSaveRelay
@@ -73,7 +74,16 @@ def partition(mod, params, dpu, opts):
     pipeline.append(MatchRenameIO())
     pipeline.append(MatchSaveRelay("renamed"))
     pipeline.append(transform.InferType())
+    # TODO: understand if current broadcast rel of outdtype is fixed with new releases
+    # currently its not working as expected
+    # conv(outdtype="int32") -> multiply() -> add() breaks in TVM when building
+    # this doesnt happen with conv(outdtype="int32") -> biasadd
+    
+    # pipeline.append(MatchRemoveFakeOutDtypeCasts())
+    # pipeline.append(transform.InferType())
+    # pipeline.append(MatchSaveRelay("removed_fake_casts"))
 
+    pipeline.append(transform.InferType())
     for net_transform_name, net_transform in target.transform_before_partitioning(opts):
         pipeline.append(net_transform)
         pipeline.append(MatchSaveRelay(net_transform_name))
