@@ -50,7 +50,7 @@ int main(int argc,char** argv){
         ${out_name}_pt,
         ${match_outputs[out_name]["prod_shape"]},
         % endfor
-        &match_ctx);
+        match_ctx.status);
     % endif
     
     % for out_name in match_outputs.keys():

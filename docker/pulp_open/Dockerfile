@@ -7,7 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # General
 RUN apt update
 # utility
-RUN apt install -y vim git
+RUN apt install -y vim git wget
 # pulp-sdk system dependencies
 RUN apt install -y build-essential libftdi-dev libftdi1 doxygen python3-pip libsdl2-dev curl cmake \
     libusb-1.0-0-dev scons gtkwave libsndfile1-dev rsync autoconf automake texinfo libtool pkg-config libsdl2-ttf-dev
@@ -56,8 +56,6 @@ RUN /bin/bash -c "source configs/pulp-open.sh"
 
 RUN chmod +x configs/pulp-open.sh
 
-COPY docker/pulp-open/build_open.sh .
-
 # build pulp-sdk
 RUN pip3 install -r /pulp-sdk/tools/gvsoc/requirements.txt
 RUN pip3 install -r /pulp-sdk/tools/gvsoc/gapy/requirements.txt
@@ -77,7 +75,7 @@ RUN xargs -a system_requirements.txt apt install -y
 
 RUN pip3 install -r requirements.txt
 
-RUN TVM_NCORES_INSTALL=${TVM_NCORES_INSTALL} make build_tvm
+RUN TVM_NCORES_INSTALL=${TVM_NCORES_INSTALL} make build_tvm_single_core
 
 RUN python3 setup.py install
 

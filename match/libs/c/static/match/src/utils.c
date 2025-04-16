@@ -26,7 +26,7 @@ int match_byte_checksum_check(const char* data, int size, int checksum) {
     return sum == checksum;
 }
 
-void handle_classifier_out(int* output_pt, int classes, match_runtime_ctx* runtime_ctx){
+void handle_int_classifier(int* output_pt, int classes, int runtime_status){
     int max_idx = 0;
     int max_val = output_pt[0];
     printf("[MATCH OUTPUT] Values:\n%d, ", max_val);
