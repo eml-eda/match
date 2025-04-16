@@ -1,6 +1,8 @@
 #ifndef __MATCH_CTX_H__
 #define __MATCH_CTX_H__
+
 #include <match/utils.h>
+#include <match/ops.h>
 
 typedef enum{
     MATCH_VAR_TENSOR,
@@ -12,14 +14,6 @@ typedef enum{
     MATCH_SW_LOAD_TENSOR,
     MATCH_SW_STORE_TENSOR,
 }MATCH_MEM_OPS_TYPE;
-
-typedef enum{
-    MATCH_OP_CONV2D,
-    MATCH_OP_BIAS_ADD,
-    MATCH_OP_ADD,
-    MATCH_OP_MULTIPLY,
-    MATCH_OP_RELU,
-}MATCH_OPS_CODE;
 
 typedef struct{
     int size;
@@ -42,12 +36,14 @@ typedef struct{
     int size;
     int max_size;
     int start_idx;
+    int curr_idx;
 }MatchTensorTile;
 
 typedef struct{
     MatchTensorTile* tiles;
     void* base_pt;
     unsigned int* pts;
+    void* pt;
     int num_tiles;
     int curr_tile;
     int num_dims;
@@ -158,11 +154,11 @@ MatchDim* default_match_ctx_get_dim(struct MatchDims_t *self,const char *name);
 int default_match_ctx_get_dim_idx(struct MatchDims_t *self,const char *name);
 
 inline int match_get_pad_x_of_tile(MatchTensorTile* tile){
-    return -tile->start_idx>0?-tile->start_idx:0;
+    return -tile->curr_idx>0?-tile->curr_idx:0;
 }
 
 inline int match_get_pad_y_of_tile(MatchTensorTile* tile){
-    return tile->dim->size-(tile->dim->curr_max_size+tile->start_idx)<0?-(tile->dim->size-(tile->dim->curr_max_size+tile->start_idx)):0;
+    return tile->dim->size-(tile->dim->curr_max_size+tile->curr_idx)<0?-(tile->dim->size-(tile->dim->curr_max_size+tile->curr_idx)):0;
 }
 
 #endif

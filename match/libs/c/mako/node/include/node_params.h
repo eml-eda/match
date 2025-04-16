@@ -65,7 +65,7 @@ inline void ${name}_update_${dep_dim.name}(){
     ;
     // if ${dep_dim.name} goes behind 0 it means there was padding so that shouldnt count for the size
     // same if it goes over the real size
-    int max_size = (${name}_${dep_dim.name}->global_idx + ${name}_${dep_dim.name}->curr_size) - ${name}_${dep_dim.name}->size;
+    int max_size = (${name}_${dep_dim.name}->global_idx + ${name}_${dep_dim.name}->curr_max_size) - ${name}_${dep_dim.name}->size;
     int min_size = -${name}_${dep_dim.name}->global_idx;
     ${name}_${dep_dim.name}->curr_size = ${name}_${dep_dim.name}->curr_max_size - ((max_size>0?max_size:0) + (min_size>0?min_size:0));
 }

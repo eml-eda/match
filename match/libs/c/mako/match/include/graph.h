@@ -44,7 +44,7 @@ TVM_DLL int32_t ${node.fn_name}(void* args, int32_t* arg_type_ids, int32_t num_a
 % else:
 ${node.fn_name}(
     % for inp_idx,node_in in enumerate([inp__ for inp__ in node.inputs if not inp__.is_constant]):
-    ${"" if inp_idx==0 else ","}${node_in.c_type}* ${node_in.name}_pt
+    ${"" if inp_idx==0 else ", "}${node_in.c_type}* ${node_in.name}_pt
     % endfor
     % for tens_out in node.outputs:
     , ${tens_out.c_type}* ${tens_out.name}_pt
@@ -59,7 +59,7 @@ int match_${model_name}_run_graph(
     ${rt_i.c_type}* ${rt_i.name}_pt,
     % endfor
     % for rt_o_idx,rt_o in enumerate(rt_outputs):
-    ${"" if rt_o_idx==0 else ","}${rt_o.c_type}* ${rt_o.name}_pt
+    ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_pt
     % endfor
 );
 #endif

@@ -150,7 +150,7 @@ void handle_dma_transfer(
                     .loc = tensor_l1_pt,
                     .number_of_1d_copies = tensor->tiles[L1_SCRATCHPAD*3+0].size,
                     .length_1d_copy = tensor->tiles[L1_SCRATCHPAD*3+1].size*tensor->tiles[L1_SCRATCHPAD*3+2].size*tensor->bits/8,
-                    .stride_1d = tensor->tiles[L2_SHARED_MEM*3+1].size*tensor->tiles[L1_SCRATCHPAD*3+2].size*tensor->bits/8,
+                    .stride_1d = tensor->tiles[L2_SHARED_MEM*3+1].size*tensor->tiles[L2_SHARED_MEM*3+2].size*tensor->bits/8,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
             // fallback to 3D
@@ -188,7 +188,7 @@ void handle_dma_transfer(
                     .number_of_2d_copies = tensor->tiles[L1_SCRATCHPAD*4+1].size,
                     .number_of_1d_copies = tensor->tiles[L1_SCRATCHPAD*4+2].size,
                     .length_1d_copy = tensor->tiles[L1_SCRATCHPAD*4+3].size,
-                    .stride_2d = tensor->tiles[L2_SHARED_MEM*4+3].size*tensor->tiles[L1_SCRATCHPAD*4+2].size,
+                    .stride_2d = tensor->tiles[L2_SHARED_MEM*4+3].size*tensor->tiles[L2_SHARED_MEM*4+2].size,
                     .stride_1d = tensor->tiles[L2_SHARED_MEM*4+3].size,
                     .dir = 1
                 });
@@ -333,15 +333,15 @@ void pulp_nn_dense_wrapper(void* args){
     int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     pulp_nn_linear(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts pt
+        tensors[0].pt, // acts pt
         // bias pt
-        tensors[2].pts[L1_SCRATCHPAD], // bias pt
+        tensors[2].pt, // bias pt
         // output pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // output pt
+        tensors[num_tensors-1].pt, // output pt
         // weights pt
-        tensors[1].pts[L1_SCRATCHPAD], // weights pt
-        num_tensors>4? tensors[2].pts[L1_SCRATCHPAD]:NULL, // bnorm mul pt
-        num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
+        tensors[1].pt, // weights pt
+        num_tensors>4? tensors[2].pt:NULL, // bnorm mul pt
+        num_tensors>4? tensors[3].pt:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
         tensors[0].tiles[L1_SCRATCHPAD*2+1].size, // input channels
@@ -357,13 +357,13 @@ void pulp_nn_dense_out_int_wrapper(void* args){
     int num_tensors = ctx->tensors->num_tensors;
     pulp_nn_linear_out_32(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts pt
+        tensors[0].pt, // acts pt
         // bias pt
-        tensors[2].pts[L1_SCRATCHPAD], // bias pt
+        tensors[2].pt, // bias pt
         // output pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // output pt
+        tensors[num_tensors-1].pt, // output pt
         // weights pt
-        tensors[1].pts[L1_SCRATCHPAD], // weights pt
+        tensors[1].pt, // weights pt
         tensors[0].tiles[L1_SCRATCHPAD*2+1].size, // input channels
         tensors[num_tensors-1].tiles[L1_SCRATCHPAD*2+1].size // output channels
     );
@@ -401,18 +401,18 @@ void pulp_nn_dw_conv2d_wrapper(void* args){
     #endif
     pulp_nn_depthwise_generic(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts pt
+        tensors[0].pt, // acts pt
         // im2col
         im2col_pt_,
         // bias pt
-        tensors[2].pts[L1_SCRATCHPAD], // bias pt
+        tensors[2].pt, // bias pt
         // output pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // output pt
+        tensors[num_tensors-1].pt, // output pt
         // weights pt
-        tensors[1].pts[L1_SCRATCHPAD], // weights pt
+        tensors[1].pt, // weights pt
         pwt_pt_, // pwt buffer pt
-        num_tensors>4? tensors[2].pts[L1_SCRATCHPAD]:NULL, // bnorm mul pt
-        num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
+        num_tensors>4? tensors[2].pt:NULL, // bnorm mul pt
+        num_tensors>4? tensors[3].pt:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
         inp_width, // input width
@@ -461,17 +461,17 @@ void pulp_nn_pw_conv2d_wrapper(void* args){
     #endif
     pulp_nn_pointwise_HoWo_parallel(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts pt
+        tensors[0].pt, // acts pt
         // im2col
         im2col_pt_,
         // bias pt
-        tensors[2].pts[L1_SCRATCHPAD], // bias pt
+        tensors[2].pt, // bias pt
         // output pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // output pt
+        tensors[num_tensors-1].pt, // output pt
         // weights pt
-        tensors[1].pts[L1_SCRATCHPAD], // weights pt
-        num_tensors>4? tensors[2].pts[L1_SCRATCHPAD]:NULL, // bnorm mul pt
-        num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
+        tensors[1].pt, // weights pt
+        num_tensors>4? tensors[2].pt:NULL, // bnorm mul pt
+        num_tensors>4? tensors[3].pt:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
         inp_width, // input width
@@ -520,17 +520,17 @@ void pulp_nn_hoparallel_conv2d_wrapper(void* args){
     #endif
     pulp_nn_conv_Ho_parallel(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts pt
+        tensors[0].pt, // acts pt
         // im2col
         im2col_pt_,
         // bias pt
-        tensors[2].pts[L1_SCRATCHPAD], // bias pt
+        tensors[2].pt, // bias pt
         // output pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // output pt
+        tensors[num_tensors-1].pt, // output pt
         // weights pt
-        tensors[1].pts[L1_SCRATCHPAD], // weights pt
-        num_tensors>4? tensors[2].pts[L1_SCRATCHPAD]:NULL, // bnorm mul pt
-        num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
+        tensors[1].pt, // weights pt
+        num_tensors>4? tensors[2].pt:NULL, // bnorm mul pt
+        num_tensors>4? tensors[3].pt:NULL, // bnorm add pt
         1, // requant mult factor
         right_shift, // requant shift factor
         inp_width, // input width
@@ -564,9 +564,9 @@ void pulp_nn_add_wrapper(void* args){
     int out_ch = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+3].size; // out ch
     pulp_nn_add(
         // activations pt  
-        tensors[0].pts[L1_SCRATCHPAD], // acts 1 pt
-        tensors[1].pts[L1_SCRATCHPAD], // acts 2 pt
-        tensors[num_tensors-1].pts[L1_SCRATCHPAD], // out
+        tensors[0].pt, // acts 1 pt
+        tensors[1].pt, // acts 2 pt
+        tensors[num_tensors-1].pt, // out
         1, // out mult 1
         1, // out mult 2
         right_shift,

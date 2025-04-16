@@ -17,10 +17,10 @@ class PulpCluster(ExecModule):
                  l3_kb_size: int=8912, async_dma: bool=False):
         super(PulpCluster, self).__init__(name="pulp_cluster",
                                           libs_required={
-                                              "pulp_nn": ModuleLib(name="pulp_nn", base_path=os.path.dirname(__file__)+"/../libs/pulp_nn"),
-                                              "pulp_cluster": ModuleLib(name="pulp_cluster", base_path=os.path.dirname(__file__)+"/../libs/pulp_cluster"),
-                                              "pulp_mem": ModuleLib(name="pulp_mem", base_path=os.path.dirname(__file__)+"/../libs/pulp_mem"),
-                                              "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/../libs/pulp_utils"),
+                                              "pulp_nn": ModuleLib(name="pulp_nn", base_path=os.path.dirname(__file__)+"/libs/pulp_nn"),
+                                              "pulp_cluster": ModuleLib(name="pulp_cluster", base_path=os.path.dirname(__file__)+"/libs/pulp_cluster"),
+                                              "pulp_mem": ModuleLib(name="pulp_mem", base_path=os.path.dirname(__file__)+"/libs/pulp_mem"),
+                                              "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/libs/pulp_utils"),
                                           })
         self.NUM_CORES = num_cores
         self.L1_SCRATCHPAD_KB_SIZE = l1_kb_size
@@ -71,7 +71,7 @@ class PulpCluster(ExecModule):
 
     def update_constants(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
         for w_tensor in match_node.const_tensors.values():
-            if "dense" in w_tensor.name and pattern_name=="dense_out":
+            if "dense" in w_tensor.name and pattern_name=="flatten_dense_out":
                 if w_tensor.layout!="CN":
                     w_tensor.data = w_tensor.data.transpose(1,0)
                     w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]

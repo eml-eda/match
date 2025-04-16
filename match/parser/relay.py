@@ -275,7 +275,8 @@ class MatchRelayParser(MatchTVMParser):
             o_w_dim = i_w_dim
         if not depthwise:
             self.update_all_dim_names_occurrences_with(old_dim_name=w_cin_dim.name,new_dim_name=i_c_dim.name)
-        
+        else:
+            self.update_all_dim_names_occurrences_with(old_dim_name=i_c_dim.name,new_dim_name=w_cout_dim.name)
         o_tensor = MatchTensor(name=name,dims=self.get_dim_arr_from_layout_and_nchw_arr(
             layout=attrs.out_layout if attrs.out_layout != "" else attrs.data_layout,
             nchw_arr=[i_n_dim,w_cout_dim,o_h_dim,o_w_dim]
@@ -341,7 +342,8 @@ class MatchRelayParser(MatchTVMParser):
             o_spatial_dim = i_spatial_dim
         if not depthwise:
             self.update_all_dim_names_occurrences_with(old_dim_name=w_cin_dim.name,new_dim_name=i_c_dim.name)
-        
+        else:
+            self.update_all_dim_names_occurrences_with(old_dim_name=i_c_dim.name,new_dim_name=w_cout_dim.name)
         o_tensor = MatchTensor(name=name,dims=self.get_dim_arr_from_layout_and_nchw_arr(
             layout=attrs.out_layout if attrs.out_layout != "" else attrs.data_layout,
             nchw_arr=[i_n_dim,w_cout_dim,o_spatial_dim]

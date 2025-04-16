@@ -48,6 +48,7 @@ int main(int argc,char** argv){
     ${handle_out_fn}(
         % for out_name in match_outputs.keys():
         ${out_name}_pt,
+        ${match_outputs[out_name]["prod_shape"]},
         % endfor
         &match_ctx);
     % endif

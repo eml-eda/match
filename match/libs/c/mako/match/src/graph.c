@@ -25,7 +25,7 @@ int match_${model_name}_run_graph(
     ${rt_i.c_type}* ${rt_i.name}_pt,
     % endfor
     % for rt_o_idx,rt_o in enumerate(rt_outputs):
-    ${"" if rt_o_idx==0 else ","} ${rt_o.c_type}* ${rt_o.name}_pt
+    ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_pt
     % endfor
 ){
     % if ext_mem_needed_bytes>0:

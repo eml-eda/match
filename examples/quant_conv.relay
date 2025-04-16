@@ -1,8 +1,0 @@
-#[version = "0.0.5"]
-def @main(%input_0: Tensor[(1, 32, 32, 32), uint8], %conv1_weights: Tensor[(32, 32, 3, 3), int8], %conv1_bias: Tensor[(32), int32]) {
-  %0 = nn.conv2d(%input_0, %conv1_weights, padding=[1, 1, 1, 1], out_dtype="int32");
-  %1 = nn.bias_add(%0, %conv1_bias);
-  %2 = right_shift(%1, 4);
-  %3 = clip(%2, a_min=0f, a_max=255f);
-  cast(%3, dtype="uint8")
-}

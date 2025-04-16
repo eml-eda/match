@@ -49,7 +49,8 @@ MatchTensorTile ${name}_${t_tensor_name}_tiles_[${len(t_tensor_tiles)*t_tensor_t
         .dim = &(${name}_dims_[${list(match_node.dims.keys()).index(tiled_dim.dim.name) if tiled_dim.dim.name in match_node.dims else len(match_node.dims)}]),
         .size = ${tiled_dim.size},
         .max_size = ${tiled_dim.max_size},
-        .start_idx = ${tiled_dim.dim.start_idx}
+        .start_idx = ${tiled_dim.dim.start_idx},
+        .curr_idx = ${tiled_dim.dim.start_idx}
     }
     % endfor
     % endfor
@@ -75,6 +76,7 @@ MatchTensor ${name}_tensors_[${len(schedule.tensors)}] = {
         .curr_tile = 0,
         .bits = ${tensor.bits},
         .base_pt = 0x0,
+        .pt = 0x0,
         .pts = ${name}_${tensor.name}_pts,
         .tiles = ${name}_${tensor.name}_tiles_
     }

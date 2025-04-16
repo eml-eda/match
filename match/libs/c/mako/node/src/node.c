@@ -90,16 +90,19 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
 
     % for var in match_node.var_tensors.values():
     ${name}_${var.name}->base_pt = var_${var.name}_pt;
+    ${name}_${var.name}->pt = var_${var.name}_pt;
     ${name}_${var.name}->pts[${memory_hierarchy["var"][-1].name}] = var_${var.name}_pt;
     % endfor
     % for out in match_node.output_tensors.values():
     ${name}_${out.name}->base_pt = out_${out.name}_pt;
+    ${name}_${out.name}->pt = out_${out.name}_pt;
     ${name}_${out.name}->pts[${memory_hierarchy["output"][-1].name}] = out_${out.name}_pt;
     % endfor
     
     % for const_tensor in schedule.tensors.values():
     % if const_tensor.tensor_type=="const":
     ${name}_${const_tensor.name}->base_pt = ${name}_${const_tensor.name}_data;
+    ${name}_${const_tensor.name}->pt = ${name}_${const_tensor.name}_data;
     ${name}_${const_tensor.name}->pts[${memory_hierarchy["const"][-1].name}] = ${name}_${const_tensor.name}_data;
     % endif
     % endfor
@@ -108,6 +111,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     % for intermediate_tensor in schedule.tensors.values():
     % if intermediate_tensor.tensor_type=="intermediate":
     ${name}_${intermediate_tensor.name}->base_pt = ${target.alloc_fn}(${intermediate_tensor.prod_shape}*sizeof(${c_dtype(intermediate_tensor.dtype)}));
+    ${name}_${intermediate_tensor.name}->pt = ${name}_${intermediate_tensor.name}->base_pt;
     ${name}_${intermediate_tensor.name}->pts[${memory_hierarchy["intermediate"][-1].name}] = ${intermediate_tensor.name}->base_pt;
     % endif
     % endfor
@@ -151,9 +155,11 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].size = ${name}_${t_dim.name}->curr_size; // this dim is not independent
     ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].max_size = ${name}_${t_dim.name}->curr_max_size; // this dim is not independent
     ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].start_idx = ${name}_${t_dim.name}->global_idx;
+    ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].curr_idx = ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].start_idx;
     % endif
     % if any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(mem_transfer.tensor.name, block_idx)][0]:loop_idx]]):
     ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].start_idx = ${name}_${t_dim.name}->global_idx;
+    ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].curr_idx = ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].start_idx;
     % endif
     % endfor
     % if (mem_transfer.tensor.is_fused or mem_transfer.tensor.unsupported_layout) and mem_apis.get_size_of_fused_tensor!="" and mem_apis.get_pt_of_fused_tensor!="":
@@ -166,6 +172,7 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     ${c_ident(loop_idx)}void* ${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)} = ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.top_mem}] + (tile_mem_offset>0?tile_mem_offset:0);
     % endif
     ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}] = ${mem_transfer.mem}_base_pt + ${mem_transfer.mem}_curr_pt_offset;
+    ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}->pt = ${c_ident(loop_idx)}${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}];
     ${c_ident(loop_idx)}${mem_transfer.mem}_curr_pt_offset += ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
     % if mem_transfer.tensor.tensor_type != "output":
     ${c_ident(loop_idx)}// call API for ${exec_module.name}-specific memory transfer handling
@@ -199,15 +206,28 @@ ${"void" if platform_apis.init_platform!="" else "int"} __attribute__ ((noinline
     ${c_ident(loop_idx)}block_${block_idx}_loads = 0;
     % endif
     
-    ## fix start idxs of other tensors not involved in mem transfers
+    ## fix start idxs and curr pts of other tensors not involved in mem transfers
     % for tensor in [tens for tens in schedule.tensors.values() if last_transfer_of_tensor_block[(tens.name, block_idx)][0]!=loop_idx]:
+    <% tensor_need_update = False %>
     % for t_dim_idx, t_dim in enumerate(tensor.dims):
-    % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependencies for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]:
-    ${c_ident(loop_idx)}${name}_${tensor.name}_tiles_[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].start_idx = ${name}_${t_dim.name}->global_idx;
-    % elif any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
-    ${c_ident(loop_idx)}${name}_${tensor.name}_tiles_[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].start_idx = ${name}_${t_dim.name}->global_idx;
+    % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependencies for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]] or any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
+    <% tensor_need_update = True %>
+    <% break %>
     % endif
     % endfor
+    % if tensor_need_update:
+    % if (tensor.is_fused or tensor.unsupported_layout) and mem_apis.get_pt_of_fused_tensor!="":
+    ${c_ident(loop_idx)}tile_mem_offset = ${mem_apis.get_pt_of_fused_tensor}(ctx,${name}_${tensor.name});
+    % else:
+    ${c_ident(loop_idx)}tile_mem_offset = ${tensor.c_offset_expr_sw_mem(last_transfer_of_tensor_block[(tensor.name, block_idx)][1], schedule, block_idx, loop_idx, name)};
+    % endif
+    ${c_ident(loop_idx)}${name}_${tensor.name}->pt = ${name}_${tensor.name}->pts[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}] + (tile_mem_offset>0?tile_mem_offset:0);
+    % for t_dim_idx, t_dim in enumerate(tensor.dims):
+    % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependencies for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]] or any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
+    ${c_ident(loop_idx)}${name}_${tensor.name}_tiles_[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].curr_idx = ${name}_${t_dim.name}->global_idx;
+    % endif
+    % endfor
+    % endif
     % endfor
 
     % if block.backend == "MATCH":
