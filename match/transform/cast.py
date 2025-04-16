@@ -29,6 +29,7 @@ class MatchAddCastInMain:
     def __call__(self, mod):
         return self.transform_module(mod)
 
+CAN_REMOVE_FAKE_CAST = False
 @tvm.relay.transform.function_pass(opt_level=0)
 class MatchRemoveFakeOutDtypeCasts(tvm.relay.expr_functor.ExprMutator):
     """Cast linear layers in graph to integers and insert the necessary cast operations (from MATCH ONNX file)
@@ -44,11 +45,17 @@ class MatchRemoveFakeOutDtypeCasts(tvm.relay.expr_functor.ExprMutator):
         """
         new_fn = self.visit(call.op)
         new_args = [self.visit(arg) for arg in call.args]
+
+        span_name = "" if not hasattr(call.span, "source_name") else call.span.source_name.name
+        is_fake_cast_node = span_name=="FAKE_CAST_TVM_OUT_DTYPE" and call.op.name=="cast" and isinstance(new_args[0], relay.Call)
+        if not CAN_REMOVE_FAKE_CAST and is_fake_cast_node:
+            new_args_attrs=dict(new_args[0].attrs)
+            new_args_attrs["out_dtype"]=call.attrs.dtype
+            new_args[0]=relay.frontend.common.get_relay_op(new_args[0].op.name)(*new_args[0].args, **new_args_attrs)
         # Default case
         new_call = relay.Call(new_fn, new_args, call.attrs, call.type_args, call.span)
-        span_name = "" if not hasattr(call.span, "source_name") else call.span.source_name.name
 
-        if span_name=="FAKE_CAST_TVM_OUT_DTYPE" and call.op.name=="cast":
+        if CAN_REMOVE_FAKE_CAST and is_fake_cast_node:
             new_args_attrs=dict(new_args[0].attrs)
             new_args_attrs["out_dtype"]=call.attrs.dtype
             new_args[0]=relay.frontend.common.get_relay_op(new_args[0].op.name)(*new_args[0].args, **new_args_attrs)
