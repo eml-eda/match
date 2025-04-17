@@ -23,7 +23,7 @@ int match_byte_checksum_check(const char* data, int size, int checksum) {
     }
 
     // Check if checksum matches
-    return sum == checksum;
+    return sum - checksum;
 }
 
 void handle_int_classifier(int* output_pt, int classes, int runtime_status){

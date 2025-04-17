@@ -1,5 +1,5 @@
 from typing import Dict, List
-from match.model.runtime import MatchMemoryTensor
+from match.runtime.graph.tensor import MatchMemoryTensor
 
 
 def check_if_any_valid_allocation(

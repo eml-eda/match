@@ -1,6 +1,6 @@
 
 from typing import List
-from match.model.runtime import MatchMemoryTensor
+from match.runtime.graph.tensor import MatchMemoryTensor
 from match.runtime.graph.alloc import allocate_tensor
 from match.runtime.graph.utils import save_memory_allocation_graph
 

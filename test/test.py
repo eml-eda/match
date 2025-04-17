@@ -56,6 +56,7 @@ def run_nodes_of_network(target_name: str="default", network: str="conv", output
                 default_inputs=default_inputs,
                 golden_cpu_model=golden_cpu_model,
                 handle_out_fn=handle_out_fn,
+                debug=True
             ),
             target=target,
             output_path=output_path
@@ -81,6 +82,7 @@ def run_microbench(target_name: str="default", microbench: str="conv", output_pa
                                              min_input_val=min_input_val, max_input_val=max_input_val),
            golden_cpu_model=golden_cpu_model,
            handle_out_fn=handle_out_fn,
+           debug=True
         ),
         target=target,
         output_path=output_path
@@ -116,7 +118,8 @@ def run_model(target_name: str="pulp_platform", model: str="keyword_spotting", o
            default_inputs=get_default_inputs(mod=mod, params=params,  input_files=input_files,
                                              min_input_val=min_input_val, max_input_val=max_input_val),
            golden_cpu_model=golden_cpu_model,
-           handle_out_fn=handle_out_fn
+           handle_out_fn=handle_out_fn,
+           debug=True
         ),
         target=target,
         output_path=output_path
@@ -146,7 +149,8 @@ def run_relay_saved_model_at(target_name: str="pulp_platform", mod_file: str="./
            default_inputs=get_default_inputs(mod=mod, params=params,  input_files=input_files,
                                              min_input_val=min_input_val, max_input_val=max_input_val),
            golden_cpu_model=golden_cpu_model,
-           handle_out_fn=handle_out_fn
+           handle_out_fn=handle_out_fn,
+           debug=True
         ),
         target=target,
         output_path=output_path

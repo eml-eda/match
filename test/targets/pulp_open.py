@@ -70,7 +70,6 @@ class PulpOpen(MatchTarget):
         return [
             ("requant", MatchRequantRewriter()),
             ("layout", MatchLayoutNCHWtoNHWCTVM),
-            ("folded", relay.transform.FoldConstant()),
         ]
     
     def host_memories(self):

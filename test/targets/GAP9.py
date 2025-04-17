@@ -77,7 +77,6 @@ class GAP9(MatchTarget):
         return [
             ("requant", MatchRequantRewriter()),
             ("layout", MatchLayoutNCHWtoNHWCTVM),
-            ("folding", relay.transform.FoldConstant())
         ]
     
     def host_memories(self):

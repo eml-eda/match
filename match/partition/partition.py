@@ -90,6 +90,9 @@ def partition(mod, params, dpu, opts):
         pipeline.append(MatchSaveRelay(net_transform_name))
         pipeline.append(transform.InferType())
 
+    pipeline.append(transform.FoldConstant())
+    pipeline.append(MatchSaveRelay("folded"))
+    pipeline.append(transform.InferType())
     pipeline.append(MatchSaveRelay("transformed"))
     pipeline.append(transform.MergeComposite(pattern_table(target=target)))
     pipeline.append(transform.AnnotateTarget(["match"]))

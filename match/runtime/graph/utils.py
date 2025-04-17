@@ -71,9 +71,9 @@ def save_memory_allocation_graph(
     ax.set_title("Memory Allocation")
     ax.set_xlabel("Nodes")
     ax.set_ylabel("Memory")
-    ax.set_xlim(0, max(tensor.last_usage for tensor in mem_tensors) + 1)
-    ax.set_ylim(0, max(max(list(tensor.mem_offset_at.values())+[0]) + tensor.num_bytes \
-                       for tensor in mem_tensors) + 32)
+    ax.set_xlim(0, max([tensor.last_usage for tensor in mem_tensors]+[0]) + 1)
+    ax.set_ylim(0, max([max(list(tensor.mem_offset_at.values())+[0]) + tensor.num_bytes \
+                       for tensor in mem_tensors]+[0]) + 32)
     ax.grid(True)
 
     # Add the legend box for the dictionary

@@ -3,11 +3,11 @@
     "padding":[1,1,1,1],
     "fil_shape":[3,3],
     "inp_shape":[22,22],
-    "inp_ch":22,
-    "out_ch":24,
+    "inp_ch":3,
+    "out_ch":8,
     "right_shift":13,
-    "inp_features":48,
-    "out_features":16,
+    "inp_features":3,
+    "out_features":8,
     "activation":true,
     "requant_pattern":true
 }
