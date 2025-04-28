@@ -10,3 +10,4 @@ cmake
 libedit-dev
 libxml2-dev
 llvm-14
+unzip

@@ -65,7 +65,7 @@ RUN echo "source /pulp-sdk/configs/pulp-open.sh" >> ~/.bashrc
 
 WORKDIR /
 
-RUN git clone --recursive https://github.com/eml-eda/match.git
+COPY . /match
 
 WORKDIR /match
 

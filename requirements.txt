@@ -2,6 +2,7 @@ setuptools>=65.5
 pyyaml
 numpy<2.0
 mako
+pytest
 # TVM specific
 typing-extensions
 psutil

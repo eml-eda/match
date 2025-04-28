@@ -2,5 +2,10 @@
     "files.associations": {
         "ne16_params.h": "c",
         "ne16_monitor.h": "c"
-    }
+    },
+    "python.testing.pytestArgs": [
+        "test"
+    ],
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true
 }

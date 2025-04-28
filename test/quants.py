@@ -4,18 +4,20 @@ import tvm
 from tvm import relay
 
 
-def create_conv_ex(inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
-                       padding:Tuple=(0,0,0,0),strides:Tuple=(1,1),
-                       groups:int=1,out_ch:int=1,inp_ch:int=3,
-                       requant_pattern:bool=False,
-                       right_shift:int=1,nhwc:bool=True,**kwargs):
+def create_conv_ex(
+    inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
+    padding:Tuple=(0,0,0,0),strides:Tuple=(1,1),
+    groups:int=1,out_ch:int=1,inp_ch:int=3,
+    requant_pattern:bool=False,
+    right_shift:int=1,nhwc:bool=True,**kwargs
+):
     tens_inp_shape = (1,inp_ch)+inp_shape if not nhwc else (1,)+inp_shape+(inp_ch,)
     x = relay.var("input_0", relay.TensorType(tens_inp_shape, "uint8"))
     # Get or generate weight_values
-    tens_weights_shape = (out_ch,inp_ch)+fil_shape if not nhwc else fil_shape+(inp_ch,out_ch)
+    tens_weights_shape = (out_ch,inp_ch//groups)+fil_shape if not nhwc else fil_shape+(inp_ch//groups,out_ch)
     weights = create_random_array(tens_weights_shape,"int8")
     # Get or generate bias values
-    scale = create_random_array((out_ch,), "int32", min_val=-2500, max_val=2500)
+    scale = create_random_array((out_ch,), "int32", min_val=1, max_val=25)
     bias = create_random_array((out_ch,), "int32", min_val=-2500, max_val=2500)
     # Generate the conv2d call
     # define weights and bias variables
@@ -42,8 +44,8 @@ def create_conv_ex(inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
     )
     b = relay.var(bias_name, relay.TensorType(bias.shape, bias.dtype))
     s = relay.var(scale_name, relay.TensorType(scale.shape, scale.dtype))
-    # x = relay.op.cast(x, "int32")
-    # x = relay.frontend.common.set_span(x, "FAKE_CAST_TVM_OUT_DTYPE")
+    x = relay.op.cast(x, "int32")
+    x = relay.frontend.common.set_span(x, "FAKE_CAST_TVM_OUT_DTYPE")
     x = relay.op.multiply(x, s)
     x = relay.op.add(x, b)
     if requant_pattern:
@@ -66,9 +68,9 @@ def create_dense_ex(inp_features:int=256,out_features:int=128,
     # Using input_0 to be used with create_demo_file
     x = relay.var("input_0", relay.TensorType((1,inp_features), "uint8"))
     # Get or generate weight_values
-    weights = create_random_array((out_features,inp_features),"int8")
+    weights = create_random_array((out_features,inp_features),"int8", )
     # Get or generate bias values
-    bias = create_random_array((out_features,), "int32")
+    bias = create_random_array((out_features,), "int32", min_val=-2500, max_val=2500)
     # Generate the conv2d call
     # define weights and bias variables
     weights_name = "dense_weights"

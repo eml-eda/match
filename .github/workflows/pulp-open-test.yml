@@ -1,0 +1,36 @@
+name: MATCH CI for Pulp Open
+
+on:
+  push:
+    branches: [ "master" ]
+  pull_request:
+    branches: [ "master" ]
+  workflow_dispatch:
+
+jobs:
+
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          submodules: True
+
+      # Set up Docker Buildx
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      # Build the Docker image
+      - name: Build Docker image
+        run: |
+          docker build . --file docker/pulp-open/Dockerfile --tag match-pulp-open:$(date +%s)
+
+      # Use the container to run tests
+      - name: Run tests in container
+        container:
+          image: match-pulp-open
+        working-directory: /match/test
+        run: |
+          pytest -v pulp_open_ci.py

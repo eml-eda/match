@@ -35,7 +35,6 @@ class GAP9(MatchTarget):
         self.set_target_host()
         self.set_paths()
         self.set_apis()
-        self.soc_memory_bytes = L2_SHARED_MEM_KB_SIZE*1024
 
     def set_target_host(self):
         self.cpu_type = "riscv_cpu"
