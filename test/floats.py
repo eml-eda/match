@@ -15,8 +15,8 @@ def create_fp_conv_ex(inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
     bias = numpy_to_array(np_arr=get_random_np_array(dtype="float32",shape=(out_ch,)),dtype="float32")
     # Generate the conv2d call
     # define weights and bias variables
-    weights_name = "pulp_conv_weights"
-    bias_name = "pulp_conv_bias"
+    weights_name = "conv_weights"
+    bias_name = "conv_bias"
 
     # define relay input vars
     w = relay.var(weights_name, relay.TensorType(weights.shape, weights.dtype))
@@ -74,8 +74,8 @@ def create_fp_dense_ex(inp_features:int=256,out_features:int=128,**kwargs):
     bias = numpy_to_array(np_arr=get_random_np_array(dtype="float32",shape=(out_features,)),dtype="float32")
     # Generate the conv2d call
     # define weights and bias variables
-    weights_name = "pulp_dense_weights"
-    bias_name = "pulp_dense_bias"
+    weights_name = "dense_weights"
+    bias_name = "dense_bias"
 
     # define relay input vars
     w = relay.var(weights_name, relay.TensorType(weights.shape, weights.dtype))

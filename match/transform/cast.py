@@ -46,12 +46,15 @@ class MatchRemoveFakeOutDtypeCasts(tvm.relay.expr_functor.ExprMutator):
         """
         new_fn = self.visit(call.op)
         new_args = [self.visit(arg) for arg in call.args]
-
-        span_name = "" if not hasattr(call.span, "source_name") else call.span.source_name.name
-        is_out_dtype_node = isinstance(new_args[0], relay.Call) and new_args[0].op.name in NODE_WITH_OUT_DTYPE_ATTR
-        is_reshape_of_out_dtype_node = isinstance(new_args[0], relay.Call) and new_args[0].op.name=="reshape" and new_args[0].args[0]
-        is_fake_cast_node = span_name=="FAKE_CAST_TVM_OUT_DTYPE" and call.op.name=="cast" \
-            and isinstance(new_args[0], relay.Call) and (is_out_dtype_node or is_reshape_of_out_dtype_node)
+        is_out_dtype_node = False
+        is_reshape_of_out_dtype_node = False
+        is_fake_cast_node = False
+        if len(new_args) > 0:
+            span_name = "" if not hasattr(call.span, "source_name") else call.span.source_name.name
+            is_out_dtype_node = isinstance(new_args[0], relay.Call) and new_args[0].op.name in NODE_WITH_OUT_DTYPE_ATTR
+            is_reshape_of_out_dtype_node = isinstance(new_args[0], relay.Call) and new_args[0].op.name=="reshape" and new_args[0].args[0]
+            is_fake_cast_node = span_name=="FAKE_CAST_TVM_OUT_DTYPE" and call.op.name=="cast" \
+                and isinstance(new_args[0], relay.Call) and (is_out_dtype_node or is_reshape_of_out_dtype_node)
         if not CAN_REMOVE_FAKE_CAST and is_fake_cast_node:
             if is_reshape_of_out_dtype_node:
                 new_args[0]=new_args[0].args[0]

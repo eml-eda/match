@@ -125,8 +125,8 @@ def run_model(target_name: str="pulp_platform", model: str="keyword_spotting", o
         output_path=output_path
     )
 
-def run_relay_saved_model_at(target_name: str="pulp_platform", mod_file: str="./models/last_model/model_graph.relay",
-                             params_file: str="./models/last_model/model_params.txt", output_path: str="./builds/last_build",
+def run_relay_saved_model_at(target_name: str="pulp_platform", mod_filename: str="./models/last_model/model_graph.relay",
+                             params_filename: str="./models/last_model/model_params.txt", output_path: str="./builds/last_build",
                              executor: str="aot", golden_cpu_model: bool=False, input_files: List[str]=[],
                              min_input_val=None, max_input_val=None, handle_out_fn=""):
     #define HW Target inside match
@@ -136,15 +136,16 @@ def run_relay_saved_model_at(target_name: str="pulp_platform", mod_file: str="./
     # just to set the desired inputs and check that there is an actual model there
     mod_text=""
     params_bytes=bytes("","utf8")
-    with open(mod_file,"r") as mod_file:
-        mod_text=mod_file.read()
-    with open(params_file,"rb") as params_file:
-        params_bytes=params_file.read()
+    with open(mod_filename,"r") as mod_file_:
+        mod_text=mod_file_.read()
+    if params_filename is not None:
+        with open(params_filename,"rb") as params_file_:
+            params_bytes=params_file_.read()
     mod=relay.fromtext(mod_text)
-    params=relay.load_param_dict(params_bytes)
+    params={} if len(params_bytes)==0 else relay.load_param_dict(params_bytes)
     match.match(
         model=MatchModel(
-           filename=mod_file, params_filename=params_file,
+           filename=mod_filename, params_filename=params_filename,
            model_type="relay", model_name="default", executor=executor,
            default_inputs=get_default_inputs(mod=mod, params=params,  input_files=input_files,
                                              min_input_val=min_input_val, max_input_val=max_input_val),
@@ -257,62 +258,78 @@ if __name__=="__main__":
     )
 
     args = parser.parse_args()
+    run_relay_saved_model_at(
+        target_name=args.target,
+        mod_filename=str(Path(os.path.dirname(__file__)+"/models/last_model/train-model.relay").absolute()),
+        params_filename=None,
+        output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+        input_files=args.input_files,
+        min_input_val=args.min_input_val,
+        max_input_val=args.max_input_val,
+        handle_out_fn=args.handle_out_fn
+    )
+    exit(0)
     if not Path(os.path.dirname(__file__)+"/builds").is_dir():
         Path(os.path.dirname(__file__)+"/builds").mkdir()
     if args.compile_last_model and Path(os.path.dirname(__file__)+"/models/last_model").is_dir() and \
         Path(os.path.dirname(__file__)+"/models/last_model/model_graph.relay").exists() and \
             Path(os.path.dirname(__file__)+"/models/last_model/model_params.txt").exists():
-        run_relay_saved_model_at(target_name=args.target,
-                                 mod_file=str(Path(os.path.dirname(__file__)+"/models/last_model/model_graph.relay").absolute()),
-                                 params_file=str(Path(os.path.dirname(__file__)+"/models/last_model/model_params.txt").absolute()),
-                                 output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
-                                 input_files=args.input_files,
-                                 min_input_val=args.min_input_val,
-                                 max_input_val=args.max_input_val,
-                                 handle_out_fn=args.handle_out_fn
-                                 )
+        run_relay_saved_model_at(
+            target_name=args.target,
+            mod_filename=str(Path(os.path.dirname(__file__)+"/models/last_model/model_graph.relay").absolute()),
+            params_filename=str(Path(os.path.dirname(__file__)+"/models/last_model/model_params.txt").absolute()),
+            output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+            input_files=args.input_files,
+            min_input_val=args.min_input_val,
+            max_input_val=args.max_input_val,
+            handle_out_fn=args.handle_out_fn
+        )
     else:
         if args.model!="":
-            run_model(target_name=args.target,
-                      model=args.model,
-                      output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
-                      executor=args.executor,
-                      golden_cpu_model=args.golden,
-                      input_files=args.input_files,
-                      min_input_val=args.min_input_val,
-                      max_input_val=args.max_input_val,
-                      handle_out_fn=args.handle_out_fn
-                      )
+            run_model(
+                target_name=args.target,
+                model=args.model,
+                output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+                executor=args.executor,
+                golden_cpu_model=args.golden,
+                input_files=args.input_files,
+                min_input_val=args.min_input_val,
+                max_input_val=args.max_input_val,
+                handle_out_fn=args.handle_out_fn
+            )
         elif args.model_path!="":
-            run_model(target_name=args.target,
-                      model=args.model_path,
-                      output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
-                      executor=args.executor,
-                      golden_cpu_model=args.golden,
-                      input_files=args.input_files,
-                      min_input_val=args.min_input_val,
-                      max_input_val=args.max_input_val,
-                      handle_out_fn=args.handle_out_fn
-                      )
+            run_model(
+                target_name=args.target,
+                model=args.model_path,
+                output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+                executor=args.executor,
+                golden_cpu_model=args.golden,
+                input_files=args.input_files,
+                min_input_val=args.min_input_val,
+                max_input_val=args.max_input_val,
+                handle_out_fn=args.handle_out_fn
+            )
         elif args.network!="":
-            run_nodes_of_network(target_name=args.target,
-                                network=args.network,
-                                output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
-                                executor=args.executor,
-                                golden_cpu_model=args.golden,
-                                input_files=args.input_files,
-                                min_input_val=args.min_input_val,
-                                max_input_val=args.max_input_val,
-                                handle_out_fn=args.handle_out_fn
-                                )
+            run_nodes_of_network(
+                target_name=args.target,
+                network=args.network,
+                output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+                executor=args.executor,
+                golden_cpu_model=args.golden,
+                input_files=args.input_files,
+                min_input_val=args.min_input_val,
+                max_input_val=args.max_input_val,
+                handle_out_fn=args.handle_out_fn
+            )
         else:
-            run_microbench(target_name=args.target,
-                           microbench=args.microbench,
-                           output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
-                           executor=args.executor,
-                           golden_cpu_model=args.golden,
-                           input_files=args.input_files,
-                           min_input_val=args.min_input_val,
-                           max_input_val=args.max_input_val,
-                           handle_out_fn=args.handle_out_fn
-                           )
+            run_microbench(
+                target_name=args.target,
+                microbench=args.microbench,
+                output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+                executor=args.executor,
+                golden_cpu_model=args.golden,
+                input_files=args.input_files,
+                min_input_val=args.min_input_val,
+                max_input_val=args.max_input_val,
+                handle_out_fn=args.handle_out_fn
+            )

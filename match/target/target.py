@@ -99,7 +99,6 @@ class MatchTarget(ABC):
         self.exec_modules=[]
         self.exec_modules_dict=dict()
         self.disabled_exec_modules=[]
-        self.soc_memory_bytes = 1024
         self.load_file_to_ext_mem_fn = "load_file"
         self.load_to_ext_mem_fn = "memcpy_to_ext"
         self.free_external_mem = "free_ext_mem"
@@ -383,6 +382,13 @@ class MatchTarget(ABC):
             if m_pt.exec_module.name not in self.disabled_exec_modules
         ]
 
+    @property
+    def soc_memory_bytes(self):
+        for mem in self.host_memories()[::-1]:
+            if not mem.external:
+                return mem.k_bytes*1024
+        return 0
+    
     @property
     def host_memory(self):
         for mem in self.host_memories()[::-1]:
