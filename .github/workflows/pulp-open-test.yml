@@ -25,7 +25,7 @@ jobs:
       # Build the Docker image
       - name: Build Docker image
         run: |
-          docker build . --file docker/pulp-open/Dockerfile --tag match-pulp-open:$(date +%s)
+          docker build . --file docker/pulp_open/Dockerfile --tag match-pulp-open:$(date +%s)
 
       # Use the container to run tests
       - name: Run tests in container

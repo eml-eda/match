@@ -15,4 +15,4 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build the Docker image
-      run: docker build . --file docker/pulp-open/Dockerfile --tag match-pulp-open:$(date +%s)
+      run: docker build . --file docker/pulp_open/Dockerfile --tag match-pulp-open:$(date +%s)
