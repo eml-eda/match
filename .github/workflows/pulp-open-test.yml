@@ -10,7 +10,7 @@ on:
 jobs:
 
   build-and-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
 
     steps:
       - name: Checkout repository
@@ -25,12 +25,11 @@ jobs:
       # Build the Docker image
       - name: Build Docker image
         run: |
-          docker build . --file docker/pulp_open/Dockerfile --tag match-pulp-open:$(date +%s)
+          docker build . --file docker/pulp_open/Dockerfile --tag match-pulp-open
 
       # Use the container to run tests
       - name: Run tests in container
-        container:
-          image: match-pulp-open
+        image: match-pulp-open
         working-directory: /match/test
         run: |
           pytest -v pulp_open_ci.py

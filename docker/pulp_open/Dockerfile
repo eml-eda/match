@@ -69,11 +69,11 @@ COPY . /match
 
 WORKDIR /match
 
-RUN git submodule update --init --recursive
-
 RUN xargs -a system_requirements.txt apt install -y
 
 RUN pip3 install -r requirements.txt
+
+RUN git submodule update --init --recursive
 
 RUN TVM_NCORES_INSTALL=${TVM_NCORES_INSTALL} make build_tvm_single_core
 
