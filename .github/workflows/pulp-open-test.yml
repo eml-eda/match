@@ -29,7 +29,5 @@ jobs:
 
       # Use the container to run tests
       - name: Run tests in container
-        image: match-pulp-open
-        working-directory: /match/test
         run: |
-          pytest -v pulp_open_ci.py
+          docker run --rm match-pulp-open sh -c "cd test; pytest -v pulp_open_ci.py"

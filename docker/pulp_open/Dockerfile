@@ -77,7 +77,7 @@ RUN git submodule update --init --recursive
 
 RUN TVM_NCORES_INSTALL=${TVM_NCORES_INSTALL} make build_tvm_single_core
 
-RUN python3 setup.py install
+RUN python3 setup.py install --user
 
 ENV TVM_HOME="/match/match-tvm"
 ENV PYTHONPATH="${TVM_HOME}/python:/match/zigzag:"
