@@ -125,6 +125,7 @@ class MatchTarget(ABC):
         self.include_list=[]
         self.input_macros=""
         self.__cached_pattern_results__=[]
+        self.other_files_to_copy = []
         for exec_module in exec_modules:
             self.add_exec_module(exec_module)
             self.exec_modules_dict[exec_module.name]=exec_module
@@ -143,10 +144,14 @@ class MatchTarget(ABC):
 
     def gen_libs_and_main(self,models,default_model,out_path):
         abs_out_path = str(Path(out_path).absolute())
+        
         subprocess.getoutput(f"cp {self.tvm_runtime_include_path} {abs_out_path}/include/tvm_runtime.h")
         subprocess.getoutput(f"cp {self.tvm_runtime_src_path} {abs_out_path}/src/tvm_runtime.c")
         subprocess.getoutput(f"cp {self.crt_config_path} {abs_out_path}/include/crt_config.h")
         subprocess.getoutput(f"cp {self.makefile_path} {abs_out_path}/Makefile")
+        for other_file in self.other_files_to_copy:
+            subprocess.getoutput(f"cp {other_file} {abs_out_path}/{Path(other_file).name}")
+            
         models_ = models
         match_inputs, match_outputs = models_[default_model].get_match_inputs_and_outputs()
         templates_data = {

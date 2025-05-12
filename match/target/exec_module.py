@@ -38,6 +38,8 @@ class MemoryApis:
         # MATCH decides the pointer but it doesn't store it
         # the exec module lib should keep it
         self.alloc_buffer = ""
+        
+        self.host_mem_transfer = ""
         """
         APIs and flags from the legacy lib
         DEFAULT_LAYOUT = {"O":"NCHW","I":"NCHW","W":"NCHW","X":"NCHW","Y":"NCHW"}
@@ -91,6 +93,10 @@ class PlatformApis:
         # and then freed
         self.init_module = ""
         self.free_module = ""
+        
+        self.offload_binary = False
+        self.offload_args_extern_variable = "offload_args"
+        
 
         """
         APIs and flags from the legacy lib
