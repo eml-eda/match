@@ -2,16 +2,21 @@
 
 import os
 import pickle
+from pathlib import Path
+
 from match.node.node import MatchNode
 from match.schedule.schedule import MatchSchedule
-from match.target.exec_module import ComputationalApis, ExecModule, MemoryApis, PlatformApis, SyncApis
-from mako.template import Template
-from mako import exceptions
-from pathlib import Path
+from match.target.exec_module import ExecModule
 from match.target.target import MatchTarget
-from match.utils.utils import add_fname_node_schedule, get_executor, get_output_path,numpy_dtype_to_c_type,c_friendly_npvalue,format_c_code
+from match.utils.utils import add_fname_node_schedule, get_executor, get_output_path, numpy_dtype_to_c_type, c_friendly_npvalue, format_c_code
+
 import tvm
 from tvm import relay
+
+from mako.template import Template
+from mako.lookup import TemplateLookup
+from mako import exceptions
+
 
 class TemplateWriter:
     def __init__(self,mod: tvm.ir.IRModule,target: MatchTarget,exec_module: ExecModule,
@@ -103,8 +108,13 @@ class TemplateWriter:
         print(f"[TEMPLATE WRITER] Generating node {self.template_data['node_name']}")
         node_code = "#include <stdio.h>\n"
         # breakpoint()
+        
+        template_blocks_dir = os.path.dirname(__file__) + "/../libs/c/mako/node/blocks"
+        
         for base_dir in ["src", "include", "metadata"]:
             template_dir = os.path.dirname(__file__) + "/../libs/c/mako/node/" + base_dir
+            template_lookup = TemplateLookup(directories=[template_dir, template_blocks_dir])
+            
             node_base_path = "" if base_dir=="metadata" else base_dir+"/"+node_path
             for filename in os.listdir(template_dir):
                 if filename.startswith("old_"):
@@ -114,11 +124,13 @@ class TemplateWriter:
                 ext = filename_without_dots[-1]
                 if ext in {"c","h","json"}:
                     try:
-                        template = Template(filename = os.path.join(template_dir, filename))
+                        #template = Template(filename = os.path.join(template_dir, filename), lookup=template_lookup)
+                        
+                        template = template_lookup.get_template(filename)
                         rendered_content = template.render(**self.template_data)
                         if ext in {"c", 'h'}:
                             rendered_content = format_c_code(rendered_content)
-                        if filename=="node.c":
+                        if filename == "node.c":
                             node_code = rendered_content
                             continue
                         output_path = os.path.join(out_path, node_base_path, filename.replace("node", self.template_data["node_name"]))
