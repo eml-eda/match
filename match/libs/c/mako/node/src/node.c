@@ -15,11 +15,70 @@
  * See the License for the specific language governing permissions and
  * limitations under the License. 
 */
+
+% if platform_apis.offload_binaries:
+
+#include <match/ctx.h>
+#include <match/utils.h>
+#include <${target.name}.h>
+% for inc_h in target.include_list:
+#include <${inc_h}.h>
+% endfor
+
+#include "nodes/${model_name}/${name}_payload.h"
+#include <nodes/${model_name}/${name}_params.h>
+
+
+int __attribute__ ((noinline)) ${node_fullname}(
+    % for var in match_node.var_tensors.values():
+    void* var_${var.name}_pt,
+    % endfor
+    % for idx,out in enumerate(match_node.output_tensors.values()):
+    ${", " if idx>0 else ""}void* out_${out.name}_pt
+    % endfor
+){
+    // Write args (input and output tensor addresses) in shared memory
+
+    volatile uint32_t* args = (volatile uint32_t*)${node_fullname}_args_addr;
+    <% tensor_cnt = 0 %>
+    % for tensor in {**match_node.var_tensors,**match_node.output_tensors}.values():
+    args[${tensor_cnt}] = (volatile uint32_t)${"var_" if tensor.tensor_type=="var" else "out_"}${tensor.name}_pt;
+    <% tensor_cnt += 1 %>
+    % endfor	
+    % for const_tensor in schedule.tensors.values():
+    % if const_tensor.tensor_type=="const":
+    args[${tensor_cnt}] = (volatile uint32_t)${name}_${const_tensor.name}_data;
+    <% tensor_cnt += 1 %>
+    % endif
+    % endfor
+
+    // DMA the binary
+    for (int i = 0; ${node_fullname}_binary_sections[i].size != 0; i++) {
+        ${mem_apis.host_mem_transfer}(
+            ${node_fullname}_binary_sections[i].src,
+            ${node_fullname}_binary_sections[i].dst,
+            ${node_fullname}_binary_sections[i].size
+        );
+    }
+
+    // Start device
+    if (${node_fullname}_boot_addr != NULL) {
+        ${platform_apis.init_platform}(${node_fullname}_boot_addr);
+    }
+    
+    return 0;
+}
+
+
+% else:
+
 // include params file
 #include <nodes/${model_name}/${name}_params.h>
 #ifdef __MATCH_TEST_NODE_WITH_HELPER__
 #include <${target.name}/node_helper_nn.h>
 #endif
+
+
 % for block_idx,block in enumerate(schedule.blocks):
 % if block.backend == "MATCH":
 <% brackets_cnt = 0 %>
@@ -332,4 +391,6 @@ int __attribute__ ((noinline)) ${node_fullname}(
     ${platform_apis.init_platform}(${name}_ctx, ${node_fullname}_inner, args);
     return 0;
 }
+% endif
+
 % endif
