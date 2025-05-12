@@ -224,3 +224,31 @@ def save_all_schedules():
         scheds_file.writelines(searched_schedules)
     # with open(f"{get_output_path()}/match_searched_tmaps.log","w") as scheds_file:
     #     scheds_file.writelines(tmap_searched)
+    
+
+def format_c_code(code: str) -> str:
+    try: # astyle
+        result = subprocess.run(
+            ["astyle", "--style=kr", "--stdout"],
+            input=code.encode(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        if result.returncode == 0:
+            return result.stdout.decode()
+    except FileNotFoundError:
+        pass
+    
+    try: # clang-format
+        result = subprocess.run(
+            ["clang-format"],
+            input=code.encode(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        if result.returncode == 0:
+            return result.stdout.decode()
+    except FileNotFoundError:
+        pass
+
+    return code

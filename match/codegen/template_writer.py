@@ -9,7 +9,7 @@ from mako.template import Template
 from mako import exceptions
 from pathlib import Path
 from match.target.target import MatchTarget
-from match.utils.utils import add_fname_node_schedule, get_executor, get_output_path,numpy_dtype_to_c_type,c_friendly_npvalue
+from match.utils.utils import add_fname_node_schedule, get_executor, get_output_path,numpy_dtype_to_c_type,c_friendly_npvalue,format_c_code
 import tvm
 from tvm import relay
 
@@ -116,6 +116,8 @@ class TemplateWriter:
                     try:
                         template = Template(filename = os.path.join(template_dir, filename))
                         rendered_content = template.render(**self.template_data)
+                        if ext in {"c", 'h'}:
+                            rendered_content = format_c_code(rendered_content)
                         if filename=="node.c":
                             node_code = rendered_content
                             continue
