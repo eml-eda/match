@@ -37,7 +37,14 @@ int match_${model_name}_run_graph(
     int ext_mem_offset = 0;
     % endif
     % if mem_needed_bytes>0:
+
+    % if target.alloc_fn != "":
     void* match_mem = ${target.alloc_fn}(${mem_needed_bytes});
+    % else:
+    uint8_t match_mem_[${mem_needed_bytes}];
+    volatile void* match_mem = (void*) match_mem_;
+    % endif
+
     % endif
     % for mem_tensor in mem_tensors:
     % if (mem_tensor.is_input or mem_tensor.is_output) and (len(mem_tensor.move_temp_to_ext_mem)>0 or len(mem_tensor.load_from_ext_mem_at)>0):
@@ -63,7 +70,7 @@ int match_${model_name}_run_graph(
     % if node.fallback:
     #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
-    printf("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}\n");
+    mini_printf("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}\r\n");
     % if node.fallback:
     #endif
     % endif
@@ -131,7 +138,7 @@ int match_${model_name}_run_graph(
     % if node.fallback:
     #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
-    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, output differs from checksum by %d\n", match_byte_checksum_check(${node.outputs[0].name}_pt, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, output differs from checksum by %d\r\n", match_byte_checksum_check(${node.outputs[0].name}_pt, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
     % if node.fallback:
     #endif
     % endif
@@ -141,7 +148,7 @@ int match_${model_name}_run_graph(
     ${target.load_to_ext_mem_fn}(${mem_tensor.name}_pt, ${mem_tensor.name}_ext_pt,${mem_tensor.elems * mem_tensor.dtype.itemsize});
     % endfor
     // final cleanup
-    % if mem_needed_bytes>0:
+    % if mem_needed_bytes>0 and target.free_fn != "":
     ${target.free_fn}(match_mem);
     % endif
     % if ext_mem_needed_bytes>0:

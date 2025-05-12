@@ -3,13 +3,13 @@
 
 // target specific inlcudes
 % for inc_h in target.include_list:
-#include <${inc_h}.h>
+    #include <${inc_h}.h>
 % endfor
 % if golden_cpu_model:
-#define GOLDEN_CHECK_BENCH_ITERATIONS ${bench_iterations}
+    #define GOLDEN_CHECK_BENCH_ITERATIONS ${bench_iterations}
 % endif
 
-int main(int argc,char** argv){
+int main(int argc, char** argv){
     // target specific inits
     % for init_func in target.init_funcs:
     ${init_func}();
@@ -37,9 +37,19 @@ int main(int argc,char** argv){
     void* ${out_name}_pt = ${out["associated_input"]}_pt;
     % else:
     #if !defined(__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__) || !__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__
-    ${out["c_type"]}* ${out_name}_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+    % if target.alloc_fn != "":
+        ${out["c_type"]}* ${out_name}_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+    % else:
+        ${out["c_type"]} ${out_name}_pt_[${out["prod_shape"]}];
+        ${out["c_type"]}* ${out_name}_pt = ${out_name}_pt_;
+    % endif
     % if golden_cpu_model:
-    ${out["c_type"]}* golden_check_${out_name}_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+        % if target.alloc_fn != "":
+            ${out["c_type"]}* golden_check_${out_name}_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+        % else:
+            ${out["c_type"]} golden_check_${out_name}_pt_[${out["prod_shape"]}];
+            ${out["c_type"]}* golden_check_${out_name}_pt = golden_check_${out_name}_pt_;
+        % endif
     % endif
     #else
     void* ${out_name}_pt = match_ext_mem+ext_mem_offset;
@@ -84,22 +94,24 @@ int main(int argc,char** argv){
     % endif
     
     % for out_idx,out_name in enumerate(match_outputs.keys()):
-    % if out["is_copy_of"]=="" and out["associated_input"]=="":
-    #if !defined(__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__) || !__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__
-    % if golden_cpu_model:
-    ${target.free_fn}(golden_check_${out_name}_pt);
-    % endif
-    ${target.free_fn}(${out_name}_pt);
-    #endif
-    % endif
+        % if out["is_copy_of"]=="" and out["associated_input"]=="":
+            #if !defined(__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__) || !__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__
+            % if golden_cpu_model and target.free_fn != "":
+                ${target.free_fn}(golden_check_${out_name}_pt);
+            % endif
+            % if target.free_fn != "":
+                ${target.free_fn}(${out_name}_pt);
+            % endif
+            #endif
+        % endif
     % endfor
 
     #if defined(__${default_model}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__) && __${default_model}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__>0
-    ${target.free_external_mem}(match_ext_mem, __${default_model}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__*${int(golden_cpu_model)+1});
+        ${target.free_external_mem}(match_ext_mem, __${default_model}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__*${int(golden_cpu_model)+1});
     #endif
     // target specific cleaning functions
     % for clean_func in target.clean_funcs:
-    ${clean_func}();
+        ${clean_func}();
     % endfor
     return 0;
 }
