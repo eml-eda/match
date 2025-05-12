@@ -412,7 +412,7 @@ run_node_schedule_nn(ctx);
 }
 
 int main(int argc, char** argv){
-    volatile uint32_t* args = ${platform_apis.self.offload_args_extern_variable};
+    volatile uint32_t* args = ${platform_apis.offload_args_extern_variable};
     ${node_fullname}_inner(args);
     return 0;
 }
