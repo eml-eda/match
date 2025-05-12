@@ -28,7 +28,7 @@ class PulpCluster(ExecModule):
         # self.schedule_engine = "basic"
 
     def include_list(self):
-        return ["crappy_runtime/cluster"]
+        return ["carfield_lib/cluster"]
 
     def module_memories(self):
         return [

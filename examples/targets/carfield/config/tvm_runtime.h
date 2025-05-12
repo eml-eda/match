@@ -23,7 +23,7 @@
 #include <tvm/runtime/c_runtime_api.h>
 #include <tvm/runtime/crt/stack_allocator.h>
 
-#include "crappy_runtime/malloc.h"
+#include "carfield_lib/malloc.h"
 
 #ifdef __cplusplus
 extern "C" {

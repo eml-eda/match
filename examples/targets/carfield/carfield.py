@@ -3,7 +3,7 @@ from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
 from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM
 from match.transform.requant import MatchRequantRewriter
-from .pulp_cluster import PulpCluster
+from pulp_cluster import PulpCluster
 from tvm import relay
 
 # pulp config
@@ -31,7 +31,6 @@ class Carfield(MatchTarget):
         self.set_target_host()
         self.set_paths()
         self.set_apis()
-        self.soc_memory_bytes = L2_SHARED_MEM_KB_SIZE
 
     def set_target_host(self):
         self.cpu_type = "riscv_cpu -march=riscv64"
