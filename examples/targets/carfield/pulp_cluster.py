@@ -26,6 +26,8 @@ class PulpCluster(ExecModule):
         self.L3_FLASH_KB_SIZE = l3_kb_size
         self.ASYNC_DMA = async_dma
         # self.schedule_engine = "basic"
+        self.separate_build = True # Requires separate compilation
+        self.is_smp = True # Execution model is Symmetric Multiprocessing
 
     def include_list(self):
         return ["carfield_lib/cluster"]
@@ -110,10 +112,8 @@ class PulpCluster(ExecModule):
         platform_apis.init_module = "cluster_lib_init"
         platform_apis.free_module = "cluster_lib_cleanup"
         
-        platform_apis.offload_binaries = True
-        platform_apis.check_should_run = "cluster_check_should_run"
-        platform_apis.check_main_core = "cluster_check_main_core"
-        platform_apis.sync_cores = "cluster_sync_cores"
+        platform_apis.smp_configured_core_guard = "cluster_check_should_run"
+        platform_apis.smp_primary_core_guard = "cluster_check_main_core"
         
         return platform_apis
     
@@ -122,7 +122,9 @@ class PulpCluster(ExecModule):
         memory_apis.alloc_buffer = "cluster_alloc_buffer"
         memory_apis.init_memory["L1_SCRATCHPAD"] = "init_l1_scratchpad_memory"
         memory_apis.free_memory["L1_SCRATCHPAD"] = "free_l1_scrachpad_memory"
-        memory_apis.host_mem_transfer = "handle_host_dma_transfer"
+        
+        memory_apis.shared_memory_extern_addr = "offload_args"
+        
         return memory_apis
     
     def sync_apis_def(self, sync_apis: SyncApis=None, pattern_name: str="conv2d"):
@@ -130,6 +132,9 @@ class PulpCluster(ExecModule):
         sync_apis.wait_store = "wait_l1_dma_transfers"
         sync_apis.must_sync_after_store = True
         sync_apis.must_sync_after_computation = False
+        
+        sync_apis.smp_barrier = "cluster_sync_cores"
+        
         return sync_apis
     
     def comp_apis_def(self, computational_apis: ComputationalApis=None, pattern_name: str="conv2d"):

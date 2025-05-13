@@ -39,7 +39,8 @@ class MemoryApis:
         # the exec module lib should keep it
         self.alloc_buffer = ""
         
-        self.host_mem_transfer = ""
+        self.shared_memory_extern_addr = "offload_args"
+        
         """
         APIs and flags from the legacy lib
         DEFAULT_LAYOUT = {"O":"NCHW","I":"NCHW","W":"NCHW","X":"NCHW","Y":"NCHW"}
@@ -94,9 +95,8 @@ class PlatformApis:
         self.init_module = ""
         self.free_module = ""
         
-        self.offload_binary = False
-        self.offload_args_extern_variable = "offload_args"
-        
+        self.smp_configured_core_guard = ""
+        self.smp_primary_core_guard = ""
 
         """
         APIs and flags from the legacy lib
@@ -124,6 +124,7 @@ class SyncApis:
         # memory movement
         self.wait_buffer_parallel_tasks = "" # TODO: test
         self.wait_buffer_tile_computation = "" # TODO: test
+        self.smp_barrier = ""
         """
         unused APIs
         self.wait_prev_tile_computation = "" # not used
@@ -172,6 +173,10 @@ class ExecModule(ABC):
         self.backend = "ZigZag"
         # currently only ZigZag has been actually tested
         self.schedule_engine = "ZigZag"
+        # Requires a separate build -> main has to be generated
+        self.separate_build = False 
+        # Symmetric Multiprocessing -> same code on all cores
+        self.is_smp = False
 
     def include_libs(self):
         return []

@@ -16,7 +16,44 @@
  * limitations under the License. 
 */
 
-% if platform_apis.offload_binaries:
+% if not exec_module.separate_build:
+
+    <%namespace name="template_blocks" file="match_computation_block.c" />
+    <%namespace name="template_blocks" file="node_inner.c" />
+
+    // include params file
+    #include <nodes/${model_name}/${name}_params.h>
+    #ifdef __MATCH_TEST_NODE_WITH_HELPER__
+    #include <${target.name}/node_helper_nn.h>
+    #endif
+
+    % for block_idx,block in enumerate(schedule.blocks):
+        % if block.backend == "MATCH":
+            ${template_blocks.match_computation_block(block_idx,block)}
+        % endif
+    % endfor
+
+    ${template_blocks.node_inner()}
+
+    % if platform_apis.init_platform != "":
+        int __attribute__ ((noinline)) ${node_fullname}(
+            % for var in match_node.var_tensors.values():
+            void* var_${var.name}_pt,
+            % endfor
+            % for idx,out in enumerate(match_node.output_tensors.values()):
+            ${", " if idx>0 else ""}void* out_${out.name}_pt
+            % endfor
+        ){
+            unsigned int* args[${len(match_node.var_tensors)+len(match_node.output_tensors)}];
+            % for tensor_idx,tensor in enumerate({**match_node.var_tensors,**match_node.output_tensors}.values()):
+            args[${tensor_idx}] = ${"var_" if tensor.tensor_type=="var" else "out_"}${tensor.name}_pt;
+            % endfor	
+            ${platform_apis.init_platform}(${name}_ctx, ${node_fullname}_inner, args);
+            return 0;
+        }
+    % endif
+    
+% else:
 
     #include <match/ctx.h>
     #include <match/utils.h>
@@ -53,7 +90,7 @@
 
         // DMA the binary
         for (int i = 0; ${node_fullname}_binary_sections[i].size != 0; i++) {
-            ${mem_apis.host_mem_transfer}(
+            ${target.offload_dma_fn}(
                 ${node_fullname}_binary_sections[i].src,
                 ${node_fullname}_binary_sections[i].dst,
                 ${node_fullname}_binary_sections[i].size
@@ -67,42 +104,5 @@
         
         return 0;
     }
-
-% else:
-
-    <%namespace name="template_blocks" file="match_computation_block.c" />
-    <%namespace name="template_blocks" file="node_inner.c" />
-
-    // include params file
-    #include <nodes/${model_name}/${name}_params.h>
-    #ifdef __MATCH_TEST_NODE_WITH_HELPER__
-    #include <${target.name}/node_helper_nn.h>
-    #endif
-
-    % for block_idx,block in enumerate(schedule.blocks):
-        % if block.backend == "MATCH":
-            ${template_blocks.match_computation_block(block_idx,block)}
-        % endif
-    % endfor
-
-    ${template_blocks.node_inner()}
-
-    % if platform_apis.init_platform != "":
-        int __attribute__ ((noinline)) ${node_fullname}(
-            % for var in match_node.var_tensors.values():
-            void* var_${var.name}_pt,
-            % endfor
-            % for idx,out in enumerate(match_node.output_tensors.values()):
-            ${", " if idx>0 else ""}void* out_${out.name}_pt
-            % endfor
-        ){
-            unsigned int* args[${len(match_node.var_tensors)+len(match_node.output_tensors)}];
-            % for tensor_idx,tensor in enumerate({**match_node.var_tensors,**match_node.output_tensors}.values()):
-            args[${tensor_idx}] = ${"var_" if tensor.tensor_type=="var" else "out_"}${tensor.name}_pt;
-            % endfor	
-            ${platform_apis.init_platform}(${name}_ctx, ${node_fullname}_inner, args);
-            return 0;
-        }
-    % endif
 
 % endif

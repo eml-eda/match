@@ -23,11 +23,9 @@
     )
     {
     
-    ## In Multi-Core Execution check if the current core should run
-    % if platform_apis.check_should_run!="":
-        if (${platform_apis.check_should_run}() == 0){
-            return;
-        }
+    ## In Symmetric Multi-Core Execution check if the current core should run
+    % if platform_apis.smp_configured_core_guard != "":
+        if (${platform_apis.smp_configured_core_guard}() == 0) return;
     % endif
 
     ## In offloaded execution retrieve the arguments from the args pointer
@@ -49,11 +47,11 @@
 
     MatchCtx* ctx = ${name}_ctx;
 
-    % if platform_apis.check_main_core!="":
-        if (!${platform_apis.check_main_core}(ctx)) goto mem_skip_${next_skip()};
+    % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
+        if (!${platform_apis.smp_primary_core_guard}(ctx)) goto mem_skip_${next_skip()};
     % endif
 
-    % if platform_apis.init_module!="":
+    % if platform_apis.init_module != "":
         ${platform_apis.init_module}(ctx);
     % endif
 
@@ -78,14 +76,14 @@
         % endif
     % endfor
 
-    % if platform_apis.check_main_core!="":
+    % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
         mem_skip_${this_skip()}: ;
     % endif
 
     #ifndef __MATCH_TEST_NODE_WITH_HELPER__
 
-    % if platform_apis.check_main_core != "" and schedule.tensors:
-        if (!${platform_apis.check_main_core}(ctx)) goto mem_skip_${next_skip()};
+    % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "" and schedule.tensors:
+        if (!${platform_apis.smp_primary_core_guard}(ctx)) goto mem_skip_${next_skip()};
     % endif
 
     // Intermediate Tensors
@@ -97,12 +95,12 @@
         % endif
     % endfor
 
-    % if platform_apis.check_main_core!="":
+    % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
         mem_skip_${this_skip()}: ;
     % endif
 
-    % if platform_apis.check_main_core!="":
-        if (!${platform_apis.check_main_core}(ctx)) goto mem_skip_${next_skip()};
+    % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
+        if (!${platform_apis.smp_primary_core_guard}(ctx)) goto mem_skip_${next_skip()};
     % endif
 
     % for mem_level in set([mem_ for k,v in memory_hierarchy.items() for mem_ in v]):
@@ -123,7 +121,7 @@
         % endif
     % endfor
 
-    % if platform_apis.check_main_core!="":
+    % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
         mem_skip_${this_skip()}: ;
     % endif
 
@@ -144,8 +142,8 @@
             int BLOCK_${block_idx}_NUM_BUFFERS_FOR_COMPUTATION = ${block.num_buffers_for_computation};
         % endif
         % for loop_idx,lp in enumerate(block.loops):
-            % if platform_apis.check_main_core!="":
-                if (!${platform_apis.check_main_core}(ctx)) goto mem_skip_${next_skip()};
+            % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
+                if (!${platform_apis.smp_primary_core_guard}(ctx)) goto mem_skip_${next_skip()};
             % endif
             % for mem_transfer in lp.mem_transfers:
                 // compute the offset from the top level memory to obtain the correct tile for the transfer
@@ -191,16 +189,16 @@
                 <% add_tile_to_tensor_at_block_and_loop(mem_transfer.tensor.name, block_idx, loop_idx, mem_transfer.mem)%>
             % endfor
             ## finished sw controlled loads and stores
-            % if platform_apis.check_main_core!="":
+            % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
                 mem_skip_${this_skip()}: ;
             % endif
             % if exec_module.backend_constraints_check(match_node,schedule,block,lp,loop_idx) and block.loop_idx_end_sw_controlled_loads>=loop_idx:
                 <% break %>
             % endif 
-            % if platform_apis.check_main_core!="":
-                for(${platform_apis.check_main_core}(ctx) ? ${name}_block_${block_idx}_loop_${lp.name}_set() : 0;
+            % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
+                for(${platform_apis.smp_primary_core_guard}(ctx) ? ${name}_block_${block_idx}_loop_${lp.name}_set() : 0;
                     ${name}_block_${block_idx}_loop_${lp.name}_end();
-                    ${platform_apis.check_main_core}(ctx) ? ${name}_block_${block_idx}_loop_${lp.name}_update() : 0){
+                    ${platform_apis.smp_primary_core_guard}(ctx) ? ${name}_block_${block_idx}_loop_${lp.name}_update() : 0){
             % else:
                 for(${name}_block_${block_idx}_loop_${lp.name}_set();
                     ${name}_block_${block_idx}_loop_${lp.name}_end();
@@ -208,8 +206,8 @@
             % endif
         % endfor
 
-        % if platform_apis.check_main_core!="":
-            if (!${platform_apis.check_main_core}(ctx)) goto mem_skip_${next_skip()};
+        % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
+            if (!${platform_apis.smp_primary_core_guard}(ctx)) goto mem_skip_${next_skip()};
         % endif
         % if not sync_apis.must_sync_after_load and sync_apis.wait_load!="":
             // sync with the SW controlled transfers
@@ -239,10 +237,11 @@
                 % endfor
             % endif
         % endfor
-        % if platform_apis.check_main_core!="":
+        % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
             mem_skip_${this_skip()}: ;
-
-            ${platform_apis.sync_cores}(ctx);
+        % endif
+        % if exec_module.is_smp and sync_apis.smp_barrier != "":
+            ${sync_apis.smp_barrier}(ctx);
         % endif
 
         % if block.backend == "MATCH":
@@ -255,8 +254,8 @@
             ${comp_apis.compute_tile}(ctx);
         % endif
 
-        % if platform_apis.check_main_core!="":
-            ${platform_apis.sync_cores}(ctx);
+        % if exec_module.is_smp and sync_apis.smp_barrier != "":
+            ${sync_apis.smp_barrier}(ctx);
         % endif
 
         % if sync_apis.must_sync_after_computation:
@@ -286,8 +285,8 @@
                 }
             % endif
 
-            % if platform_apis.check_main_core!="":
-                if (!${platform_apis.check_main_core}(ctx)) goto mem_skip_${next_skip()};
+            % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
+                if (!${platform_apis.smp_primary_core_guard}(ctx)) goto mem_skip_${next_skip()};
             % endif
             % for mem_transfer in block.loops[loop_idx_].mem_transfers:
                 <% free_transfer_unique_tile(mem_transfer.tensor.name) %>
@@ -311,15 +310,15 @@
                         ${mem_transfer.mem}_curr_pt_offset -= ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
                 % endif
             % endfor
-            % if platform_apis.check_main_core!="":
+            % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
                 mem_skip_${this_skip()}: ;
             % endif
         % endfor
 
     % endfor
 
-    % if platform_apis.check_main_core!="":
-        if (!${platform_apis.check_main_core}(ctx)) goto mem_skip_${next_skip()};
+    % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
+        if (!${platform_apis.smp_primary_core_guard}(ctx)) goto mem_skip_${next_skip()};
     % endif
     % for instr in schedule.instrs:
         ${instr.lhs_expr.c_expr} ${instr.eq_expr.c_expr} ${instr.rhs_expr.c_expr};
@@ -337,19 +336,20 @@
     % if platform_apis.free_module!="":
         ${platform_apis.free_module}(ctx);
     % endif
-    % if platform_apis.check_main_core!="":
+    % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
         mem_skip_${this_skip()}: ;
     % endif
     #endif
     #ifdef __MATCH_TEST_NODE_WITH_HELPER__
     run_node_schedule_nn(ctx);
     #endif
-    % if platform_apis.init_platform=="":
-        return;
+
+    % if exec_module.is_smp and sync_apis.smp_barrier != "":
+        ${sync_apis.smp_barrier}(ctx);
     % endif
 
-    % if platform_apis.check_main_core!="":
-        ${platform_apis.sync_cores}(ctx);
+    % if platform_apis.init_platform=="":
+        return;
     % endif
     }
 

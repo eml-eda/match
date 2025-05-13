@@ -17,7 +17,7 @@
 */
 // include params file
 
-% if platform_apis.offload_binaries:
+% if exec_module.separate_build:
 
 #include <nodes/${model_name}/${name}_params.h>
 #ifdef __MATCH_TEST_NODE_WITH_HELPER__
@@ -36,7 +36,7 @@
 ${template_blocks.node_inner()}
 
 int main(int argc, char** argv){
-    volatile uint32_t* args = ${platform_apis.offload_args_extern_variable};
+    volatile uint32_t* args = ${mem_apis.shared_memory_extern_addr};
     ${node_fullname}_inner(args);
     return 0;
 }
