@@ -4,7 +4,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-
 typedef struct dma_transfer {
     void* src;
     void* dst;
