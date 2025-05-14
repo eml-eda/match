@@ -24,6 +24,7 @@ class MatchSchedule:
         self.tensor_tiles = tensor_tiles
         self.buffers = buffers
         self.num_units = 1
+        self.exec_module = None
 
     def set_default_tensor_tiles(self):
         for tensor in self.tensors.values():

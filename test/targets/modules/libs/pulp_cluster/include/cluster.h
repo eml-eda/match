@@ -13,7 +13,7 @@
 #ifdef GAP_SDK
 #define L1_SCRATCHPAD_SIZE 92700
 #else
-#define L1_SCRATCHPAD_SIZE 32768
+#define L1_SCRATCHPAD_SIZE 39*1024
 #endif
 // #define CLUSTER_LIB_DEBUG
 

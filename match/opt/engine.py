@@ -30,6 +30,10 @@ class ScheduleEngine(ABC):
         raise NotImplementedError()
     
     def get_schedule(self):
+        if self.schedule is None:
+            raise ValueError("Schedule not generated yet.")
+        if self.schedule.exec_module is None:
+            self.schedule.exec_module = self.exec_module
         return self.schedule
 
     def get_latency(self):

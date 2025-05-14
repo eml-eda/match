@@ -68,6 +68,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.spatial_sizes = self.spatial_mapping.spatial_loop_dim_size
         self.pattern_name = self.layer.layer_attrs["operator_type"]
         self.match_node = self.layer.layer_attrs["match_node"]
+        self.precision = {key if "final" not in key else key.split("_")[0]:val for key, val in self.layer.operand_precision.items() if key+"_final" not in self.layer.operand_precision}
 
     def def_innermost_loops_cost(self):
         """This function computes the cost of each single iteration of the kernel
@@ -202,9 +203,17 @@ class ZigZagMatchCostModel(CostModelEvaluation):
             constant_mem_key = "I1"
         lowest_const_mem = self.mem_hierarchy_dict[constant_mem_key][0]
         mem_bytes = lowest_const_mem.memory_instance.size//8
+        sizes_per_mem_level = self.size_per_mem_level
+        if "I" in self.operands:
+            if "fx" in self.layer.layer_attrs["dimension_relations"][0] and sizes_per_mem_level["W"]["FX"][0]>1:
+                if sizes_per_mem_level["I"]["OX"][0] != sizes_per_mem_level["I"]["OX"][1]:
+                    sizes_per_mem_level["I"]["OX"][0] += sizes_per_mem_level["W"]["FX"][0]
+            if "fy" in self.layer.layer_attrs["dimension_relations"][0] and sizes_per_mem_level["W"]["FY"][0]>1:
+                if sizes_per_mem_level["I"]["OY"][0] != sizes_per_mem_level["I"]["OY"][1]:
+                    sizes_per_mem_level["I"]["OY"][0] += sizes_per_mem_level["W"]["FY"][0]
         for operand in self.operands:
             if self.layer.memory_operand_links[operand] in lowest_const_mem.operands:
-                mem_bytes-=prod([val[0] for val in self.size_per_mem_level[operand].values()])
+                mem_bytes-=prod([val[0] for val in sizes_per_mem_level[operand].values()])*self.precision[operand]//8
         
         for w_tensor in self.match_node.const_tensors.values():
             if self.layer.layer_attrs["w_tensor"] is not None and w_tensor!=self.layer.layer_attrs["w_tensor"]:
@@ -217,10 +226,11 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         lowest_var_mem = self.mem_hierarchy_dict[var_mem_key][0]
         var_mem_bytes = lowest_var_mem.memory_instance.size//8
         if lowest_const_mem==lowest_var_mem:
-            var_mem_bytes-=mem_bytes
+            var_mem_bytes=mem_bytes
 
         if self.HAS_ANY_ADDITIONAL_BUFFER:
             schedule = self.layer.layer_attrs["get_match_schedule"](self)
+            schedule.buffers = []
             self.layer.layer_attrs["exec_module"].set_buffers_for_schedule(match_node=self.match_node,
                 schedule=schedule,
                 pattern_name=self.pattern_name,

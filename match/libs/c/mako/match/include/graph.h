@@ -16,9 +16,13 @@
 #define __${model_name}_GRAPH_${mem_tensor.name}_FROM_EXTERNAL_MEM__ ${int(mem_tensor.stored_in_external_memory)}
 % endif
 % endfor
-
+#define __${model_name}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__ ${sum([mem_tensor.num_bytes for mem_tensor in mem_tensors if (mem_tensor.is_input or mem_tensor.is_output) and mem_tensor.stored_in_external_memory])}
+// profiling flags
+#define __${model_name}_GRAPH_PROFILE__ ${int(profile)}
+#define __${model_name}_FALLBACK_GRAPH_PROFILE__ ${int(profile_fallback)}
+// debugging flags
 #define __${model_name}_GRAPH_DEBUG__ ${int(debug)}
-#define __${model_name}_FALLBACK_GRAPH_DEBUG__ ${int(debug)}
+#define __${model_name}_FALLBACK_GRAPH_DEBUG__ ${int(debug_fallback)}
 #if __${model_name}_GRAPH_DEBUG__
 % for activation_name, activation_checksum in checksums.items():
 % if map_names[activation_name][2] in nodes_map:
@@ -56,10 +60,10 @@ ${node.fn_name}(
 
 int match_${model_name}_run_graph(
     % for rt_i in rt_inputs:
-    ${rt_i.c_type}* ${rt_i.name}_pt,
+    ${rt_i.c_type}* ${rt_i.name}_${"ext_" if rt_i.stored_in_external_memory else ""}pt,
     % endfor
     % for rt_o_idx,rt_o in enumerate(rt_outputs):
-    ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_pt
+    ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_${"ext_" if rt_o.stored_in_external_memory else ""}pt
     % endfor
 );
 #endif

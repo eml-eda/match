@@ -94,16 +94,19 @@ typedef struct{
 typedef struct{
     int idx;
     int axis;
+    int bias;
 }MatchBiasAddAttrs;
 
 typedef struct{
     int idx;
     int axis;
+    int multiplier;
 }MatchMultiplyAttrs;
 
 typedef struct{
     int idx;
     int axis;
+    int adder;
 }MatchAddAttrs;
 
 typedef struct{

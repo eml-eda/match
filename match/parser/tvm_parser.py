@@ -113,6 +113,10 @@ class MatchTVMParser:
         return unique_name
 
     def check_broadcasting_and_get_out_dims(self, inp_tensor, w_tensor):
+        if len(inp_tensor.dims)==0:
+            return w_tensor.dims, []
+        if len(w_tensor.dims)==0:
+            return inp_tensor.dims, []
         w_tensor.layout = inp_tensor.layout
         # check if broadcasted
         broadcasted_tensor = None
@@ -160,6 +164,17 @@ class MatchTVMParser:
             raise RuntimeError(f"[TVM PARSER] Trying to do broadcast an operation which violates constraints,\
                                     shape A {[dim.size for dim in inp_tensor.dims]} shape B {[dim.size for dim in w_tensor.dims]}")
         return other_tensor.dims, axeses
+
+    def rearrange_if_const_first(self, inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type):
+        if inp_tensor.tensor_type == "const" and w_tensor.tensor_type != "const":
+            tmp_name, tmp_tensor, tmp_type = inp_name, inp_tensor, inp_type
+            inp_name, inp_tensor, inp_type = w_name, w_tensor, weights_type
+            w_name, w_tensor, weights_type = tmp_name, tmp_tensor, tmp_type
+        return inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type
+
+    def update_if_intermediate_tensor(self, tensor, name):
+        if name in self.name_to_calls:
+            tensor.tensor_type = "intermediate"
 
     def get_io_from_layout(self, layout, data, dims):
         # conv2d and other 4 dims operators
@@ -302,8 +317,8 @@ class MatchTVMParser:
                             self.tensor_name_mapping[a.name_hint] = v_name
                             var_and_consts_not_unrolled[v_name] = self.args_list[len(var_and_consts_not_unrolled)]
                             const_  = self.args_list[len(var_and_consts_not_unrolled)-1]
-                            if isinstance(const_.checked_type, tvm.ir.type.TupleType):
-                                breakpoint()
+                            # if isinstance(const_.checked_type, tvm.ir.type.TupleType):
+                                # breakpoint()
                             shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in const_.checked_type.shape]
                             dtype = const_.checked_type.dtype
                             const_dims=[MatchDim(name=v_name+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
@@ -353,6 +368,9 @@ class MatchTVMParser:
             call_tensor.name = call_tensor.name + "_out"
         
         self.match_node.output_tensors = {t_name+"_out":t_value for t_name,t_value in self.calls_tensors.items() if t_value.tensor_type=="output"}
+        for out_tensor in self.match_node.output_tensors.values():
+            if len(out_tensor.dims)==0:
+                print(f"[TVM PARSER] Warning, output tensor {out_tensor.name} has no dims")
         self.match_node.intermediate_tensors = {t_name+"_out":t_value for t_name,t_value in self.calls_tensors.items() if t_value.tensor_type=="intermediate"}
         # remove useless dims
         # Find duplicate dims with different names but same properties     

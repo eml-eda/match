@@ -16,6 +16,7 @@ extern MatchDim ${name}_dims_[${len(match_node.dims)}+1];
 % for idx,dim in enumerate(match_node.dims.values()):
 extern MatchDim* ${name}_${dim.name};
 % endfor
+extern MatchDim* ${name}_default;
 extern MatchDims ${name}_dims_cnt_;
 
 // TILES

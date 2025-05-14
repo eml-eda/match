@@ -1,7 +1,12 @@
 #include <pulp_mem/ram.h>
 
-void* pulp_init_ram(int size){
-    mem_init();
+static int ram_initialized = 0;
+
+void* pulp_alloc_ram(int size){
+    if(!ram_initialized){
+        mem_init();
+        ram_initialized = 1;
+    }
     return ram_malloc(size);
 }
 
@@ -14,7 +19,7 @@ void pulp_memcpy_from_ram(void* l2_pt, void* ext_pt, int size){
 }
 
 void pulp_memcpy_to_ram(void* l2_pt, void* ext_pt, int size){
-    ram_read(ext_pt, l2_pt, size);
+    ram_write(ext_pt, l2_pt, size);
 }
 
 void pulp_shutdown_ram(void* ext_pt, int size){

@@ -6,9 +6,10 @@ from match.schedule.loop import MatchLoop
 from match.schedule.schedule import MatchSchedule
 
 class MatchOpMultiply(MatchOp):
-    def __init__(self, out_arr = ..., var_arr = ..., const_arr = ..., axis: int=-1, **kwargs):
+    def __init__(self, out_arr = ..., var_arr = ..., const_arr = ..., axis: int=-1, multiplier: int=1, **kwargs):
         super().__init__(out_arr, var_arr, const_arr, op="Multiply", **kwargs)
         self.axis = axis
+        self.multiplier = multiplier
         self.op_code = 8
 
     def basic_schedules(self):

@@ -91,6 +91,14 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         temporal_mapping_dict,valid = super().adjust_temporal_mapping(temporal_mapping_dict, operand_list, layer)
         if valid and "I" in operand_list:
             min_innermost_loops=min([len(temporal_mapping_dict[operand][0]) for operand in operand_list])
+            new_innermost_loops=min_innermost_loops
+            max_tile_found=False
+            for idx in range(min_innermost_loops, len(temporal_mapping_dict["I"][0])):
+                if (not max_tile_found) and (temporal_mapping_dict["I"][0][idx] not in ["C","K"]):
+                    new_innermost_loops=idx
+                else:
+                    max_tile_found = True
+            min_innermost_loops = new_innermost_loops
             temporal_mapping_dict["I"][1]=temporal_mapping_dict["I"][0][min_innermost_loops:]+temporal_mapping_dict["I"][1]
             temporal_mapping_dict["I"][0]=temporal_mapping_dict["I"][0][:min_innermost_loops]
             return temporal_mapping_dict,valid

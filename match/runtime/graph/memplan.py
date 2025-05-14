@@ -48,7 +48,7 @@ class MatchMemoryPlanner:
     def external_memory_needed(self):
         return self.total_memory_needed_bytes > self.available_soc_bytes
 
-    def match_mem_planner_impl(self):
+    def match_mem_planner_impl(self, tensor_fixed_to_ext_mem:List[str]=[]):
         sorted_mem_tensors = sorted([m_t for m_t in self.mem_tensors],
                                     key=lambda m_t:(-(m_t.num_bytes),-m_t.lifetime_span))
         ext_mem_needed = 0
@@ -60,7 +60,7 @@ class MatchMemoryPlanner:
         for tensor in sorted_mem_tensors:
             original_last_usage_tensors[tensor.name] = tensor.last_usage
             original_start_usage_tensors[tensor.name] = tensor.start_usage
-            if tensor.is_input or tensor.is_output:
+            if (tensor.is_input or tensor.is_output) and tensor.name not in tensor_fixed_to_ext_mem:
                 tensor.start_usage = 0
                 tensor.last_usage = self.last_timestep
         
@@ -71,6 +71,7 @@ class MatchMemoryPlanner:
                 free_size_at_time=free_size_at_time,
                 tensors_allocated_at_time=tensors_allocated_at_time,
                 available_soc_bytes=self.available_soc_bytes,
+                tensor_fixed_to_ext_mem = tensor.name in tensor_fixed_to_ext_mem,
                 tensor=tensor
             )
         
@@ -86,31 +87,35 @@ class MatchMemoryPlanner:
             if tensor.is_constant and not tensor.stored_in_external_memory:
                 store_as_constant = True
                 for time in free_size_at_time:
-                    if time not in tensor.used_at and free_size_at_time[time]<=tensor.num_bytes:
+                    if time not in tensor.mem_offset_at and free_size_at_time[time]<tensor.num_bytes:
                         store_as_constant = False
                         break
                 if store_as_constant:
                     self.available_soc_bytes -= tensor.num_bytes
                     for time in free_size_at_time:
-                        if time not in tensor.used_at:
+                        if time not in tensor.mem_offset_at:
                             free_size_at_time[time] -= tensor.num_bytes
                     real_constant_tensors.append(tensor.name)
                 else:
                     print(f"[MEMORY PLANNER] Constant tensor {tensor.name} will be stored in external memory")
             tensor.mem_offset_at = dict()
+            tensor.stored_in_external_memory = False
+            tensor.move_temp_to_ext_mem = list()
+            tensor.load_from_ext_mem_at = list()
         sorted_mem_tensors = [m_t for m_t in sorted_mem_tensors if m_t.name not in real_constant_tensors]
         tensors_allocated_at_time = {key:[] for key in self.calls_idxs}
         free_size_at_time = {key:self.available_soc_bytes for key in self.calls_idxs}
         
         print(f"[MEM PLANNER] Moved actual constants to on-chip memory, now there are {self.available_soc_bytes} bytes of available on-chip memory")
         # reallocate these intermediate and tensors who may have to stay in SoC memory
+        
         for tensor in sorted_mem_tensors:
-            tensor.stored_in_external_memory = False
             allocate_tensor(
                 calls_idxs=self.calls_idxs,
                 free_size_at_time=free_size_at_time,
                 tensors_allocated_at_time=tensors_allocated_at_time,
                 available_soc_bytes=self.available_soc_bytes,
+                tensor_fixed_to_ext_mem = tensor.name in tensor_fixed_to_ext_mem,
                 tensor=tensor
             )
         
@@ -144,13 +149,12 @@ class MatchMemoryPlanner:
             tensor.mem_offset_at = dict()
 
         for tensor in sorted_mem_tensors:
-            if (tensor.is_input or tensor.is_output) and not tensor.stored_in_external_memory:
+            if (tensor.is_input or tensor.is_output) and len(tensor.load_from_ext_mem_at)==0:
                 if self.available_soc_bytes<=tensor.num_bytes:
                     self.available_soc_bytes -= tensor.num_bytes
-                else:
-                    self.stored_in_external_memory = True
+                    real_constant_tensors.append(tensor.name)
             
-        sorted_mem_tensors = [m_t for m_t in sorted_mem_tensors if m_t.name not in real_constant_tensors and not ((m_t.is_input or m_t.is_output) and not m_t.stored_in_external_memory)]
+        sorted_mem_tensors = [m_t for m_t in sorted_mem_tensors if m_t.name not in real_constant_tensors]
         tensors_allocated_at_time = {key:[] for key in self.calls_idxs}
         free_size_at_time = {key:self.available_soc_bytes for key in self.calls_idxs}
 
@@ -158,11 +162,16 @@ class MatchMemoryPlanner:
         # reallocate again
         for tensor in sorted_mem_tensors:
             tensor.stored_in_external_memory = False
+            tensor.move_temp_to_ext_mem = list()
+            tensor.load_from_ext_mem_at = list()
+        
+        for tensor in sorted_mem_tensors:
             allocate_tensor(
                 calls_idxs=self.calls_idxs,
                 free_size_at_time=free_size_at_time,
                 tensors_allocated_at_time=tensors_allocated_at_time,
                 available_soc_bytes=self.available_soc_bytes,
+                tensor_fixed_to_ext_mem = tensor.name in tensor_fixed_to_ext_mem,
                 tensor=tensor
             )
 
@@ -170,7 +179,7 @@ class MatchMemoryPlanner:
         # compute external memory needed
         for tensor in sorted_mem_tensors:
             # ext mem for inputs and outputs doesnt count here...
-            if len(tensor.load_from_ext_mem_at)>0 or tensor.stored_in_external_memory:
+            if ((len(tensor.load_from_ext_mem_at)>0 or len(tensor.move_temp_to_ext_mem)>0) or tensor.stored_in_external_memory) and not (tensor.is_input or tensor.is_output):
                 ext_mem_needed+=tensor.num_bytes
             tensor.mem_offset = tensor.mem_offset_at[tensor.used_at[0]] if len(tensor.used_at)>0 else self.available_soc_bytes
             if tensor.is_output or tensor.is_input:
@@ -194,7 +203,9 @@ class MatchMemoryPlanner:
         # use only SoC memory if possible, otherwise use external memory
         try:
             if self.algorithm=="match":
-                return self.match_mem_planner_impl()
+                return self.match_mem_planner_impl(
+                    tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if tensor.is_output or tensor.is_input]
+                )
             else:
                 raise Exception(f"[MEMORY PLANNER] Algorithm {self.algorithm} not implemented")
         except Exception as exc:

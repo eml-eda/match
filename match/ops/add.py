@@ -6,9 +6,10 @@ from match.schedule.loop import MatchLoop
 from match.schedule.schedule import MatchSchedule
 
 class MatchOpAdd(MatchOp):
-    def __init__(self, out_arr = ..., var_arr = ..., const_arr = ..., axis: int=-1, **kwargs):
+    def __init__(self, out_arr = ..., var_arr = ..., const_arr = ..., axis: int=-1, adder: int=0, **kwargs):
         super().__init__(out_arr, var_arr, const_arr, op="Add", **kwargs)
         self.axis = axis
+        self.adder = adder
         self.op_code = 9
 
     def basic_schedules(self):

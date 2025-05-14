@@ -29,11 +29,3 @@ class BasicEngine(ScheduleEngine):
     def transform_schedule(self):
         pass
     
-    def get_schedule(self):
-        return self.schedule
-    
-    def get_latency(self):
-        return 0
-    
-    def get_energy(self):
-        return 0

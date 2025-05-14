@@ -23,8 +23,7 @@ class MatchRelayParser(MatchTVMParser):
     
     def visit_relu(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
-        if inp_name in self.name_to_calls:
-            inp_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
         if inp_tensor.layout=="":
             if len(inp_tensor.dims)==4:
                 inp_tensor.layout = "NCHW"
@@ -44,8 +43,7 @@ class MatchRelayParser(MatchTVMParser):
 
     def visit_cast(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
-        if inp_name in self.name_to_calls:
-            inp_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
         if inp_tensor.layout=="":
             if len(inp_tensor.dims)==4:
                 inp_tensor.layout = "NCHW"
@@ -68,8 +66,7 @@ class MatchRelayParser(MatchTVMParser):
     def visit_right_shift(self, call, attrs, name):
         # nothing to do actually, right shift has no attrs and the arg is already saved before
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
-        if inp_name in self.name_to_calls:
-            inp_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
         out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op = ops.MatchOpRightShift(
@@ -81,8 +78,7 @@ class MatchRelayParser(MatchTVMParser):
 
     def visit_clip(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
-        if inp_name in self.name_to_calls:
-            inp_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
         if inp_tensor.layout=="":
             if len(inp_tensor.dims)==4:
                 inp_tensor.layout = "NCHW"
@@ -106,11 +102,13 @@ class MatchRelayParser(MatchTVMParser):
     def visit_bias_add(self, call, attrs, name):
         axis = int(attrs.axis) if hasattr(attrs,"axis") else 0
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
-        if inp_name in self.name_to_calls:
-            inp_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
-        if w_name in self.name_to_calls:
-            w_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=w_tensor, name=w_name)
+        inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type = self.rearrange_if_const_first(
+            inp_name=inp_name, inp_tensor=inp_tensor, inp_type=inp_type,
+            w_name=w_name, w_tensor=w_tensor, weights_type=weights_type
+        )
         for w_dim in w_tensor.dims:
             if w_dim.size!=1:
                 self.update_all_dim_names_occurrences_with(old_dim_name=w_dim.name,new_dim_name=inp_tensor.dims[-1].name if axis>=len(inp_tensor.dims) or axis<0 else inp_tensor.dims[axis].name)
@@ -131,16 +129,19 @@ class MatchRelayParser(MatchTVMParser):
             var_arr=[inp_tensor],
             const_arr=[w_tensor],
             axis=axis,
+            bias=int(w_tensor.data) if w_tensor.tensor_type=="const" and len(w_tensor.dims)==0 else 0,
         )
         self.update_match_node(op=op,call=call,name=name)
 
     def visit_multiply(self,call,atts,name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
-        if inp_name in self.name_to_calls:
-            inp_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
-        if w_name in self.name_to_calls:
-            w_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=w_tensor, name=w_name)
+        inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type = self.rearrange_if_const_first(
+            inp_name=inp_name, inp_tensor=inp_tensor, inp_type=inp_type,
+            w_name=w_name, w_tensor=w_tensor, weights_type=weights_type
+        )
         if inp_tensor.layout=="":
             if len(inp_tensor.dims)==4:
                 inp_tensor.layout = "NCHW"
@@ -150,6 +151,8 @@ class MatchRelayParser(MatchTVMParser):
                 inp_tensor.layout = "NC"
             elif len(inp_tensor.dims)==1:
                 inp_tensor.layout = "N"
+            else:
+                print(f"[RELAY PARSER]: The input tensor {inp_name} has an unknown layout")
         odtype = call.checked_type.dtype
         out_dims, axeses = self.check_broadcasting_and_get_out_dims(inp_tensor=inp_tensor, w_tensor=w_tensor)
         out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output", layout=inp_tensor.layout)
@@ -159,6 +162,7 @@ class MatchRelayParser(MatchTVMParser):
             var_arr=[inp_tensor],
             const_arr=[w_tensor],
             axis=-1 if len(axeses)>1 or len(axeses)==0 else axeses[0],
+            multiplier=int(w_tensor.data) if w_tensor.tensor_type=="const" and len(w_tensor.dims)==0 else 1,
         )
         self.update_match_node(op=op,call=call,name=name)
 
@@ -171,12 +175,14 @@ class MatchRelayParser(MatchTVMParser):
         if ishape[-1] != wshape[1]:
             raise NotImplementedError(f"[RELAY PARSER]: The weights shape in the dense operation are not correct")
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
-        if inp_name in self.name_to_calls:
-            inp_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
         # well consider the case where the multiplied dimension is the last one
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
-        if w_name in self.name_to_calls:
-            w_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=w_tensor, name=w_name)
+        inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type = self.rearrange_if_const_first(
+            inp_name=inp_name, inp_tensor=inp_tensor, inp_type=inp_type,
+            w_name=w_name, w_tensor=w_tensor, weights_type=weights_type
+        )
         if inp_tensor.layout=="":
             if len(inp_tensor.dims)==4:
                 inp_tensor.layout = "NCHW"
@@ -203,11 +209,13 @@ class MatchRelayParser(MatchTVMParser):
 
     def visit_add(self,call,attrs,name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
-        if inp_name in self.name_to_calls:
-            inp_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
-        if w_name in self.name_to_calls:
-            w_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=w_tensor, name=w_name)
+        inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type = self.rearrange_if_const_first(
+            inp_name=inp_name, inp_tensor=inp_tensor, inp_type=inp_type,
+            w_name=w_name, w_tensor=w_tensor, weights_type=weights_type
+        )
         if inp_tensor.layout=="":
             if len(inp_tensor.dims)==4:
                 inp_tensor.layout = "NCHW"
@@ -227,16 +235,19 @@ class MatchRelayParser(MatchTVMParser):
             var_arr=[inp_tensor],
             const_arr=[w_tensor],
             axis=-1 if len(axeses)>1 or len(axeses)==0 else axeses[0],
+            adder=int(w_tensor.data) if w_tensor.tensor_type=="const" and len(w_tensor.dims)==0 else 0,
         )
         self.update_match_node(op=op,call=call,name=name)
 
     def visit_conv_2d(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
-        if inp_name in self.name_to_calls:
-            inp_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
-        if w_name in self.name_to_calls:
-            w_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=w_tensor, name=w_name)
+        inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type = self.rearrange_if_const_first(
+            inp_name=inp_name, inp_tensor=inp_tensor, inp_type=inp_type,
+            w_name=w_name, w_tensor=w_tensor, weights_type=weights_type
+        )
         # shapes etc.
         ishape = [int(v) for v in call.args[0].checked_type.shape]
         wshape = [int(v) for v in call.args[1].checked_type.shape]
@@ -308,11 +319,13 @@ class MatchRelayParser(MatchTVMParser):
 
     def visit_conv_1d(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
-        if inp_name in self.name_to_calls:
-            inp_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
         w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
-        if w_name in self.name_to_calls:
-            w_tensor.tensor_type = "intermediate"
+        self.update_if_intermediate_tensor(tensor=w_tensor, name=w_name)
+        inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type = self.rearrange_if_const_first(
+            inp_name=inp_name, inp_tensor=inp_tensor, inp_type=inp_type,
+            w_name=w_name, w_tensor=w_tensor, weights_type=weights_type
+        )
         # shapes etc.
         ishape = [int(v) for v in call.args[0].checked_type.shape]
         wshape = [int(v) for v in call.args[1].checked_type.shape]

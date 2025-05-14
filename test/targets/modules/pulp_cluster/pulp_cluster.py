@@ -173,7 +173,8 @@ class PulpCluster(ExecModule):
         def add_pt_requant():
             cast_a = is_op("cast")(wildcard())
             cast_b = is_op("cast")(wildcard())
-            add = is_op("add")(cast_a, cast_b)
+            add = is_op("add")(cast_a , cast_b )
+            add = add | is_op("cast")(is_op("add")(wildcard() , wildcard()))
             # pattern cast cast add clip cast cast multiply right shift cast
             mul = is_op("multiply")(is_constant(), add) | is_op("multiply")(add, is_constant())
             rshift = is_op("right_shift")(mul, is_constant())

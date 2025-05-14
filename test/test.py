@@ -258,17 +258,6 @@ if __name__=="__main__":
     )
 
     args = parser.parse_args()
-    run_relay_saved_model_at(
-        target_name=args.target,
-        mod_filename=str(Path(os.path.dirname(__file__)+"/models/last_model/train-model.relay").absolute()),
-        params_filename=None,
-        output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
-        input_files=args.input_files,
-        min_input_val=args.min_input_val,
-        max_input_val=args.max_input_val,
-        handle_out_fn=args.handle_out_fn
-    )
-    exit(0)
     if not Path(os.path.dirname(__file__)+"/builds").is_dir():
         Path(os.path.dirname(__file__)+"/builds").mkdir()
     if args.compile_last_model and Path(os.path.dirname(__file__)+"/models/last_model").is_dir() and \
