@@ -1,14 +1,19 @@
 import os
-import pathlib
 import json
+import pathlib
 import subprocess
 from typing import Dict, List
-from mako.template import Template
+
 import numpy as np
-from tvm import relay as relay_tvm
-import match
-from tvm.ir import IRModule
+
+from mako.template import Template
+
 import tvm
+from tvm import relay as relay_tvm
+from tvm.ir import IRModule
+
+import match
+
 
 def get_default_inputs(mod: IRModule=None, params: Dict[str, tvm.runtime.ndarray.NDArray]={}, input_files: List[str]=[], min_input_val=None, max_input_val=None):
     default_inputs = []

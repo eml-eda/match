@@ -1,16 +1,21 @@
-import pathlib
+import os
 import shutil
 import ctypes
-import os
-from match.target.target import DefaultMatchTarget, MatchTarget
+import pathlib
+from typing import Tuple, Dict
+
 import tvm
 import tvm.relay as relay
-import numpy as np
 
-from typing import Tuple, Dict
+import numpy as np
 import numpy.typing as npt
+
 from mako.template import Template
 from mako import exceptions
+
+from match.target.target import DefaultMatchTarget, MatchTarget
+from match.utils.utils import format_c_code
+
 
 def numpy_to_array(np_arr: npt.NDArray, dtype: str):
     """ Convert a numpy array to a TVM array with datatype `dtype`.
@@ -335,6 +340,8 @@ def create_build_dir(build_path: str = "./build",
                     try:
                         template = Template(filename = os.path.join(template_dir, filename))
                         rendered_content = template.render(**build_template_data)
+                        if ext in {"c", 'h'}:
+                            rendered_content = format_c_code(rendered_content)
                         output_path = os.path.join(build_path, base_dir, build_filename + "." + ext)
                         with open(output_path, "w") as output_file:
                             output_file.write(rendered_content)

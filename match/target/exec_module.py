@@ -97,6 +97,8 @@ class PlatformApis:
         
         self.smp_configured_core_guard = ""
         self.smp_primary_core_guard = ""
+        
+        self.print_fn = "printf"
 
         """
         APIs and flags from the legacy lib
