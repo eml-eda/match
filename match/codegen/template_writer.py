@@ -19,32 +19,40 @@ from mako import exceptions
 
 
 class TemplateWriter:
-    def __init__(self,mod: tvm.ir.IRModule,target: MatchTarget,exec_module: ExecModule,
-                 pattern_name:str="fused_quant_conv2d",schedule: MatchSchedule=None,match_node: MatchNode=None,
-                 latency: float=0.0,energy: float=0.0):
-        self.mod=mod
-        self.target=target
-        self.exec_module=exec_module
-        self.pattern_name=pattern_name
-        self.schedule=schedule
-        self.match_node=match_node
-        self.latency=latency
-        self.energy=energy
-        self.template_data=dict()
+    def __init__(
+        self,
+        mod: tvm.ir.IRModule,
+        target: MatchTarget,
+        exec_module: ExecModule,
+        pattern_name: str = "fused_quant_conv2d",
+        schedule: MatchSchedule = None,
+        match_node: MatchNode = None,
+        latency: float = 0.0,
+        energy: float = 0.0,
+    ):
+        self.mod = mod
+        self.target = target
+        self.exec_module = exec_module
+        self.pattern_name = pattern_name
+        self.schedule = schedule
+        self.match_node = match_node
+        self.latency = latency
+        self.energy = energy
+        self.template_data = dict()
     
     def get_template_data(self):
-        self.template_data["c_dtype"]=numpy_dtype_to_c_type
-        self.template_data["c_np_array"]=c_friendly_npvalue
-        #self.template_data["pattern_name"]=self.exec_module.specific_pattern
-        self.template_data["pattern_name"]=self.pattern_name
-        self.template_data["c_ident"]=lambda x: "\t"*x
-        self.template_data["latency"]=self.latency
-        self.template_data["energy"]=self.energy
-        self.template_data["exec_module"]=self.exec_module
-        self.template_data["target"]=self.target
-        self.template_data["schedule"]=self.schedule
-        self.template_data["memory_hierarchy"]=self.target.memory_hierarchy_for_pt(exec_module=self.exec_module, pattern_name=self.pattern_name)
-        self.template_data["match_node"]=self.match_node
+        self.template_data["c_dtype"] = numpy_dtype_to_c_type
+        self.template_data["c_np_array"] = c_friendly_npvalue
+        #self.template_data["pattern_name"] = self.exec_module.specific_pattern
+        self.template_data["pattern_name"] = self.pattern_name
+        self.template_data["c_ident"] = lambda x: "\t"*x
+        self.template_data["latency"] = self.latency
+        self.template_data["energy"] = self.energy
+        self.template_data["exec_module"] = self.exec_module
+        self.template_data["target"] = self.target
+        self.template_data["schedule"] = self.schedule
+        self.template_data["memory_hierarchy"] = self.target.memory_hierarchy_for_pt(exec_module=self.exec_module, pattern_name=self.pattern_name)
+        self.template_data["match_node"] = self.match_node
         self.template_data["mod"] = self.mod
         self.template_data["model_name"] = "_".join(self.mod.attrs.global_symbol.split("_")[1:-3])
         self.template_data["node_name"] = "_".join(self.mod.attrs.global_symbol.split("_")[-2:])
@@ -124,8 +132,6 @@ class TemplateWriter:
                 ext = filename_without_dots[-1]
                 if ext in {"c","h","json"}:
                     try:
-                        #template = Template(filename = os.path.join(template_dir, filename), lookup=template_lookup)
-                        
                         template = template_lookup.get_template(filename)
                         rendered_content = template.render(**self.template_data)
                         if ext in {"c", 'h'}:

@@ -69,6 +69,7 @@ class Carfield(MatchTarget):
         self.free_external_mem = "pulp_shutdown_ram"
         # offload dma
         self.offload_dma_fn = "handle_host_dma_transfer"
+        self.print_fn = "mini_printf"
 
     def network_transformations(self, opts):
         return [

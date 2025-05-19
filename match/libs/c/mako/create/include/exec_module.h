@@ -9,4 +9,8 @@
 #define ${module_option_name} ${module_option_value}
 % endfor
 
+% if exec_module.separate_build:
+    #define ${exec_module.name}_EXIT_SIGNAL 0xFFFFFFFF
+%endif
+
 #endif

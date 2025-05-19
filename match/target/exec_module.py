@@ -167,11 +167,11 @@ class ExecModule(ABC):
                  name: str="default_module",
                  libs_required: Dict[str, ModuleLib] = {},
                  **kwargs):
-        self.name=name
+        self.name = name
         self.FULL_DIM = sys.maxsize
         self.zigzag_optimal_spatial_mapping = None
         self.libs_required = libs_required
-        self.module_options=dict()
+        self.module_options = dict()
         self.backend = "ZigZag"
         # currently only ZigZag has been actually tested
         self.schedule_engine = "ZigZag"
@@ -179,6 +179,8 @@ class ExecModule(ABC):
         self.separate_build = False 
         # Symmetric Multiprocessing -> same code on all cores
         self.is_smp = False
+        # Shared Memory address
+        self.shared_memory_extern_addr = "offload_args"
 
     def include_libs(self):
         return []

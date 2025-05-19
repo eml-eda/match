@@ -48,9 +48,9 @@ extern MatchOp* ${name}_${op_name}_op;
 % endfor
 extern MatchOps ${name}_ops_cnt_;
 
-extern MatchCtx ${name}_ctx_;
+extern volatile MatchCtx ${name}_ctx_;
 
-extern MatchCtx* ${name}_ctx;
+extern volatile MatchCtx* ${name}_ctx;
 
 % for dep_dim in match_node.dependent_dims:
 inline void ${name}_update_${dep_dim.name}(){
@@ -76,7 +76,7 @@ inline void ${name}_update_${dep_dim.name}(){
 // loops iters counters
 % for block_idx,block in enumerate(schedule.blocks):
 % for loop_idx,lp in enumerate(block.loops):
-extern int ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter;
+extern volatile int ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter;
 
 inline void ${name}_block_${block_idx}_loop_${lp.name}_set(){
     ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
@@ -101,7 +101,7 @@ inline void ${name}_block_${block_idx}_loop_${lp.name}_update(){
     % endfor
 }
 inline int ${name}_block_${block_idx}_loop_${lp.name}_end(){
-    return ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter >= ${lp.size} ? ${name}_block_${block_idx}_loop_${lp.name}_reset() : 1;
+    return ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter < ${lp.size};
 }
 
 % endfor

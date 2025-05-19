@@ -120,6 +120,7 @@ class MatchTarget(ABC):
         self.timestamp_to_ms = "* CLOCKS_PER_SEC/1000"
         self.alloc_fn = "malloc"
         self.free_fn = "free"
+        self.print_fn = "printf"
         self.offload_dma_fn = "offload_dma"
         self.clean_funcs=[]
         self.init_funcs=[]

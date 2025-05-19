@@ -4,7 +4,11 @@
 #include <carfield_lib/printf.h>
 
 #define CLUSTER_LIB_DEBUG
+#define CALLOC_L1_SCRATCHPAD 0
 
+volatile dma_transfer_id_t dma_transfer_ = 0;
+volatile void* im2col_pt_ = NULL;
+volatile void* pwt_pt_ = NULL;
 
 int cluster_check_should_run() 
 {
@@ -18,6 +22,7 @@ int cluster_check_main_core(MatchCtx* ctx)
 
 void cluster_sync_cores(MatchCtx* ctx) 
 {
+    asm volatile("fence rw,rw":::"memory");
     synch_barrier();
 }
 
@@ -26,13 +31,17 @@ void cluster_lib_init(MatchCtx* ctx)
     // Just for not overlapping print :)
     for (int i = 0; i < 10000; i++)
         asm volatile("nop");
-    mini_printf("[CLUSTER] Yo! Cluster is alive!\r\n");
     dma_transfer_ = dma_transfer_create();
+    mini_printf("[CLUSTER] Yo! Cluster is alive! DMA counter is %d\r\n", dma_transfer_);
 }
 
 void* init_l1_scratchpad_memory(MatchCtx* ctx){
     mini_printf("[CLUSTER] Inizialing L1 Scratchpad...\r\n");
     void* l1_memory_pt = pi_l1_malloc(0, L1_SCRATCHPAD_SIZE);
+    #if CALLOC_L1_SCRATCHPAD
+    for (int i = 0; i < L1_SCRATCHPAD_SIZE; i++)
+        ((volatile char*)l1_memory_pt)[i] = 0;
+    #endif
     mini_printf("[CLUSTER] Success.\r\n");
     return l1_memory_pt;
 }
@@ -48,7 +57,7 @@ void cluster_lib_cleanup(MatchCtx* ctx)
 }
 
 
-void* cluster_alloc_buffer(const char* name, int tensor_l1_pt, int size, int mem, int buffer_idx)
+void cluster_alloc_buffer(const char* name, int tensor_l1_pt, int size, int mem, int buffer_idx)
 {
     im2col_pt_ = (void*)tensor_l1_pt;
 }
@@ -67,11 +76,15 @@ void handle_dma_transfer(
         exit(1);
     
     if(!tensor->num_dims) return;
-
+    
     #ifdef CLUSTER_LIB_DEBUG
-    mini_printf("Handle transfer params tensor l2 pt %p tensor l1 pt %p transfer type %d tensor type %d ext mem %d int mem %d\r\n",
-        tensor_l2_pt, tensor_l1_pt, match_transfer_type, match_tensor_type, ext_mem, int_mem);
-    for(int idx=0; idx<tensor->num_dims; idx++) mini_printf(" [L2: %d L1: %d]", tensor->tiles[L2_SHARED_MEM*tensor->num_dims+idx].size, tensor->tiles[L1_SCRATCHPAD*tensor->num_dims+idx].size);
+    mini_printf("[CLUSTER] DMA Transfer: %s(%p) %s %s(%p) - Tensor type: %s\r\n",
+        ext_mem==L2_SHARED_MEM?"L2":"L1", tensor_l2_pt,
+        match_transfer_type==MATCH_SW_LOAD_TENSOR?"→":"<-",
+        int_mem==L1_SCRATCHPAD?"L1":"L2", tensor_l1_pt,
+        match_tensor_type==MATCH_VAR_TENSOR?"VAR":(match_tensor_type==MATCH_CONST_TENSOR?"CONST":"OUT"));
+    for(int idx=0; idx<tensor->num_dims; idx++) 
+        mini_printf("  [L2: %d L1: %d]", tensor->tiles[L2_SHARED_MEM*tensor->num_dims+idx].size, tensor->tiles[L1_SCRATCHPAD*tensor->num_dims+idx].size);
     mini_printf("\r\n");
     #endif
     

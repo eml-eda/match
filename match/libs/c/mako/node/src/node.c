@@ -16,13 +16,13 @@
  * limitations under the License. 
 */
 
+<%namespace name="template_blocks" file="match_computation_block.c" />
+<%namespace name="template_blocks" file="node_inner.c" />   
+
 % if not exec_module.separate_build:
 
-    <%namespace name="template_blocks" file="match_computation_block.c" />
-    <%namespace name="template_blocks" file="node_inner.c" />
-
     // include params file
-    #include <nodes/${model_name}/${name}_params.h>
+    #include "nodes/${model_name}/${name}_params.h"
     #ifdef __MATCH_TEST_NODE_WITH_HELPER__
     #include <${target.name}/node_helper_nn.h>
     #endif
@@ -33,7 +33,7 @@
         % endif
     % endfor
 
-    ${template_blocks.node_inner()}
+    <%template_blocks:node_inner/>
 
     % if platform_apis.init_platform != "":
         int __attribute__ ((noinline)) ${node_fullname}(
@@ -55,16 +55,35 @@
     
 % else:
 
-    #include <match/ctx.h>
-    #include <match/utils.h>
-    #include <${target.name}.h>
-    % for inc_h in target.include_list:
-        #include <${inc_h}.h>
+
+## In this case we need to distinguish the two compilations: host and device
+#ifdef __${exec_module.name}__
+    ## Node exec_module code
+
+    #include <nodes/${model_name}/${name}_params.h>
+    #ifdef __MATCH_TEST_NODE_WITH_HELPER__
+    #include <${target.name}/node_helper_nn.h>
+    #endif
+
+    % for block_idx,block in enumerate(schedule.blocks):
+        % if block.backend == "MATCH":
+            ${template_blocks.match_computation_block(block_idx,block)}
+        % endif
     % endfor
 
-    #include "nodes/${model_name}/${name}_payload.h"
-    #include <nodes/${model_name}/${name}_params.h>
+    <%template_blocks:node_inner/>
+    
+#else
+    ## Node host code
 
+    #include "match/ctx.h"
+    #include "match/utils.h"
+    #include "${target.name}.h"
+    % for inc_h in target.include_list:
+        #include "${inc_h}.h"
+    % endfor
+    
+    #include "nodes/${model_name}/${name}_params.h"
 
     int __attribute__ ((noinline)) ${node_fullname}(
         % for var in match_node.var_tensors.values():
@@ -75,8 +94,9 @@
         % endfor
     ){
         // Write args (input and output tensor addresses) in shared memory
-        volatile uint32_t* args = (volatile uint32_t*)${node_fullname}_args_addr; \
-        <% tensor_cnt = 0 %>
+        volatile uint32_t* args = (volatile uint32_t*)${exec_module.shared_memory_extern_addr};
+
+        <% tensor_cnt = 1 %> 
         % for tensor in {**match_node.var_tensors,**match_node.output_tensors}.values():
             args[${tensor_cnt}] = (volatile uint32_t)${"var_" if tensor.tensor_type=="var" else "out_"}${tensor.name}_pt;\
             <% tensor_cnt += 1 %>
@@ -88,21 +108,21 @@
             % endif
         % endfor
 
-        // DMA the binary
-        for (int i = 0; ${node_fullname}_binary_sections[i].size != 0; i++) {
-            ${target.offload_dma_fn}(
-                ${node_fullname}_binary_sections[i].src,
-                ${node_fullname}_binary_sections[i].dst,
-                ${node_fullname}_binary_sections[i].size
-            );
+        // Set start signal - TODO send interrupt
+        args[0] = ${node_idx} + 1;
+
+        mini_printf("[HOST] Written node_id (${node_idx} + 1) in %p. Now waiting...\r\n", args);
+
+        // Wait completion signal - TODO wait interrupt
+        while (args[0] != 0) {
+            asm volatile("fence r,rw" ::: "memory");
         }
 
-        // Start device
-        if (${node_fullname}_boot_addr != NULL) {
-            ${platform_apis.init_platform}(${node_fullname}_boot_addr);
-        }
-        
+        mini_printf("[HOST] Offload device finished.\r\n");
+
         return 0;
     }
+#endif
+
 
 % endif

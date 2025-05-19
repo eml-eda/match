@@ -26,7 +26,7 @@ void carfield_init() {
     uint64_t reset_freq = clint_get_core_freq(rtc_freq, 2500);
     car_uart_init(&__base_uart, reset_freq, 115200);
 
-    mini_printf("Hi, there. I'm Carfield.\r\n\n");
+    mini_printf("Hi, there. I'm Carfield 🐱\r\n\n");
 }
 
 void carfield_shutdown() {
@@ -46,14 +46,18 @@ void reset_cluster() {
     car_reset_domain(CAR_PULP_RST);
 }
 
-
-void offload_to_pulp_cluster(void* boot_addr)
+void offload_to_pulp_cluster_async(void* boot_addr)
 {
     mini_printf("Starting PULP cluster...\r\n");
     reset_cluster();
     pulp_cluster_set_bootaddress(boot_addr);
     pulp_cluster_start();
     //mini_printf("> Started PULP cluster. Waiting...\r\n");
+}
+
+void offload_to_pulp_cluster(void* boot_addr)
+{
+    offload_to_pulp_cluster_async(boot_addr);
     pulp_cluster_wait_eoc();
     mini_printf("> Cluster finished.\r\n");
 }
