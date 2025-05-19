@@ -1,9 +1,17 @@
+from typing import Dict
+
+
 class DimDependency:
-    def __init__(self,dependencies) -> None:
-        self.dependencies = dependencies
+    def __init__(self, idx_dependencies: Dict={}, size_dependencies: Dict={}) -> None:
+        self.idx_dependencies = idx_dependencies
+        self.size_dependencies = size_dependencies
+    
+    @property
+    def dependencies(self):
+        return {**self.idx_dependencies, **self.size_dependencies}
     
     def __eq__(self, other):
-        return other is not None and self.dependencies == other.dependencies
+        return other is not None and self.idx_dependencies == other.idx_dependencies and self.size_dependencies == other.size_dependencies
 
 class MatchDim:
     def __init__(self, name: str="width", size: int=1, is_dynamic: bool=False, dim_dependency: DimDependency=None) -> None:
@@ -19,7 +27,7 @@ class MatchDim:
             return 0
         else:
             start_idx = 0
-            for ind_dim,mult in self.dim_dependency.dependencies.items():
+            for ind_dim,mult in self.dim_dependency.idx_dependencies.items():
                 start_idx += (mult*(ind_dim if not hasattr(ind_dim,"name") else 0))
             return int(start_idx)
 
@@ -29,7 +37,7 @@ class MatchDim:
             return self.size
         else:
             max_size = 0
-            for ind_dim,mult in self.dim_dependency.dependencies.items():
+            for ind_dim,mult in self.dim_dependency.size_dependencies.items():
                 max_size += (mult*(ind_dim if not hasattr(ind_dim,"name") else ind_dim.size))
             return int(max_size)
         

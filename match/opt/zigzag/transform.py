@@ -154,7 +154,7 @@ class ZigZagTransformMappingToSchedule:
                                     continue
                                 if dim.dim_dependency:
                                     new_size = 0
-                                    for ind_dim,mult in dim.dim_dependency.dependencies.items():
+                                    for ind_dim,mult in dim.dim_dependency.size_dependencies.items():
                                         new_size += (mult*(ind_dim if not hasattr(ind_dim,"name") else steps[ind_dim.name]))
                                     new_size = int(new_size)
                                     self.schedule.tensor_tiles[tensor.name][mem_idx].tiled_dims[dim_idx].max_size = new_size

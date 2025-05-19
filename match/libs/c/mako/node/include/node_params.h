@@ -55,12 +55,12 @@ extern MatchCtx* ${name}_ctx;
 % for dep_dim in match_node.dependent_dims:
 inline void ${name}_update_${dep_dim.name}(){
     ${name}_${dep_dim.name}->global_idx = 
-    % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.dependencies.items()):
+    % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.idx_dependencies.items()):
     ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else name+"_"+ind_dim.name+"->global_idx"})
     % endfor
     ;
     ${name}_${dep_dim.name}->curr_max_size = 
-    % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.dependencies.items()):
+    % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.size_dependencies.items()):
     ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else name+"_"+ind_dim.name+"->curr_size"})
     % endfor
     ;

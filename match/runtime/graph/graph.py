@@ -203,7 +203,7 @@ class MatchTVMGraphRuntime:
             if mem_tensor.stored_in_external_memory and mem_tensor.is_constant:
                 np.frombuffer(mem_tensor.constant_val.flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}_data.hex"))
             elif mem_tensor.stored_in_external_memory and mem_tensor.is_input:
-                np.frombuffer(mem_tensor.constant_val.flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}_data.hex"))
+                np.frombuffer(activations[mem_tensor.name].flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}_data.hex"))
         for activation_name, activation in activations.items():
             mem_tensor_ = None
             for m_t in mem_tensors:
