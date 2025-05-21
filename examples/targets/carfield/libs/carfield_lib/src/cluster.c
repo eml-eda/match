@@ -1,7 +1,8 @@
-#ifdef CLUSTER_COMPILATION
+#ifdef __pulp_cluster__
 
-#include <carfield_lib/cluster.h>
-#include <carfield_lib/printf.h>
+#include "carfield_lib/cluster.h"
+#include "carfield_lib/printf.h"
+#include "carfield_lib/mbox.h"
 
 #define CLUSTER_LIB_DEBUG
 #define CALLOC_L1_SCRATCHPAD 0
@@ -9,6 +10,7 @@
 volatile dma_transfer_id_t dma_transfer_ = 0;
 volatile void* im2col_pt_ = NULL;
 volatile void* pwt_pt_ = NULL;
+
 
 int cluster_check_should_run() 
 {
@@ -596,5 +598,43 @@ void pulp_nn_wrapper(MatchCtx* ctx){
             break;
     }
 }
+
+
+
+void cluster_wait_for_task_poll(volatile uint32_t** tensor_ptrs, volatile uint32_t* task_id) {
+    // Polling for the start signal
+    while (offload_args[0] == 0xFFFFFFF0) {
+        asm volatile("fence r,rw" ::: "memory");
+    }
+    *tensor_ptrs = offload_args+1;
+    *task_id = offload_args[0];
+    asm volatile("fence r,rw" ::: "memory");
+}
+
+
+void cluster_end_of_task_poll(uint32_t task_id) {
+    // Set end signal
+    asm volatile("fence rw,rw":::"memory");
+    offload_args[0] = 0xFFFFFFF0;
+    asm volatile("fence rw,rw":::"memory");
+}
+
+
+void cluster_wait_for_task_mbox(volatile uint32_t** tensor_ptrs, volatile uint32_t* task_id) {
+    asm volatile("fence rw,rw" ::: "memory");
+    eu_evt_maskWaitAndClr(1 << CLUSTER_MBOX_EVT);
+    mailbox_read(HOST_TO_CLUSTER_MBOX, tensor_ptrs, task_id);
+    mailbox_clear(HOST_TO_CLUSTER_MBOX);
+    eu_evt_clr(1 << CLUSTER_MBOX_EVT);
+    asm volatile("fence rw,rw" ::: "memory");
+}
+
+
+void cluster_end_of_task_mbox(uint32_t task_id) {
+    asm volatile("fence rw,rw" ::: "memory");
+    mailbox_send(CLUSTER_TO_HOST_MBOX, task_id, 0);
+    asm volatile("fence rw,rw" ::: "memory");
+}
+
 
 #endif

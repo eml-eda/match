@@ -1,6 +1,8 @@
-#include <carfield_lib/carfield.h>
-// Std
+#include "carfield_lib/carfield.h"
+
+#include <stdint.h>
 #include <string.h>
+
 // Carfield
 #include "car_util.h"
 #include "car_memory_map.h"
@@ -11,8 +13,12 @@
 #include "params.h"
 #include "regs/cheshire.h"
 #include "util.h"
+// OpenTitan Peripherals (PLIC)
+#include "sw/device/lib/dif/dif_rv_plic.h" 
+
 // Carfield Lib
 #include "carfield_lib/uart.h"
+#include "carfield_lib/mbox.h"
 
 
 #define VERIFY_DMA 0
@@ -21,10 +27,10 @@
 void carfield_init() {
     // Initialize the Carfield SoC
     car_enable_domain(CAR_PULP_RST);
-
-    uint32_t rtc_freq = *reg32(&__base_regs, CHESHIRE_RTC_FREQ_REG_OFFSET);
-    uint64_t reset_freq = clint_get_core_freq(rtc_freq, 2500);
-    car_uart_init(&__base_uart, reset_freq, 115200);
+    // Initialize the UART
+    carfield_init_uart();
+    // If mailboxes are used initialize the PLIC
+    carfield_init_plic();
 
     mini_printf("Hi, there. I'm Carfield 🐱\r\n\n");
 }
@@ -35,7 +41,7 @@ void carfield_shutdown() {
 }
 
 
-void reset_cluster() {
+void pulp_cluster_reset() {
     volatile uint32_t *booten_addr = (uint32_t*)(CAR_INT_CLUSTER_BOOTEN_ADDR(car_soc_ctrl));
     writew(0, booten_addr);
     volatile uint32_t *fetchen_addr = (uint32_t*)(CAR_INT_CLUSTER_FETCHEN_ADDR(car_soc_ctrl));
@@ -46,21 +52,106 @@ void reset_cluster() {
     car_reset_domain(CAR_PULP_RST);
 }
 
-void offload_to_pulp_cluster_async(void* boot_addr)
+
+void pulp_cluster_offload_async(void* boot_addr)
 {
     mini_printf("Starting PULP cluster...\r\n");
-    reset_cluster();
+    pulp_cluster_reset();
     pulp_cluster_set_bootaddress(boot_addr);
     pulp_cluster_start();
     //mini_printf("> Started PULP cluster. Waiting...\r\n");
 }
 
-void offload_to_pulp_cluster(void* boot_addr)
+
+void pulp_cluster_offload_blk(void* boot_addr)
 {
-    offload_to_pulp_cluster_async(boot_addr);
+    pulp_cluster_offload_async(boot_addr);
     pulp_cluster_wait_eoc();
     mini_printf("> Cluster finished.\r\n");
 }
+
+
+void pulp_cluster_send_task_poll(volatile uint32_t* args, uint32_t task_id) {
+    asm volatile("fence rw,rw":::"memory");
+    args[0] = task_id;
+    asm volatile("fence rw,rw":::"memory");
+}
+
+
+int pulp_cluster_wait_end_of_task_poll(volatile uint32_t* args, uint32_t task_id) {
+    while (args[0] != 0xFFFFFFF0) {
+        asm volatile("fence r,rw" ::: "memory");
+    }
+    return 0;
+}
+
+
+void pulp_cluster_send_task_mbox(volatile uint32_t* args, uint32_t task_id) {
+    asm volatile("fence rw,rw" ::: "memory");
+    mailbox_send(HOST_TO_CLUSTER_MBOX, args+1, task_id);
+    asm volatile("fence rw,rw" ::: "memory");
+}
+
+volatile uint32_t last_completed_node_id = 0xFFFFFFFF;
+volatile uint32_t last_task_error_code = 0;
+
+int pulp_cluster_wait_end_of_task_mbox(volatile uint32_t* args, uint32_t task_id) {
+    while (last_completed_node_id != task_id) {
+        asm volatile("fence rw,rw" ::: "memory");
+        asm volatile("wfi":::"memory");
+        asm volatile("fence rw,rw" ::: "memory");
+        //mini_printf("In effetti qua ci siamo...\r\n");
+    }
+    return last_task_error_code;
+}
+
+
+// Host interrupt related things
+
+
+static dif_rv_plic_t plic0;
+
+
+void carfield_init_plic() {
+    // Reset PLIC
+    dif_rv_plic_reset(&plic0);
+    // Set global interrupt enable in CVA6 csr
+    asm volatile("csrw  mstatus, %0\n" : : "r"(GLOBAL_IRQ_ENABLE));
+    // Set external interrupt enable in CVA6 csr
+    asm volatile("csrw  mie, %0\n" : : "r"(EXTERNAL_IRQ_ENABLE));
+    // Setup PLIC
+    mmio_region_t plic_base_addr = mmio_region_from_addr(PLIC_BASE_ADDRESS);
+    dif_result_t t = dif_rv_plic_init(plic_base_addr, &plic0);
+
+    // Enable CLUSTER_TO_HOST_MBOX interrupt
+    const int irq = HOST_MBOX_IRQ;
+    const int priority = 0x1;
+    t = dif_rv_plic_irq_set_priority(&plic0, irq, priority);
+    t = dif_rv_plic_irq_set_enabled(&plic0, irq, 0, kDifToggleEnabled);
+    if (t != kDifOk) {
+        mini_printf("Error setting PLIC IRQ %d\r\n", irq);
+    }
+}
+
+
+void handle_interrupt_pulp_cluster_mbox() {
+    mailbox_read(CLUSTER_TO_HOST_MBOX, &last_completed_node_id, &last_task_error_code);
+    mailbox_clear(CLUSTER_TO_HOST_MBOX);
+    //mini_printf("Hey IIiIIIIIIIInterrupt!\r\n");
+}
+
+
+void trap_vector(void) {
+    dif_rv_plic_irq_id_t claim_irq;
+    dif_rv_plic_irq_claim(&plic0, 0, &claim_irq);
+    if (claim_irq == HOST_MBOX_IRQ) {
+        handle_interrupt_pulp_cluster_mbox();
+        dif_rv_plic_irq_complete(&plic0, 0, claim_irq);
+    }
+}
+
+
+// Other things
 
 void handle_host_dma_transfer(void* src, void* dst, size_t size) 
 {
@@ -89,4 +180,11 @@ void handle_host_dma_transfer(void* src, void* dst, size_t size)
         mini_printf("Transfer Verified Successfully.\r\n");
     }
     #endif
+}
+
+
+void carfield_init_uart() {
+    uint32_t rtc_freq = *reg32(&__base_regs, CHESHIRE_RTC_FREQ_REG_OFFSET);
+    uint64_t reset_freq = clint_get_core_freq(rtc_freq, 2500);
+    car_uart_init(&__base_uart, reset_freq, 115200);
 }

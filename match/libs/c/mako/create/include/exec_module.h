@@ -10,6 +10,7 @@
 % endfor
 
 % if exec_module.separate_build:
+    #define ${exec_module.name}_IDLE_SIGNAL 0xFFFFFFF0
     #define ${exec_module.name}_EXIT_SIGNAL 0xFFFFFFFF
 %endif
 

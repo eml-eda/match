@@ -109,16 +109,18 @@
         % endfor
 
         // Set start signal - TODO send interrupt
-        args[0] = ${node_idx} + 1;
+        ${exec_module.host_send_task_fn}(args, ${node_idx});
 
-        mini_printf("[HOST] Written node_id (${node_idx} + 1) in %p. Now waiting...\r\n", args);
+        ${target.print_fn}("[HOST] Written node_id (${node_idx} + 1) in %p. Now waiting...\r\n", args);
 
-        // Wait completion signal - TODO wait interrupt
-        while (args[0] != 0) {
-            asm volatile("fence r,rw" ::: "memory");
+        // Wait completion - TODO this need to be reconsidered for parallel node execution
+        int error = ${exec_module.host_wait_end_of_task_fn}(args, ${node_idx});
+        if (error) {
+            ${target.print_fn}("[HOST] Error in offloaded node execution.\r\n");
+            return -1;
         }
 
-        mini_printf("[HOST] Offload device finished.\r\n");
+        ${target.print_fn}("[HOST] Offload device finished.\r\n");
 
         return 0;
     }

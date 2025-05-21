@@ -33,30 +33,22 @@ ${caller.body()}
 </%def>
 
 
+static volatile uint32_t* tensor_ptrs;
+static volatile int32_t   task_id;
+
 int main(int argc, char** argv) {
-    volatile uint32_t* args = ${mem_apis.shared_memory_extern_addr};
 
     while (1) {
         <%self:primary_core_region>
-            // Polling for the start signal
-            while (args[0] == 0) {
-                asm volatile("fence r,rw" ::: "memory");
-            }
-            // Or wait for interrupt
-            // asm volatile("wfi");
+            ${platform_apis.wait_for_task_fn}(&tensor_ptrs, &task_id);
         </%self:primary_core_region>
-
-        <%self:smp_print>"Mi hanno detto di fare %d + 1\r\n", args[0] - 1</%self:smp_print>
-        <%self:smp_print>"Al momento c'è: %p, %p, %p, %p %p, ...\r\n", args[0], args[1], args[2], args[3], args[4]</%self:smp_print>
         
         <%self:smp_barrier/>
 
-        switch (args[0]) {
-            case 0:
-                break;
+        switch (task_id) {
             % for node in nodes:
-                case ${int(node.fn_name.split("_")[-1])} + 1:
-                    ${node.fn_name}_inner(args);
+                case ${int(node.fn_name.split("_")[-1])}:
+                    ${node.fn_name}_inner(tensor_ptrs);
                     break; 
             % endfor
             case ${exec_module.name}_EXIT_SIGNAL:
@@ -65,19 +57,14 @@ int main(int argc, char** argv) {
                 return 0;
             default:
                 // Handle unknown command
-                <%self:smp_print>"Unknown node command: %d\r\n", args[1]</%self:smp_print>
+                <%self:smp_print>"Unknown node command: %d\r\n", task_id</%self:smp_print>
                 return -1;
         }
 
         <%self:smp_barrier/>
 
         <%self:primary_core_region>
-            // Clear the start signal
-            asm volatile("fence rw,rw" ::: "memory");
-            args[0] = 0;
-            asm volatile("fence rw,rw":::"memory");
-            // Or send interrupt
-            // TODO
+            ${platform_apis.end_of_task_fn}(task_id);
         </%self:primary_core_region>
     }
 

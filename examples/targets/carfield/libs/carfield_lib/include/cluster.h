@@ -1,15 +1,17 @@
 #ifndef CAR_LIB_CLUSTER_H
 #define CAR_LIB_CLUSTER_H
 
-#include <match/ctx.h>
+#include <stdint.h>
 
+#include "match/ctx.h"
 #include "carfield.h"
+
 #include "pulp_cluster.h"
 
-#include <carfield_lib/dma.h>
+#include "carfield_lib/dma.h"
 
-#ifdef CLUSTER_COMPILATION
-#include <pulp_nn/pulp_nn_kernels.h>
+#ifdef __pulp_cluster__
+#include "pulp_nn/pulp_nn_kernels.h"
 #include "pulp.h"
 #endif
 
@@ -27,6 +29,11 @@ extern volatile dma_transfer_id_t dma_transfer_;
 extern volatile void* im2col_pt_;
 extern volatile void* pwt_pt_;
 
+void cluster_wait_for_task_poll(volatile uint32_t** tensor_ptrs, volatile uint32_t* task_id);
+void cluster_end_of_task_poll(uint32_t task_id);
+
+void cluster_wait_for_task_mbox(volatile uint32_t** tensor_ptrs, volatile uint32_t* task_id);
+void cluster_end_of_task_mbox(uint32_t task_id);
 
 int cluster_check_should_run();
 int cluster_check_main_core(MatchCtx* ctx);

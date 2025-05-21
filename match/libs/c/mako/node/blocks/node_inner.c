@@ -51,7 +51,7 @@
     % if platform_apis.init_platform!="":
         // Rerieve tensor pointers from host trough known args location
         volatile unsigned *real_args = (unsigned int *) args;
-        <% tensor_cnt = 1 if exec_module.separate_build else 0 %>
+        <% tensor_cnt = 0 if exec_module.separate_build else 0 %>
         % for tensor in {**match_node.var_tensors,**match_node.output_tensors}.values():
             void* ${"var_" if tensor.tensor_type=="var" else "out_"}${tensor.name}_pt = (void*) real_args[${tensor_cnt}];\
             <% tensor_cnt += 1 %>
