@@ -272,6 +272,9 @@ class MatchModel:
                 with open(f"{build_dir}/codegen/host/include/{model_name}_params_data.h","w") as run_file:
                     run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/include/params_data.h").render(**graph_runtime_template_data))
             except Exception as e:
+                # with open(f"{build_dir}/codegen/host/src/{model_name}_graph.html", "wb") as output_file:
+                    # import mako
+                    # output_file.write(mako.exceptions.html_error_template().render())
                 print(f"[TEMPLATE WRITER] Error processing graph runtime template")
                 raise e
             subprocess.getoutput(f"rm {build_dir}/mod.tar")
@@ -371,9 +374,10 @@ class MatchModel:
                 "c_arr_size":int(prod(out.shape)),
                 "c_type":numpy_dtype_to_c_type(out.dtype),
                 "prod_shape":int(prod(out.shape)),
+                "is_copy_of":"" if not isinstance(func.body, relay.Tuple) or not any([func.body[idx]==func_out for func_out in list(func.body)[:idx]]) else f"output{[func_out for func_out in range(idx) if func.body[idx]==func.body[func_out]][0]}",
                 "shape":[int(sh) for sh in out.shape],
                 "bytes":int(prod(out.shape)*np.dtype(out.dtype).itemsize),
-                "associated_input":"" if not isinstance(func.body[idx], relay.Var) else to_c_variable_name(func.body[idx].name_hint),
+                "associated_input":"" if not isinstance(func.body, relay.Tuple) or not isinstance(func.body[idx], relay.Var) else to_c_variable_name(func.body[idx].name_hint),
                 "dims":[int(sh) for sh in out.shape],
             } for idx,out in enumerate(relay_out_types)
         }
