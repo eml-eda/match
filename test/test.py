@@ -127,7 +127,7 @@ def run_model(target_name: str="pulp_platform", model: str="keyword_spotting", o
 
 def run_relay_saved_model_at(target_name: str="pulp_platform", mod_filename: str="./models/last_model/model_graph.relay",
                              params_filename: str="./models/last_model/model_params.txt", output_path: str="./builds/last_build",
-                             executor: str="aot", golden_cpu_model: bool=False, input_files: List[str]=[],
+                             executor: str="graph", golden_cpu_model: bool=False, input_files: List[str]=[],
                              min_input_val=None, max_input_val=None, handle_out_fn=""):
     #define HW Target inside match
     if target_name not in TEST_TARGET:
@@ -269,6 +269,8 @@ if __name__=="__main__":
             params_filename=str(Path(os.path.dirname(__file__)+"/models/last_model/model_params.txt").absolute()),
             output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
             input_files=args.input_files,
+            executor=args.executor,
+            golden_cpu_model=args.golden,
             min_input_val=args.min_input_val,
             max_input_val=args.max_input_val,
             handle_out_fn=args.handle_out_fn

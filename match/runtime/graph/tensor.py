@@ -22,8 +22,9 @@ class MatchMemoryTensor:
         self.is_constant=is_constant
         self.is_output=is_output
         self.is_input=is_input
-        if sum([self.is_intermediate,self.is_constant,self.is_output,self.is_input])!=1:
-            raise Exception(f"Match Memory Tensor can only be one option between(intermediate,constant,output,input)")
+        # Note: This has been removed since a tensor can be a combination of the single types, e.g. an input and an output at the same time
+        # if sum([self.is_intermediate,self.is_constant,self.is_output,self.is_input])!=1:
+            # raise Exception(f"Match Memory Tensor can only be one option between(intermediate,constant,output,input)")
         self.constant_val=constant_val
         self.original_constant_val=original_constant_val
         self.shape=shape

@@ -373,6 +373,7 @@ class MatchModel:
                 "prod_shape":int(prod(out.shape)),
                 "shape":[int(sh) for sh in out.shape],
                 "bytes":int(prod(out.shape)*np.dtype(out.dtype).itemsize),
+                "associated_input":"" if not isinstance(func.body[idx], relay.Var) else to_c_variable_name(func.body[idx].name_hint),
                 "dims":[int(sh) for sh in out.shape],
             } for idx,out in enumerate(relay_out_types)
         }

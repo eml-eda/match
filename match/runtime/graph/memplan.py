@@ -49,7 +49,7 @@ class MatchMemoryPlanner:
         return self.total_memory_needed_bytes > self.available_soc_bytes
 
     def match_mem_planner_impl(self, tensor_fixed_to_ext_mem:List[str]=[]):
-        sorted_mem_tensors = sorted([m_t for m_t in self.mem_tensors],
+        sorted_mem_tensors = sorted([m_t for m_t in self.mem_tensors if m_t.lifetime!=(-1,-1)],
                                     key=lambda m_t:(-(m_t.num_bytes),-m_t.lifetime_span))
         ext_mem_needed = 0
         tensors_allocated_at_time = {key:[] for key in self.calls_idxs}

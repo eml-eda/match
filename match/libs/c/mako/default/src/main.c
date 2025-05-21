@@ -31,6 +31,9 @@ int main(int argc,char** argv){
     #endif
     % endfor
     % for out_idx,(out_name,out) in enumerate(match_outputs.items()):
+    % if out["associated_input"]!="":
+    void* ${out_name}_pt = ${out["associated_input"]}_pt;
+    % else:
     #if !defined(__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__) || !__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__
     ${out["c_type"]}* ${out_name}_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
     % if golden_cpu_model:
@@ -44,6 +47,7 @@ int main(int argc,char** argv){
     ext_mem_offset += ${out["bytes"]};
     % endif
     #endif
+    % endif
     % endfor
 
     match_${"golden_check_" if golden_cpu_model else ""}${default_model}_runtime(
