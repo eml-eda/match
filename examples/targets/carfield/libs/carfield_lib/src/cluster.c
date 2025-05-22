@@ -637,4 +637,25 @@ void cluster_end_of_task_mbox(uint32_t task_id) {
 }
 
 
+void cluster_timer_start() {
+    if (rt_core_id() == 0) {
+        reset_timer(0);
+        asm volatile("fence rw,rw" ::: "memory");
+        start_timer(0);
+        asm volatile("fence rw,rw" ::: "memory");
+    }
+}
+
+
+uint32_t cluster_timer_stop() {
+    if (rt_core_id() == 0) {
+        asm volatile("fence rw,rw" ::: "memory");
+        stop_timer(0);
+        volatile uint32_t time = get_time(0);
+        asm volatile("fence rw,rw" ::: "memory");
+        return time;
+    }
+}
+
+
 #endif

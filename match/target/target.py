@@ -128,6 +128,8 @@ class MatchTarget(ABC):
         self.input_macros=""
         self.__cached_pattern_results__=[]
         self.other_files_to_copy = []
+        self.timer_start_fn = ""
+        self.timer_stop_fn = ""
         for exec_module in exec_modules:
             self.add_exec_module(exec_module)
             self.exec_modules_dict[exec_module.name]=exec_module

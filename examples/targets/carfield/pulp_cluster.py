@@ -32,6 +32,8 @@ class PulpCluster(ExecModule):
         # Host functions specific to this exec module
         self.host_send_task_fn = "pulp_cluster_send_task_mbox"
         self.host_wait_end_of_task_fn = "pulp_cluster_wait_end_of_task_mbox"
+        self.timer_start_fn = "cluster_timer_start"
+        self.timer_stop_fn = "cluster_timer_stop"
 
     def include_list(self):
         return ["carfield_lib/cluster"]

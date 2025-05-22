@@ -27,6 +27,18 @@
     <% smp_region_counter += 1 %>
 </%def>
 
+<%def name="profile_region_begin()">
+    %if exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+        ${exec_module.timer_start_fn}();
+    % endif
+</%def>
+
+<%def name="profile_region_end(label)">
+    %if exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+        real_args[8 + ${label}] += ${exec_module.timer_stop_fn}();
+    % endif
+</%def>
+
 
 <%def name="node_inner()">
 
@@ -146,6 +158,7 @@
         % endif
         % for loop_idx,lp in enumerate(block.loops):
             <%self:smp_primary_core_region_begin/>
+                <%self:profile_region_begin/>
                 % for mem_transfer in lp.mem_transfers:
                     // compute the offset from the top level memory to obtain the correct tile for the transfer
                     % for t_dim_idx, t_dim in enumerate(mem_transfer.tensor.dims):
@@ -189,6 +202,7 @@
                     % endif
                     <% add_tile_to_tensor_at_block_and_loop(mem_transfer.tensor.name, block_idx, loop_idx, mem_transfer.mem)%>
                 % endfor
+            <%self:profile_region_end label="1"/>
             <%self:smp_primary_core_region_end/>
             ## finished sw controlled loads and stores
             % if exec_module.backend_constraints_check(match_node,schedule,block,lp,loop_idx) and block.loop_idx_end_sw_controlled_loads>=loop_idx:
@@ -201,75 +215,85 @@
                     ${name}_block_${block_idx}_loop_${lp.name}_update()){
             */
             <%self:smp_primary_core_region_begin/>
-            ${name}_block_${block_idx}_loop_${lp.name}_set();
+                ${name}_block_${block_idx}_loop_${lp.name}_set();
             <%self:smp_primary_core_region_end/>
             <%self:smp_barrier/>
             while(${name}_block_${block_idx}_loop_${lp.name}_end()) {
         % endfor
 
         <%self:smp_primary_core_region_begin/>
-            % if not sync_apis.must_sync_after_load and sync_apis.wait_load!="":
-                // sync with the SW controlled transfers
-                if(block_${block_idx}_loads) ${sync_apis.wait_load}(ctx);
-                block_${block_idx}_loads = 0;
-            % endif
-            ## fix start idxs and curr pts of other tensors not involved in mem transfers
-            % for tensor in [tens for tens in schedule.tensors.values() if last_transfer_of_tensor_block[(tens.name, block_idx)][0]!=loop_idx]:
-                <% tensor_need_update = False %>
-                % for t_dim_idx, t_dim in enumerate(tensor.dims):
-                    % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependencies for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]] or any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
-                        <% tensor_need_update = True %>
-                        <% break %>
-                    % endif
-                % endfor
-                % if tensor_need_update:
-                    % if (tensor.is_fused or tensor.unsupported_layout) and mem_apis.get_pt_of_fused_tensor!="":
-                        tile_mem_offset = ${mem_apis.get_pt_of_fused_tensor}(ctx,${name}_${tensor.name});
-                    % else:
-                        tile_mem_offset = ${tensor.c_offset_expr_sw_mem(last_transfer_of_tensor_block[(tensor.name, block_idx)][1], schedule, block_idx, loop_idx, name)};
-                    % endif
-                    ${name}_${tensor.name}->pt = ${name}_${tensor.name}->pts[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}] + (tile_mem_offset>0?tile_mem_offset:0);
+            <%self:profile_region_begin/>
+                % if not sync_apis.must_sync_after_load and sync_apis.wait_load!="":
+                    // sync with the SW controlled transfers
+                    if(block_${block_idx}_loads) ${sync_apis.wait_load}(ctx);
+                    block_${block_idx}_loads = 0;
+                % endif
+                ## fix start idxs and curr pts of other tensors not involved in mem transfers
+                % for tensor in [tens for tens in schedule.tensors.values() if last_transfer_of_tensor_block[(tens.name, block_idx)][0]!=loop_idx]:
+                    <% tensor_need_update = False %>
                     % for t_dim_idx, t_dim in enumerate(tensor.dims):
                         % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependencies for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]] or any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
-                            ${name}_${tensor.name}_tiles_[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].curr_idx = ${name}_${t_dim.name}->global_idx;
+                            <% tensor_need_update = True %>
+                            <% break %>
                         % endif
                     % endfor
-                % endif
-            % endfor
+                    % if tensor_need_update:
+                        % if (tensor.is_fused or tensor.unsupported_layout) and mem_apis.get_pt_of_fused_tensor!="":
+                            tile_mem_offset = ${mem_apis.get_pt_of_fused_tensor}(ctx,${name}_${tensor.name});
+                        % else:
+                            tile_mem_offset = ${tensor.c_offset_expr_sw_mem(last_transfer_of_tensor_block[(tensor.name, block_idx)][1], schedule, block_idx, loop_idx, name)};
+                        % endif
+                        ${name}_${tensor.name}->pt = ${name}_${tensor.name}->pts[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}] + (tile_mem_offset>0?tile_mem_offset:0);
+                        % for t_dim_idx, t_dim in enumerate(tensor.dims):
+                            % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependencies for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]] or any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
+                                ${name}_${tensor.name}_tiles_[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].curr_idx = ${name}_${t_dim.name}->global_idx;
+                            % endif
+                        % endfor
+                    % endif
+                % endfor
+            <%self:profile_region_end label="1"/>
         <%self:smp_primary_core_region_end/>
         
         <%self:smp_barrier/>
 
-        % if block.backend == "MATCH":
-            % if block.parallel_execution:
-                ${platform_apis.parallelize_task}(match_backend_block_${block_idx}_computation,${block.num_tasks},ctx);
+        <%self:smp_primary_core_region_begin/>
+            <%self:profile_region_begin/>
+        <%self:smp_primary_core_region_end/>
+            % if block.backend == "MATCH":
+                % if block.parallel_execution:
+                    ${platform_apis.parallelize_task}(match_backend_block_${block_idx}_computation,${block.num_tasks},ctx);
+                % else:
+                    match_backend_block_${block_idx}_computation(ctx);
+                % endif
             % else:
-                match_backend_block_${block_idx}_computation(ctx);
+                ${comp_apis.compute_tile}(ctx);
             % endif
-        % else:
-            ${comp_apis.compute_tile}(ctx);
-        % endif
 
-        % if sync_apis.must_sync_after_computation:
-            % if block.backend=="MATCH" and block.parallel_execution and sync_apis.wait_parallel_tasks:
-                ${sync_apis.wait_parallel_tasks}(ctx);
-            % elif sync_apis.wait_tile_computation!="":
-                ${sync_apis.wait_tile_computation}(ctx);
+            % if sync_apis.must_sync_after_computation:
+                % if block.backend=="MATCH" and block.parallel_execution and sync_apis.wait_parallel_tasks:
+                    ${sync_apis.wait_parallel_tasks}(ctx);
+                % elif sync_apis.wait_tile_computation!="":
+                    ${sync_apis.wait_tile_computation}(ctx);
+                % endif
+                % elif block.num_buffers_for_computation!=1:
+                    buffer_for_computation_idx++;
+                % if sync_apis.wait_tile_computation!="":
+                    // the buffer is full, wait before the next iteration...
+                    if(block_${block_idx}_buffer_for_computation_idx>=BLOCK_${block_idx}_NUM_BUFFERS_FOR_COMPUTATION){
+                        % if block.backend=="MATCH" and block.parallel_execution and sync_apis.wait_buffer_parallel_tasks!="":
+                        ${sync_apis.wait_buffer_parallel_tasks}(ctx);
+                        % elif sync_apis.wait_buffer_tile_computation!="":
+                        ${sync_apis.wait_buffer_tile_computation}(ctx);
+                        % endif
+                    }
+                % endif
             % endif
-            % elif block.num_buffers_for_computation!=1:
-                buffer_for_computation_idx++;
-            % if sync_apis.wait_tile_computation!="":
-                // the buffer is full, wait before the next iteration...
-                if(block_${block_idx}_buffer_for_computation_idx>=BLOCK_${block_idx}_NUM_BUFFERS_FOR_COMPUTATION){
-                    % if block.backend=="MATCH" and block.parallel_execution and sync_apis.wait_buffer_parallel_tasks!="":
-                    ${sync_apis.wait_buffer_parallel_tasks}(ctx);
-                    % elif sync_apis.wait_buffer_tile_computation!="":
-                    ${sync_apis.wait_buffer_tile_computation}(ctx);
-                    % endif
-                }
-            % endif
-        % endif
 
+        <%self:smp_barrier/>
+        
+        <%self:smp_primary_core_region_begin/>
+            <%self:profile_region_end label="0"/>
+        <%self:smp_primary_core_region_end/>
         
         ## close braces and save output
         % for loop_idx_ in range(loop_idx,-1,-1):
@@ -286,28 +310,30 @@
             % endif
 
             <%self:smp_primary_core_region_begin/>
-                % for mem_transfer in block.loops[loop_idx_].mem_transfers:
-                    <% free_transfer_unique_tile(mem_transfer.tensor.name) %>
-                    % if mem_transfer.tensor.tensor_type == "output":
-                        // call API for ${exec_module.name}-specific memory transfer handling
-                        ${mem_apis.mem_transfer}(
-                            ctx,${name}_${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)},
-                            ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
-                            MATCH_SW_STORE_TENSOR,MATCH_OUT_TENSOR,
-                            ${mem_transfer.top_mem},${mem_transfer.mem}
-                        );
-                        % if sync_apis.must_sync_after_store:
-                            // sync after each single store as the SW transfer require...
-                            ${sync_apis.wait_store}(ctx);
+                <%self:profile_region_begin/>
+                    % for mem_transfer in block.loops[loop_idx_].mem_transfers:
+                        <% free_transfer_unique_tile(mem_transfer.tensor.name) %>
+                        % if mem_transfer.tensor.tensor_type == "output":
+                            // call API for ${exec_module.name}-specific memory transfer handling
+                            ${mem_apis.mem_transfer}(
+                                ctx,${name}_${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)},
+                                ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
+                                MATCH_SW_STORE_TENSOR,MATCH_OUT_TENSOR,
+                                ${mem_transfer.top_mem},${mem_transfer.mem}
+                            );
+                            % if sync_apis.must_sync_after_store:
+                                // sync after each single store as the SW transfer require...
+                                ${sync_apis.wait_store}(ctx);
+                            % endif
                         % endif
-                    % endif
-                    % if block.num_buffers_for_computation==1 or mem_transfer.mem!=memory_hierarchy[mem_transfer.tensor.tensor_type][0].name:
-                        ${mem_transfer.mem}_curr_pt_offset -= ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
-                    % elif block.num_buffers_for_computation>1 and mem_transfer.mem==memory_hierarchy[mem_transfer.tensor.tensor_type][0].name:
-                        if(block_${block_idx}_buffer_for_computation_idx>=BLOCK_${block_idx}_NUM_BUFFERS_FOR_COMPUTATION)
+                        % if block.num_buffers_for_computation==1 or mem_transfer.mem!=memory_hierarchy[mem_transfer.tensor.tensor_type][0].name:
                             ${mem_transfer.mem}_curr_pt_offset -= ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
-                    % endif
-                % endfor
+                        % elif block.num_buffers_for_computation>1 and mem_transfer.mem==memory_hierarchy[mem_transfer.tensor.tensor_type][0].name:
+                            if(block_${block_idx}_buffer_for_computation_idx>=BLOCK_${block_idx}_NUM_BUFFERS_FOR_COMPUTATION)
+                                ${mem_transfer.mem}_curr_pt_offset -= ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
+                        % endif
+                    % endfor
+                <%self:profile_region_end label="2"/>
             <%self:smp_primary_core_region_end/>
         % endfor
 

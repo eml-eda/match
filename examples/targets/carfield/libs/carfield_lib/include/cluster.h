@@ -11,8 +11,9 @@
 #include "carfield_lib/dma.h"
 
 #ifdef __pulp_cluster__
-#include "pulp_nn/pulp_nn_kernels.h"
 #include "pulp.h"
+#include "bench/bench.h"
+#include "pulp_nn/pulp_nn_kernels.h"
 #endif
 
 
@@ -38,6 +39,9 @@ void cluster_end_of_task_mbox(uint32_t task_id);
 int cluster_check_should_run();
 int cluster_check_main_core(MatchCtx* ctx);
 void cluster_sync_cores(MatchCtx* ctx);
+
+void cluster_timer_start();
+uint32_t cluster_timer_stop();
 
 void cluster_alloc_buffer(const char* name, int tensor_l1_pt, int size, int mem, int buffer_idx);
 

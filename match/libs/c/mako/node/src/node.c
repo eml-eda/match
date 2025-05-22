@@ -93,8 +93,13 @@
             ${", " if idx>0 else ""}void* out_${out.name}_pt
         % endfor
     ){
+        % if target.timer_start_fn != "":
+            ${target.timer_start_fn}();
+        % endif
+
         // Write args (input and output tensor addresses) in shared memory
         volatile uint32_t* args = (volatile uint32_t*)${exec_module.shared_memory_extern_addr};
+        for (int i = 0; i < 16; i++) args[i] = 0;
 
         <% tensor_cnt = 1 %> 
         % for tensor in {**match_node.var_tensors,**match_node.output_tensors}.values():
@@ -120,7 +125,22 @@
             return -1;
         }
 
+        % if target.timer_stop_fn != "":
+            ${name}_stats.total_cycles = ${target.timer_stop_fn}();
+        % endif
+        % if exec_module.timer_stop_fn != "":
+            ${name}_stats.compute_cycles = args[9 + 0];
+            ${name}_stats.load_cycles = args[9 + 1];
+            ${name}_stats.store_cycles = args[9 + 2];
+        % endif
+
         ${target.print_fn}("[HOST] Offload device finished.\r\n");
+
+        ${target.print_fn}("[HOST] Stats:\r\n");
+        ${target.print_fn}("       Total Cycles: %d\r\n", ${name}_stats.total_cycles);
+        ${target.print_fn}("       Compute Cycles: %d\r\n", ${name}_stats.compute_cycles);
+        ${target.print_fn}("       Load Cycles: %d\r\n", ${name}_stats.load_cycles);
+        ${target.print_fn}("       Store Cycles: %d\r\n", ${name}_stats.store_cycles);
 
         return 0;
     }

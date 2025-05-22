@@ -184,6 +184,8 @@ class ExecModule(ABC):
         # Only used when separated_build is True - TODO this should be reconsidered for paralell node execution
         self.host_send_task_fn = ""
         self.host_wait_end_of_task_fn = ""
+        self.timer_start_fn = ""
+        self.time_stop_fn = ""
 
     def include_libs(self):
         return []

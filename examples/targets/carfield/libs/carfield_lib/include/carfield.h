@@ -24,6 +24,9 @@ void handle_host_dma_transfer(
     size_t size
 );
 
+void carfield_timer_start();
+uint64_t carfield_timer_stop();
+
 // Host interrupt related things
 
 extern volatile uint32_t last_completed_node_id;

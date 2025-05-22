@@ -6,7 +6,7 @@
 // Carfield
 #include "car_util.h"
 #include "car_memory_map.h"
-#include "car_util.h"
+#include "regs/system_timer.h"
 // Cheshire
 #include "dif/clint.h"
 #include "dif/dma.h"
@@ -187,4 +187,16 @@ void carfield_init_uart() {
     uint32_t rtc_freq = *reg32(&__base_regs, CHESHIRE_RTC_FREQ_REG_OFFSET);
     uint64_t reset_freq = clint_get_core_freq(rtc_freq, 2500);
     car_uart_init(&__base_uart, reset_freq, 115200);
+}
+
+
+void carfield_timer_start() {
+    writed(1, CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_RESET_LO_OFFSET);
+    writed(1, CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_START_LO_OFFSET);
+}
+    
+uint64_t carfield_timer_stop() {
+    writed(0, CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_CFG_LO_OFFSET);
+    volatile uint64_t time = readd(CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_CNT_LO_OFFSET);
+    return time;
 }

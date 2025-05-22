@@ -146,3 +146,6 @@ volatile MatchCtx* ${name}_ctx = &${name}_ctx_;
 volatile int ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
 % endfor
 % endfor
+
+// Node Profiling
+volatile node_stats_t ${name}_stats = {0};
