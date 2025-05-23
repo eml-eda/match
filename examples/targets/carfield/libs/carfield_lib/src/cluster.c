@@ -4,7 +4,7 @@
 #include "carfield_lib/printf.h"
 #include "carfield_lib/mbox.h"
 
-#define CLUSTER_LIB_DEBUG
+//#define CLUSTER_LIB_DEBUG
 #define CALLOC_L1_SCRATCHPAD 0
 
 volatile dma_transfer_id_t dma_transfer_ = 0;
@@ -30,21 +30,29 @@ void cluster_sync_cores(MatchCtx* ctx)
 
 void cluster_lib_init(MatchCtx* ctx)
 {
+    #ifdef CLUSTER_LIB_DEBUG
     // Just for not overlapping print :)
     for (int i = 0; i < 10000; i++)
         asm volatile("nop");
+    #endif
     dma_transfer_ = dma_transfer_create();
+    #ifdef CLUSTER_LIB_DEBUG
     mini_printf("[CLUSTER] Yo! Cluster is alive! DMA counter is %d\r\n", dma_transfer_);
+    #endif
 }
 
 void* init_l1_scratchpad_memory(MatchCtx* ctx){
+    #ifdef CLUSTER_LIB_DEBUG
     mini_printf("[CLUSTER] Inizialing L1 Scratchpad...\r\n");
+    #endif
     void* l1_memory_pt = pi_l1_malloc(0, L1_SCRATCHPAD_SIZE);
     #if CALLOC_L1_SCRATCHPAD
     for (int i = 0; i < L1_SCRATCHPAD_SIZE; i++)
         ((volatile char*)l1_memory_pt)[i] = 0;
     #endif
+    #ifdef CLUSTER_LIB_DEBUG
     mini_printf("[CLUSTER] Success.\r\n");
+    #endif
     return l1_memory_pt;
 }
 
@@ -64,21 +72,24 @@ void cluster_alloc_buffer(const char* name, int tensor_l1_pt, int size, int mem,
     im2col_pt_ = (void*)tensor_l1_pt;
 }
 
-void handle_dma_transfer(
+int handle_dma_transfer(
     MatchCtx* ctx, MatchTensor* tensor,
     void* tensor_l2_pt, void* tensor_l1_pt,
     int match_transfer_type, int match_tensor_type,
     int ext_mem, int int_mem 
 ){
+    asm volatile("fence rw,rw":::"memory");
     // shouldnt happen, we currently support only L2 and L1
     if(ext_mem!=L2_SHARED_MEM || int_mem!=L1_SCRATCHPAD)
         exit(1);
     // we should handle only 4-dims tensors
     if(tensor->num_dims>5)
         exit(1);
-    
-    if(!tensor->num_dims) return;
-    
+
+    if(!tensor->num_dims) return 0;
+
+    int transferred_bytes = 0;
+
     #ifdef CLUSTER_LIB_DEBUG
     mini_printf("[CLUSTER] DMA Transfer: %s(%p) %s %s(%p) - Tensor type: %s\r\n",
         ext_mem==L2_SHARED_MEM?"L2":"L1", tensor_l2_pt,
@@ -89,36 +100,38 @@ void handle_dma_transfer(
         mini_printf("  [L2: %d L1: %d]", tensor->tiles[L2_SHARED_MEM*tensor->num_dims+idx].size, tensor->tiles[L1_SCRATCHPAD*tensor->num_dims+idx].size);
     mini_printf("\r\n");
     #endif
-    
+
     switch(tensor->num_dims){
-        case 1:
+        case 1: {
+            int bytes = tensor->tiles[L1_SCRATCHPAD*1+0].size * tensor->bits/8;
             #ifdef CLUSTER_LIB_DEBUG
-            mini_printf("1D transfer prec %d bytes\r\n", tensor->bits/8);
+            mini_printf("[TRANSFER TYPE] 1D transfer: %d bytes\r\n", bytes);
             #endif
             dma_transfer_1d_async((dma_transfer_cfg_t) {
                 .ext = tensor_l2_pt,
                 .loc = tensor_l1_pt,
-                .length_1d_copy = tensor->tiles[L1_SCRATCHPAD*1+0].size*tensor->bits/8,
+                .length_1d_copy = bytes,
                 .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
             });
+            transferred_bytes = bytes;
             break;
-        case 2:
+        }
+        case 2: {
+            int is_1d = tensor->tiles[L2_SHARED_MEM*2+1].size==tensor->tiles[L1_SCRATCHPAD*2+1].size;
+            int bytes = 0;
             #ifdef CLUSTER_LIB_DEBUG
-            mini_printf("2D transfer 1D %d prec %d bytes\r\n", 
-                tensor->tiles[L2_SHARED_MEM*2+1].size==tensor->tiles[L1_SCRATCHPAD*2+1].size,
-                tensor->bits/8
-            );
+            mini_printf("[TRANSFER TYPE] 2D transfer: 1D case: %d, bytes per elem: %d\r\n", is_1d, tensor->bits/8);
             #endif
-            // check if we can do a 1D transfer
-            if(tensor->tiles[L2_SHARED_MEM*2+1].size==tensor->tiles[L1_SCRATCHPAD*2+1].size)
+            if(is_1d){
+                bytes = tensor->tiles[L1_SCRATCHPAD*2+0].size * tensor->tiles[L1_SCRATCHPAD*2+1].size * tensor->bits/8;
                 dma_transfer_1d_async((dma_transfer_cfg_t) {
                     .ext = tensor_l2_pt,
                     .loc = tensor_l1_pt,
-                    .length_1d_copy = tensor->tiles[L1_SCRATCHPAD*2+0].size*tensor->tiles[L1_SCRATCHPAD*2+1].size*tensor->bits/8,
+                    .length_1d_copy = bytes,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
-            // resort to 2D transfers 
-            else
+            } else {
+                bytes = tensor->tiles[L1_SCRATCHPAD*2+0].size * tensor->tiles[L1_SCRATCHPAD*2+1].size * tensor->bits/8;
                 dma_transfer_2d_async((dma_transfer_cfg_t) {
                     .ext = tensor_l2_pt,
                     .loc = tensor_l1_pt,
@@ -127,30 +140,34 @@ void handle_dma_transfer(
                     .stride_1d = tensor->tiles[L2_SHARED_MEM*2+1].size*tensor->bits/8,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
+            }
+            transferred_bytes = bytes;
             break;
-        case 3:
+        }
+        case 3: {
+            int is_1d = tensor->tiles[L2_SHARED_MEM*3+1].size==tensor->tiles[L1_SCRATCHPAD*3+1].size
+                        && tensor->tiles[L2_SHARED_MEM*3+2].size==tensor->tiles[L1_SCRATCHPAD*3+2].size;
+            int is_2d = tensor->tiles[L2_SHARED_MEM*3+2].size==tensor->tiles[L1_SCRATCHPAD*3+2].size;
+            int bytes = 0;
             #ifdef CLUSTER_LIB_DEBUG
-            mini_printf("3D transfer 1D %d 2D %d prec %d bytes\r\n", 
-                tensor->tiles[L2_SHARED_MEM*3+1].size==tensor->tiles[L1_SCRATCHPAD*3+1].size
-                && tensor->tiles[L2_SHARED_MEM*3+2].size==tensor->tiles[L1_SCRATCHPAD*3+2].size,
-                tensor->tiles[L2_SHARED_MEM*3+2].size==tensor->tiles[L1_SCRATCHPAD*3+2].size,
-                tensor->bits/8
-            );
+            mini_printf("[TRANSFER TYPE] 3D transfer: 1D case: %d, 2D case: %d, bytes per elem: %d\r\n", is_1d, is_2d, tensor->bits/8);
             #endif
-            // check if we can do a 1D transfer
-            if(tensor->tiles[L2_SHARED_MEM*3+1].size==tensor->tiles[L1_SCRATCHPAD*3+1].size
-                && tensor->tiles[L2_SHARED_MEM*3+2].size==tensor->tiles[L1_SCRATCHPAD*3+2].size)
+            if(is_1d){
+                bytes = tensor->tiles[L1_SCRATCHPAD*3+0].size*
+                        tensor->tiles[L1_SCRATCHPAD*3+1].size*
+                        tensor->tiles[L1_SCRATCHPAD*3+2].size*
+                        tensor->bits/8;
                 dma_transfer_1d_async((dma_transfer_cfg_t) {
                     .ext = tensor_l2_pt,
                     .loc = tensor_l1_pt,
-                    .length_1d_copy = tensor->tiles[L1_SCRATCHPAD*3+0].size*
-                                        tensor->tiles[L1_SCRATCHPAD*3+1].size*
-                                        tensor->tiles[L1_SCRATCHPAD*3+2].size*
-                                        tensor->bits/8,
+                    .length_1d_copy = bytes,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
-            // fallback to 2D if possible
-            else if(tensor->tiles[L2_SHARED_MEM*3+2].size==tensor->tiles[L1_SCRATCHPAD*3+2].size)
+            } else if(is_2d){
+                bytes = tensor->tiles[L1_SCRATCHPAD*3+0].size*
+                        tensor->tiles[L1_SCRATCHPAD*3+1].size*
+                        tensor->tiles[L1_SCRATCHPAD*3+2].size*
+                        tensor->bits/8;
                 dma_transfer_2d_async((dma_transfer_cfg_t) {
                     .ext = tensor_l2_pt,
                     .loc = tensor_l1_pt,
@@ -159,8 +176,11 @@ void handle_dma_transfer(
                     .stride_1d = tensor->tiles[L2_SHARED_MEM*3+1].size*tensor->tiles[L2_SHARED_MEM*3+2].size*tensor->bits/8,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
-            // fallback to 3D
-            else
+            } else {
+                bytes = tensor->tiles[L1_SCRATCHPAD*3+0].size*
+                        tensor->tiles[L1_SCRATCHPAD*3+1].size*
+                        tensor->tiles[L1_SCRATCHPAD*3+2].size*
+                        tensor->bits/8;
                 dma_transfer_3d_async((dma_transfer_cfg_t) {
                     .ext = tensor_l2_pt,
                     .loc = tensor_l1_pt,
@@ -171,23 +191,26 @@ void handle_dma_transfer(
                     .stride_2d = tensor->tiles[L2_SHARED_MEM*3+1].size*tensor->tiles[L2_SHARED_MEM*3+2].size*tensor->bits/8,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
+            }
+            transferred_bytes = bytes;
             break;
-        case 4:
+        }
+        case 4: {
+            int is_hwc_to_chw = (ctx->pattern_name==depthwise_conv2d && match_tensor_type==MATCH_VAR_TENSOR && ctx->exec_module==PULP_CLUSTER);
+            int is_1d = tensor->tiles[L2_SHARED_MEM*4+1].size==tensor->tiles[L1_SCRATCHPAD*4+1].size
+                        && tensor->tiles[L2_SHARED_MEM*4+2].size==tensor->tiles[L1_SCRATCHPAD*4+2].size
+                        && tensor->tiles[L2_SHARED_MEM*4+3].size==tensor->tiles[L1_SCRATCHPAD*4+3].size;
+            int is_2d = tensor->tiles[L2_SHARED_MEM*4+2].size==tensor->tiles[L1_SCRATCHPAD*4+2].size
+                        && tensor->tiles[L2_SHARED_MEM*4+3].size==tensor->tiles[L1_SCRATCHPAD*4+3].size;
+            int bytes = 0;
             #ifdef CLUSTER_LIB_DEBUG
-            mini_printf("4D transfer HWC_TO_CHW %d 1D %d 2D %d prec %d bytes\r\n", 
-                ctx->pattern_name==depthwise_conv2d && match_tensor_type==MATCH_VAR_TENSOR
-                && ctx->exec_module==PULP_CLUSTER,
-                tensor->tiles[L2_SHARED_MEM*4+1].size==tensor->tiles[L1_SCRATCHPAD*4+1].size
-                && tensor->tiles[L2_SHARED_MEM*4+2].size==tensor->tiles[L1_SCRATCHPAD*4+2].size
-                && tensor->tiles[L2_SHARED_MEM*4+3].size==tensor->tiles[L1_SCRATCHPAD*4+3].size,
-                tensor->tiles[L2_SHARED_MEM*4+2].size==tensor->tiles[L1_SCRATCHPAD*4+2].size
-                && tensor->tiles[L2_SHARED_MEM*4+3].size==tensor->tiles[L1_SCRATCHPAD*4+3].size,
-                tensor->bits/8
-            );
+            mini_printf("[TRANSFER TYPE] 4D transfer: HWC_TO_CHW: %d, 1D case: %d, 2D case: %d, bytes per elem: %d\r\n",
+                is_hwc_to_chw, is_1d, is_2d, tensor->bits/8);
             #endif
-            // check if depthwise conv2d and activations
-            if(ctx->pattern_name==depthwise_conv2d && match_tensor_type==MATCH_VAR_TENSOR
-                && ctx->exec_module==PULP_CLUSTER)
+            if(is_hwc_to_chw){
+                bytes = tensor->tiles[L1_SCRATCHPAD*4+1].size*
+                        tensor->tiles[L1_SCRATCHPAD*4+2].size*
+                        tensor->tiles[L1_SCRATCHPAD*4+3].size;
                 dma_transfer_hwc_to_chw((dma_transfer_cfg_t) {
                     .ext = tensor_l2_pt,
                     .loc = tensor_l1_pt,
@@ -198,23 +221,25 @@ void handle_dma_transfer(
                     .stride_1d = tensor->tiles[L2_SHARED_MEM*4+3].size,
                     .dir = 1
                 });
-            // check if we can do a 1D transfer
-            else if(tensor->tiles[L2_SHARED_MEM*4+1].size==tensor->tiles[L1_SCRATCHPAD*4+1].size
-                && tensor->tiles[L2_SHARED_MEM*4+2].size==tensor->tiles[L1_SCRATCHPAD*4+2].size
-                && tensor->tiles[L2_SHARED_MEM*4+3].size==tensor->tiles[L1_SCRATCHPAD*4+3].size)
+                bytes *= tensor->bits/8;
+            } else if(is_1d){
+                bytes = tensor->tiles[L1_SCRATCHPAD*4+0].size*
+                        tensor->tiles[L1_SCRATCHPAD*4+1].size*
+                        tensor->tiles[L1_SCRATCHPAD*4+2].size*
+                        tensor->tiles[L1_SCRATCHPAD*4+3].size*
+                        tensor->bits/8;
                 dma_transfer_1d_async((dma_transfer_cfg_t) {
                     .ext = tensor_l2_pt,
                     .loc = tensor_l1_pt,
-                    .length_1d_copy = tensor->tiles[L1_SCRATCHPAD*4+0].size*
-                                        tensor->tiles[L1_SCRATCHPAD*4+1].size*
-                                        tensor->tiles[L1_SCRATCHPAD*4+2].size*
-                                        tensor->tiles[L1_SCRATCHPAD*4+3].size*
-                                        tensor->bits/8,
+                    .length_1d_copy = bytes,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
-            // fallback to 2D if possible
-            else if( tensor->tiles[L2_SHARED_MEM*4+2].size==tensor->tiles[L1_SCRATCHPAD*4+2].size
-                && tensor->tiles[L2_SHARED_MEM*4+3].size==tensor->tiles[L1_SCRATCHPAD*4+3].size)
+            } else if(is_2d){
+                bytes = tensor->tiles[L1_SCRATCHPAD*4+0].size*
+                        tensor->tiles[L1_SCRATCHPAD*4+1].size*
+                        tensor->tiles[L1_SCRATCHPAD*4+2].size*
+                        tensor->tiles[L1_SCRATCHPAD*4+3].size*
+                        tensor->bits/8;
                 dma_transfer_2d_async((dma_transfer_cfg_t) {
                     .ext = tensor_l2_pt,
                     .loc = tensor_l1_pt,
@@ -229,8 +254,12 @@ void handle_dma_transfer(
                                     tensor->bits/8,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
-            // fallback to 3D
-            else
+            } else {
+                bytes = tensor->tiles[L1_SCRATCHPAD*4+1].size*
+                        tensor->tiles[L1_SCRATCHPAD*4+2].size*
+                        tensor->tiles[L1_SCRATCHPAD*4+3].size*
+                        tensor->bits/8;
+                // this is per 3d transfer, but we are doing N of them
                 for(int idx=0; idx<tensor->tiles[L1_SCRATCHPAD*4+0].size; idx++)
                     dma_transfer_3d_async((dma_transfer_cfg_t) {
                         .ext = tensor_l2_pt + idx*tensor->tiles[L2_SHARED_MEM*4+1].size*
@@ -252,26 +281,40 @@ void handle_dma_transfer(
                                         tensor->bits/8,
                         .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                     });
+                bytes *= tensor->tiles[L1_SCRATCHPAD*4+0].size;
+            }
+            transferred_bytes = bytes;
             break;
-        case 5:
+        }
+        case 5: {
+            int bytes = 0;
             if(tensor->tiles[L2_SHARED_MEM*5+1].dim==tensor->tiles[L1_SCRATCHPAD*5+4].dim){
-                // check if we can do a 1D transfer
-                if(tensor->tiles[L2_SHARED_MEM*5+1].size==tensor->tiles[L1_SCRATCHPAD*5+1].size
-                    && tensor->tiles[L2_SHARED_MEM*5+2].size==tensor->tiles[L1_SCRATCHPAD*5+2].size
-                    && tensor->tiles[L2_SHARED_MEM*5+3].size==tensor->tiles[L1_SCRATCHPAD*5+3].size)
+                int is_1d = tensor->tiles[L2_SHARED_MEM*5+1].size==tensor->tiles[L1_SCRATCHPAD*5+1].size
+                        && tensor->tiles[L2_SHARED_MEM*5+2].size==tensor->tiles[L1_SCRATCHPAD*5+2].size
+                        && tensor->tiles[L2_SHARED_MEM*5+3].size==tensor->tiles[L1_SCRATCHPAD*5+3].size;
+                int is_2d = tensor->tiles[L2_SHARED_MEM*5+2].size==tensor->tiles[L1_SCRATCHPAD*5+2].size
+                        && tensor->tiles[L2_SHARED_MEM*5+3].size==tensor->tiles[L1_SCRATCHPAD*5+3].size;
+                #ifdef CLUSTER_LIB_DEBUG
+                mini_printf("[TRANSFER TYPE] 5D transfer: 1D case: %d, 2D case: %d, bytes per elem: %d\r\n", is_1d, is_2d, tensor->bits/8);
+                #endif
+                if(is_1d){
+                    bytes = tensor->tiles[L1_SCRATCHPAD*5+0].size*
+                            tensor->tiles[L1_SCRATCHPAD*5+1].size*
+                            tensor->tiles[L1_SCRATCHPAD*5+2].size*
+                            tensor->tiles[L1_SCRATCHPAD*5+3].size*
+                            tensor->bits/8;
                     dma_transfer_1d_async((dma_transfer_cfg_t) {
                         .ext = tensor_l2_pt,
                         .loc = tensor_l1_pt,
-                        .length_1d_copy = tensor->tiles[L1_SCRATCHPAD*5+0].size*
-                                            tensor->tiles[L1_SCRATCHPAD*5+1].size*
-                                            tensor->tiles[L1_SCRATCHPAD*5+2].size*
-                                            tensor->tiles[L1_SCRATCHPAD*5+3].size*
-                                            tensor->bits/8,
+                        .length_1d_copy = bytes,
                         .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                     });
-                // fallback to 2D if possible
-                else if( tensor->tiles[L2_SHARED_MEM*5+2].size==tensor->tiles[L1_SCRATCHPAD*5+2].size
-                    && tensor->tiles[L2_SHARED_MEM*5+3].size==tensor->tiles[L1_SCRATCHPAD*5+3].size)
+                } else if(is_2d){
+                    bytes = tensor->tiles[L1_SCRATCHPAD*5+0].size*
+                            tensor->tiles[L1_SCRATCHPAD*5+1].size*
+                            tensor->tiles[L1_SCRATCHPAD*5+2].size*
+                            tensor->tiles[L1_SCRATCHPAD*5+3].size*
+                            tensor->bits/8;
                     dma_transfer_2d_async((dma_transfer_cfg_t) {
                         .ext = tensor_l2_pt,
                         .loc = tensor_l1_pt,
@@ -286,8 +329,11 @@ void handle_dma_transfer(
                                         tensor->bits/8,
                         .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                     });
-                // fallback to 3D
-                else
+                } else {
+                    bytes = tensor->tiles[L1_SCRATCHPAD*5+1].size*
+                            tensor->tiles[L1_SCRATCHPAD*5+2].size*
+                            tensor->tiles[L1_SCRATCHPAD*5+3].size*
+                            tensor->bits/8;
                     for(int idx=0; idx<tensor->tiles[L1_SCRATCHPAD*5+0].size; idx++)
                         dma_transfer_3d_async((dma_transfer_cfg_t) {
                             .ext = tensor_l2_pt + idx*tensor->tiles[L2_SHARED_MEM*5+1].size*
@@ -309,21 +355,33 @@ void handle_dma_transfer(
                                             tensor->bits/8,
                             .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                         });
-            }
-            else
+                    bytes *= tensor->tiles[L1_SCRATCHPAD*5+0].size;
+                }
+                transferred_bytes = bytes;
+            } else
                 exit(1);
             break;
-                
+        }
     }
     #ifdef CLUSTER_LIB_DEBUG
-    mini_printf("\r\n");
+    mini_printf("[TRANSFER INFO] Transferred %d bytes\r\n", transferred_bytes);
     #endif
+    for (int i = 0; i < 300; i++)
+        asm volatile("fence rw,rw":::"memory");
+    return transferred_bytes;
 }
 
+
+
 void wait_l1_dma_transfers(MatchCtx* ctx) {
+    asm volatile("fence rw,rw":::"memory");
     dma_transfer_wait(dma_transfer_);
+    asm volatile("fence rw,rw":::"memory");
     dma_transfer_ = dma_transfer_create();
+    asm volatile("fence rw,rw":::"memory");
 }
+
+//#define CLUSTER_LIB_DEBUG
 
 
 void pulp_nn_dense_wrapper(MatchCtx* ctx){

@@ -49,7 +49,7 @@ void cluster_lib_init(MatchCtx* ctx);
 
 void* init_l1_scratchpad_memory(MatchCtx* ctx);
 
-void handle_dma_transfer(
+int handle_dma_transfer(
     MatchCtx* ctx, MatchTensor* tensor,
     void* tensor_l2_pt, void* tensor_l1_pt,
     int match_transfer_type, int match_tensor_type,

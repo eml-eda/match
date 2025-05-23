@@ -39,6 +39,12 @@
     % endif
 </%def>
 
+<%def name="profile_var(label)">
+    %if exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+        real_args[8 + ${label}] +=
+    % endif
+</%def>
+
 
 <%def name="node_inner()">
 
@@ -187,7 +193,7 @@
                     ${mem_transfer.mem}_curr_pt_offset += ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
                     % if mem_transfer.tensor.tensor_type != "output":
                         // call API for ${exec_module.name}-specific memory transfer handling
-                        ${mem_apis.mem_transfer}(
+                        <%self:profile_var label="3"/> ${mem_apis.mem_transfer}(
                             ctx,${name}_${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)},
                             ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
                             MATCH_SW_LOAD_TENSOR,MATCH_${"CONST" if mem_transfer.tensor.tensor_type=="const" else "VAR"}_TENSOR,
@@ -315,7 +321,7 @@
                         <% free_transfer_unique_tile(mem_transfer.tensor.name) %>
                         % if mem_transfer.tensor.tensor_type == "output":
                             // call API for ${exec_module.name}-specific memory transfer handling
-                            ${mem_apis.mem_transfer}(
+                            <%self:profile_var label="4"/> ${mem_apis.mem_transfer}(
                                 ctx,${name}_${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)},
                                 ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
                                 MATCH_SW_STORE_TENSOR,MATCH_OUT_TENSOR,

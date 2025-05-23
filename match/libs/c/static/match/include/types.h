@@ -17,6 +17,8 @@ typedef struct node_stats {
     uint32_t compute_cycles;
     uint32_t load_cycles;
     uint32_t store_cycles;
+    uint32_t load_bytes;
+    uint32_t store_bytes;
     uint32_t device;
 } node_stats_t;
 

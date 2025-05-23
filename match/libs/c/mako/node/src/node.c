@@ -93,9 +93,7 @@
             ${", " if idx>0 else ""}void* out_${out.name}_pt
         % endfor
     ){
-        % if target.timer_start_fn != "":
-            ${target.timer_start_fn}();
-        % endif
+        
 
         // Write args (input and output tensor addresses) in shared memory
         volatile uint32_t* args = (volatile uint32_t*)${exec_module.shared_memory_extern_addr};
@@ -114,9 +112,13 @@
         % endfor
 
         // Set start signal - TODO send interrupt
-        ${exec_module.host_send_task_fn}(args, ${node_idx});
+        ${target.print_fn}("[HOST] Writing node_id (${node_idx} + 1) in %p. Now waiting...\r\n", args);
 
-        ${target.print_fn}("[HOST] Written node_id (${node_idx} + 1) in %p. Now waiting...\r\n", args);
+        % if target.timer_start_fn != "":
+            ${target.timer_start_fn}();
+        % endif
+
+        ${exec_module.host_send_task_fn}(args, ${node_idx});
 
         // Wait completion - TODO this need to be reconsidered for parallel node execution
         int error = ${exec_module.host_wait_end_of_task_fn}(args, ${node_idx});
@@ -132,6 +134,8 @@
             ${name}_stats.compute_cycles = args[9 + 0];
             ${name}_stats.load_cycles = args[9 + 1];
             ${name}_stats.store_cycles = args[9 + 2];
+            ${name}_stats.load_bytes = args[9 + 3];
+            ${name}_stats.store_bytes = args[9 + 4];
         % endif
 
         ${target.print_fn}("[HOST] Offload device finished.\r\n");
@@ -141,6 +145,8 @@
         ${target.print_fn}("       Compute Cycles: %d\r\n", ${name}_stats.compute_cycles);
         ${target.print_fn}("       Load Cycles: %d\r\n", ${name}_stats.load_cycles);
         ${target.print_fn}("       Store Cycles: %d\r\n", ${name}_stats.store_cycles);
+        ${target.print_fn}("       Load Bytes: %d\r\n", ${name}_stats.load_bytes);
+        ${target.print_fn}("       Store Bytes: %d\r\n", ${name}_stats.store_bytes);
 
         return 0;
     }
