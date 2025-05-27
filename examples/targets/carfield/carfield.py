@@ -62,16 +62,17 @@ class Carfield(MatchTarget):
         self.alloc_fn = "" # should use stack
         self.free_fn = ""
         # external memory management
-        self.allocate_ext_mem = "pulp_init_ram"
-        self.load_file_to_ext_mem_fn = "pulp_load_file"
-        self.load_to_ext_mem_fn = "pulp_memcpy_to_ram"
-        self.load_from_ext_mem_fn = "pulp_memcpy_from_ram"
-        self.free_external_mem = "pulp_shutdown_ram"
+        self.allocate_ext_mem = "carfield_init_ram"
+        self.load_file_to_ext_mem_fn = "carfield_load_file_to_ram"
+        self.load_to_ext_mem_fn = "carfield_memcpy_to_ram"
+        self.load_from_ext_mem_fn = "carfield_memcpy_from_ram"
+        self.free_external_mem = "carfield_free_ram"
         # offload dma
         self.offload_dma_fn = "handle_host_dma_transfer"
         self.print_fn = "mini_printf"
         self.timer_start_fn = "carfield_timer_start"
         self.timer_stop_fn = "carfield_timer_stop"
+        self.fix_io_tensors_in_ext_mem = False
 
     def network_transformations(self, opts):
         return [

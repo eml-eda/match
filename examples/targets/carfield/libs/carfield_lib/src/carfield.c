@@ -200,3 +200,26 @@ uint64_t carfield_timer_stop() {
     volatile uint64_t time = readd(CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_CNT_LO_OFFSET);
     return time;
 }
+
+// External memory management
+
+void* carfield_init_ram(size_t size) {
+    // TODO
+    return NULL;
+}
+
+void carfield_load_file_to_ram(const char* file_name, void* dst, size_t size) {
+    // TODO
+}
+
+void carfield_memcpy_from_ram(void* loc, const void* ext, size_t size) {
+    handle_host_dma_transfer(ext, loc, size);
+}
+
+void carfield_memcpy_to_ram(const void* loc, void* ext, size_t size) {
+    handle_host_dma_transfer(loc, ext, size);
+}
+
+void carfield_free_ram(void* ext, size_t size) {
+    // TODO
+}

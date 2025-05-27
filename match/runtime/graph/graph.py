@@ -222,7 +222,8 @@ class MatchTVMGraphRuntime:
             calls_idxs=[node.node_id for node in nodes],
             nodes=nodes,
             out_path=self.out_path,
-            algorithm="match"
+            algorithm="match",
+            fix_io_tensors_in_ext_mem=self.target.fix_io_tensors_in_ext_mem,
         )
         self.mem_needed_bytes, self.ext_mem_needed_bytes = self.mem_planner.generate()
         inputs = [tens for tens in mem_tensors if tens.is_input]

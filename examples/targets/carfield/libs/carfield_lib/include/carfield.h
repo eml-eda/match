@@ -27,6 +27,13 @@ void handle_host_dma_transfer(
 void carfield_timer_start();
 uint64_t carfield_timer_stop();
 
+// External memory management
+void* carfield_init_ram(size_t size);
+void carfield_load_file_to_ram(const char* file_name, void* dst, size_t size);
+void carfield_memcpy_from_ram(void* loc, const void* ext, size_t size);
+void carfield_memcpy_to_ram(const void* loc, void* ext, size_t size);
+void carfield_free_ram(void* ext, size_t size);
+
 // Host interrupt related things
 
 extern volatile uint32_t last_completed_node_id;

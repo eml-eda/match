@@ -12,7 +12,8 @@ class MatchMemoryPlanner:
         calls_idxs: List=[],
         nodes: List=[],
         out_path: str="output_path",
-        algorithm: str="match"
+        algorithm: str="match",
+        fix_io_tensors_in_ext_mem: bool=True
     ):
         self.mem_tensors = mem_tensors
         self.available_soc_bytes = available_soc_bytes
@@ -43,7 +44,8 @@ class MatchMemoryPlanner:
                 self.output_memory_usage += tensor.elems * tensor.dtype.itemsize
         self.total_memory_needed_bytes = self.input_memory_usage + self.output_memory_usage + self.constant_memory_usage + max(self.intermediate_memory_usage)
         self.total_memory_needed_bytes_w_consts = self.input_memory_usage + self.output_memory_usage + max(self.overall_intermediate_memory_usage)
-    
+        self.fix_io_tensors_in_ext_mem = fix_io_tensors_in_ext_mem
+        
     @property
     def external_memory_needed(self):
         return self.total_memory_needed_bytes > self.available_soc_bytes
@@ -204,7 +206,7 @@ class MatchMemoryPlanner:
         try:
             if self.algorithm=="match":
                 return self.match_mem_planner_impl(
-                    tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if tensor.is_output or tensor.is_input]
+                    tensor_fixed_to_ext_mem= [tensor.name for tensor in self.mem_tensors if tensor.is_output or tensor.is_input] if self.fix_io_tensors_in_ext_mem else []
                 )
             else:
                 raise Exception(f"[MEMORY PLANNER] Algorithm {self.algorithm} not implemented")

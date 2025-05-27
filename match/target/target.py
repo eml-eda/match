@@ -130,6 +130,7 @@ class MatchTarget(ABC):
         self.other_files_to_copy = []
         self.timer_start_fn = ""
         self.timer_stop_fn = ""
+        self.fix_io_tensors_in_ext_mem = True
         for exec_module in exec_modules:
             self.add_exec_module(exec_module)
             self.exec_modules_dict[exec_module.name]=exec_module
