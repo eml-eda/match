@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#ifdef CLUSTER_COMPILATION
+#ifdef __pulp_cluster__
 #include "pulp.h"
 #endif
 

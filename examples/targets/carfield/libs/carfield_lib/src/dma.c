@@ -21,7 +21,7 @@ void dma_transfer_hwc_to_chw(dma_transfer_cfg_t conf) {
   const int size_2d = conf.number_of_1d_copies * conf.number_of_2d_copies;
 
   for (int i = start_fm_channel; i < end_fm_channel; i++) {
-    unsigned int dma_cmd = plp_dma_getCmd(conf.dir, size_2d, 1, 0, 0, 0);
+    unsigned int dma_cmd = plp_dma_getCmd(conf.dir, size_2d, 1, 1, 1, 1);
     plp_dma_cmd_push_2d(dma_cmd, loc, ext, conf.stride_1d, 1);
     ext += 1; // next channel
     loc += conf.number_of_1d_copies * conf.number_of_2d_copies;
@@ -30,13 +30,13 @@ void dma_transfer_hwc_to_chw(dma_transfer_cfg_t conf) {
 
 void dma_transfer_1d_async(dma_transfer_cfg_t conf) {
   unsigned int dma_cmd =
-      plp_dma_getCmd(conf.dir, conf.length_1d_copy, 0, 0, 0, 0);
+      plp_dma_getCmd(conf.dir, conf.length_1d_copy, 0, 1, 1, 1);
   plp_dma_cmd_push(dma_cmd, conf.loc, conf.ext);
 }
 
 void dma_transfer_2d_async(dma_transfer_cfg_t conf) {
   const int size_2d = conf.number_of_1d_copies * conf.length_1d_copy;
-  unsigned int dma_cmd = plp_dma_getCmd(conf.dir, size_2d, 1, 0, 0, 0);
+  unsigned int dma_cmd = plp_dma_getCmd(conf.dir, size_2d, 1, 1, 1, 1);
   plp_dma_cmd_push_2d(dma_cmd, conf.loc, conf.ext, conf.stride_1d,
                       conf.length_1d_copy);
 }
