@@ -33,6 +33,7 @@ def numpy_dtype_to_c_type(dtype):
     
     # Mapping NumPy dtype to C type
     mapping = {
+        'float16': '_Float16',  # or 'float' in C99
         'float32': 'float',
         'float64': 'double',
         'int32': 'int',

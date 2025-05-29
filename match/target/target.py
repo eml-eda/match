@@ -17,7 +17,7 @@ import tvm
 
 import traceback as tb
 
-HOST_MEM_SIZE = 8192
+HOST_MEM_SIZE = 8192 * 1024
 
 class PatternResult:
     """Class that stores all the information that may be relevant to cache a result of a node that we want to compile

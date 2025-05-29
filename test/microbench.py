@@ -7,7 +7,7 @@ import numpy as np
 from networks import RESNET_18_MAPPER, RESNET_18_NODES, VIT_MAPPER, VIT_NODES
 
 from quants import create_conv_ex, create_dense_ex, create_simple_sum_ex, create_sumnet_ex
-from mini import create_dense_conv_dense_ex, create_easy_dense_int32_ex
+from mini import create_dense_conv_dense_ex, create_easy_dense_int32_ex, create_dense_conv_dense_fp16_ex
 
 
 MICROBENCH_MAPPER = {
@@ -15,6 +15,7 @@ MICROBENCH_MAPPER = {
     "dense":create_dense_ex,
     "simple_sum":create_simple_sum_ex,
     "dense_conv_dense":create_dense_conv_dense_ex,
+    "dense_conv_dense_fp16":create_dense_conv_dense_fp16_ex,
     "easy_dense_int32":create_easy_dense_int32_ex,
     "sumnet":create_sumnet_ex,
 }

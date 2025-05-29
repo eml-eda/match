@@ -83,6 +83,7 @@ inline void ${name}_update_${dep_dim.name}(){
         inline void ${name}_block_${block_idx}_loop_${lp.name}_set(){
             ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
             ${name}_${lp.dim.name}->curr_size = ${lp.step};
+            ${name}_${lp.dim.name}->curr_max_size = ${lp.step};
             % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
             ${name}_update_${dep_dim}();
             % endfor

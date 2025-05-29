@@ -234,16 +234,17 @@ def create_random_array(shape: Tuple[int, ...], dtype: str, min_val=None, max_va
     minimum to maximum depending on the data type:
     E.g. in8 --> [-128, 127]
     """
+    float_dtype = np.issubdtype(dtype, np.floating)
     def get_dtype_range():
         try:
             if min_val is not None and isinstance(min_val, (float,int)):
                 dtype_min = min_val
             else:
-                dtype_min = np.iinfo(dtype).min
+                dtype_min = np.finfo(dtype).min if float_dtype else np.iinfo(dtype).min
             if max_val is not None and isinstance(max_val, (float,int)):
                 dtype_max = max_val
             else:
-                dtype_max = np.iinfo(dtype).max
+                dtype_max = np.finfo(dtype).max if float_dtype else np.iinfo(dtype).max
         except ValueError:
             range_map = {
                 "int4": (-8, 7),
@@ -261,8 +262,7 @@ def create_random_array(shape: Tuple[int, ...], dtype: str, min_val=None, max_va
     if dtype in ['int4', 'int2']:
         np_dtype = 'int8'
     shape = [int(i) for i in shape]
-    np_array = np.random.randint(low=dtype_min, high=dtype_max+1,
-                                 size=shape, dtype=np_dtype)
+    np_array = np.random.rand(*shape).astype(np_dtype) if float_dtype else np.random.randint(low=dtype_min, high=dtype_max+1, size=shape, dtype=np_dtype)
     return numpy_to_array(np_array, dtype)
 
 def create_build_dir(build_path: str = "./build",

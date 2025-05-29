@@ -227,6 +227,9 @@ class MatchModel:
                 "-I"+os.path.join(tvm.__path__[0], "../..", "3rdparty", "dlpack", "include"),
                 "-I"+os.path.join(tvm.__path__[0], "../..", "include"),
             ]
+            other_flags = [
+                "-Dhalf=_Float16",
+            ]
             host_only_lib_path = f"{build_dir}/host_only_lib_{model_name}.so"
             tvm.contrib.cc.create_shared(
                 output=host_only_lib_path,
@@ -234,7 +237,7 @@ class MatchModel:
                     f"{build_dir}/codegen/host/src/lib0.c",
                     f"{build_dir}/codegen/host/src/lib1.c"
                 ],
-                options=include_paths
+                options=include_paths+other_flags,
             )
             host_module = tvm.runtime.load_module(host_only_lib_path)
             # read the json of the mod and the params to build the runtime
