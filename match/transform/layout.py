@@ -9,7 +9,7 @@ NCHW_TO_NHWC_OPERATORS_SET = (
 )
 LAYOUT_FROM_TO = {"data_layout":{"from":"NCHW","to":"NHWC"},"kernel_layout":{"from":"OIHW","to":"HWIO"},"layout":{"from":"NCHW","to":"NHWC"}}
 
-desired_layouts = {"nn.conv2d": ["NHWC", "HWIO"], "nn.max_pool2d": ["NHWC"], "nn.avg_pool2d": ["NHWC"], "nn.global_max_pool2d": ["NHWC"], "nn.global_avg_pool2d": ["NHWC"], "nn.batch_norm": ["NHWC"], "nn.instance_norm": ["NHWC"], "nn.layer_norm": ["NHWC"]}
+desired_layouts = {"nn.conv2d": ["NHWC", "HWIO"], "nn.conv3d": ["NDHWC", "DHWIO"], "nn.max_pool2d": ["NHWC"], "nn.avg_pool2d": ["NHWC"], "nn.global_max_pool2d": ["NHWC"], "nn.global_avg_pool2d": ["NHWC"], "nn.batch_norm": ["NHWC"], "nn.instance_norm": ["NHWC"], "nn.layer_norm": ["NHWC"]}
 MatchLayoutNCHWtoNHWCTVM = relay.transform.ConvertLayout(desired_layouts)
 
 

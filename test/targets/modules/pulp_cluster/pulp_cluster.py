@@ -134,6 +134,20 @@ class PulpCluster(ExecModule):
     
     def partitioning_patterns(self):
         
+        def conv3d_pt_requant():
+            #Create pattern for a 3D Conv block, with bias and ReLU.
+            conv3d = is_op("nn.conv3d")(
+                wildcard(), wildcard()
+            )
+            conv3d = is_op("cast")(conv3d) | conv3d
+            bias_add = is_op("nn.bias_add")(conv3d, wildcard()) | is_op("add")(conv3d, wildcard())
+            scale = is_op("multiply")(conv3d, wildcard()) | is_op("multiply")(wildcard(), conv3d)
+            bias = is_op("add")(scale, wildcard()) | is_op("add")(wildcard(), scale)
+            right_shift = is_op("right_shift")(bias_add | bias, is_constant())
+            clip = is_op("clip")(right_shift)
+            cast = is_op("cast")(clip)
+            return cast
+
         def conv_pt_requant():
             #Create pattern for a 2D Conv block, with bias and ReLU.
             conv2d = is_op("nn.conv2d")(
@@ -222,6 +236,7 @@ class PulpCluster(ExecModule):
             return True
 
         return [
+            PartitioningPattern(name="conv3d",pattern=conv3d_pt_requant,additional_checks=only_out_uint8),
             PartitioningPattern(name="dense_out",pattern=dense_pt_out),
             PartitioningPattern(name="dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
             PartitioningPattern(name="conv2d",pattern=conv_pt_requant,additional_checks=only_std_convs),

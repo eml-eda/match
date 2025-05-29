@@ -4,6 +4,7 @@ from match.dim.dim import MatchDim
 from match.node.node import MatchNode
 from match.ops.conv1d import MatchOpConv1D
 from match.ops.conv2d import MatchOpConv2D
+from match.ops.conv3d import MatchOpConv3D
 from match.ops.dense import MatchOpDense
 from match.tensor.tensor import MatchTensor
 
@@ -46,6 +47,14 @@ class MatchNodeToZigZagParser:
         self.o_tensor = self.outs[0]
         self.w_tensor = None if self.num_vars>1 or self.num_consts==0 else self.consts[0]
 
+        self.workload_dimensions_relations = [
+            f"ix=1*ox+1*fx",
+            f"iy=1*oy+1*fy",
+        ]
+        self.workload_padding = {
+            "IY": (self.padding[0], self.padding[2]),
+            "IX": (self.padding[1], self.padding[3]),
+        }
         self.pr_loop_dim_size = {"IY":1, "IX":1} if self.w_tensor is not None else {}
         self.operand_source = {"W": [], "I": []} if self.w_tensor is not None else {"X":[], "Y":[]}
         self.constant_operands = ["W"] if self.w_tensor is not None else []
@@ -77,7 +86,26 @@ class MatchNodeToZigZagParser:
         def get_io_from_layout(dims: List[MatchDim]=[], layout: str="NCHW", tensor: MatchTensor=None, key: str="K"):
             # conv2d and other 4 dims operators
             if len(dims)==5:
-                if layout=="NCHWc16":
+                if layout=="NDHWC" or layout=="ODHWI":
+                    # layout is ndhwc
+                    n = dims[0]
+                    c = dims[4]
+                    d = dims[1]
+                    h = dims[2]
+                    w = dims[3]
+                elif layout=="NCDHW" or layout=="OIDHW":
+                    n = dims[0]
+                    c = dims[1]
+                    d = dims[2]
+                    h = dims[3]
+                    w = dims[4]
+                elif layout=="DHWIO":
+                    n = dims[4]
+                    c = dims[3]
+                    d = dims[0]
+                    h = dims[1]
+                    w = dims[2]
+                elif layout=="NCHWc16":
                     n = dims[0]
                     c = dims[1]
                     h = dims[2]
@@ -92,6 +120,8 @@ class MatchNodeToZigZagParser:
                         return h
                     if key=="FX":
                         return w
+                    if key=="FD":
+                        return d
                 if tensor.tensor_type=="output":
                     if key=="B":
                         return n
@@ -101,6 +131,8 @@ class MatchNodeToZigZagParser:
                         return h
                     if key=="OX":
                         return w
+                    if key=="OD":
+                        return d
                 if tensor.tensor_type=="var":
                     if key=="B":
                         return n
@@ -110,8 +142,10 @@ class MatchNodeToZigZagParser:
                         return h
                     if key=="IX":
                         return w
+                    if key=="ID":
+                        return d
             if len(dims)==4:
-                if layout=="NHWC":
+                if layout=="NHWC" or layout=="OHWI":
                     # layout is nhwc
                     n = dims[0]
                     c = dims[3]
@@ -127,16 +161,6 @@ class MatchNodeToZigZagParser:
                     c = dims[1]
                     h = dims[2]
                     w = dims[3]
-                elif layout=="OIHW":
-                    n = dims[0]
-                    c = dims[1]
-                    h = dims[2]
-                    w = dims[3]
-                elif layout=="OHWI":
-                    n = dims[0]
-                    c = dims[3]
-                    h = dims[1]
-                    w = dims[2]
                 else:
                     #layout is nchw
                     n = dims[0]
@@ -213,18 +237,23 @@ class MatchNodeToZigZagParser:
             tensor = self.w_tensor
         if name=="FX":
             tensor = self.w_tensor
+        if name=="FD":
+            tensor = self.w_tensor
         if name=="IY":
             tensor = self.i_tensor
         if name=="IX":
             tensor = self.i_tensor
-
+        if name=="ID":
+            tensor = self.i_tensor
         if tensor is None:
             return self.match_node.default_dim
         
         found_dim = get_io_from_layout(dims=tensor.dims, layout=tensor.layout, tensor=tensor, key=name)
         if found_dim==self.match_node.default_dim:
             error_dim = False
-            if name in ["IX","FX","OX"] and len(tensor.dims)>=4:
+            if name in ["ID","FD","OD"] and len(tensor.dims)>=5:
+                error_dim = True
+            elif name in ["IX","FX","OX"] and len(tensor.dims)>=4:
                 error_dim = True
             elif name in ["IY","FY","OY"] and len(tensor.dims)>=3:
                 error_dim = True
@@ -249,14 +278,11 @@ class MatchNodeToZigZagParser:
                 "match_node": self.match_node,
                 "operator_type": self.pattern_name,
                 "equation": self.equation,
-                "dimension_relations": [
-                    f"ix={self.strides[1]}*ox+{self.dilations[1]}*fx",
-                    f"iy={self.strides[0]}*oy+{self.dilations[0]}*fy",
-                ],
+                "dimension_relations": self.workload_dimensions_relations,
                 "loop_dim_size": self.loop_dim_size,
                 "operand_precision": self.operand_precision,
                 "pr_loop_dim_size": self.pr_loop_dim_size,
-                "padding": {"IY":(self.padding[0],self.padding[2]),"IX":(self.padding[1],self.padding[3])},
+                "padding": self.workload_padding,
                 "strides": self.strides,
                 "operand_source": self.operand_source,
                 "constant_operands": self.constant_operands,
@@ -266,7 +292,9 @@ class MatchNodeToZigZagParser:
     
     def parse(self):
         # TODO: currently its a sort of priority queue of operations, should be done better
-        if "conv2d" in self.match_node.ops_occurrences:
+        if "conv3d" in self.match_node.ops_occurrences:
+            self.visit_conv3d()
+        elif "conv2d" in self.match_node.ops_occurrences:
             self.visit_conv2d()
         elif "conv1d" in self.match_node.ops_occurrences:
             self.visit_conv1d()
@@ -291,6 +319,14 @@ class MatchNodeToZigZagParser:
         self.kernel_size = conv1d_node.kernel_size + (1,)
         # as if it was height only
         self.padding = (self.padding[0], 0, self.padding[1], 0)
+        self.workload_dimensions_relations = [
+            f"ix=1*ox+1*fx",
+            f"iy={self.strides[0]}*oy+{self.dilations[0]}*fy",
+        ]
+        self.workload_padding = {
+            "IY": (self.padding[0], self.padding[2]),
+            "IX": (0, 0),
+        }
         # get sizes
         o_n, o_c, o_h = [self.get_dim_name_by_name(key).size for key in ["B","K","OY"]]
         i_h = self.get_dim_name_by_name("IY").size
@@ -307,7 +343,7 @@ class MatchNodeToZigZagParser:
         if conv1d_node.depthwise:
             self.operand_source_dimension_mapping["I"]["C"]="K"
             self.equation = "O[b][k][oy][ox]+=W[k][c][fy]*I[b][k][iy]"
-        
+    
     def visit_conv2d(self):
         # get conv attrs
         conv2d_node: MatchOpConv2D = self.match_node.ops["conv2d"]
@@ -320,6 +356,14 @@ class MatchNodeToZigZagParser:
         i_h,i_w = [self.get_dim_name_by_name(key).size for key in ["IY","IX"]]
         w_cin = self.get_dim_name_by_name("C").size
         
+        self.workload_dimensions_relations = [
+            f"ix={self.strides[1]}*ox+{self.dilations[1]}*fx",
+            f"iy={self.strides[0]}*oy+{self.dilations[0]}*fy",
+        ]
+        self.workload_padding = {
+            "IY": (self.padding[0], self.padding[2]),
+            "IX": (self.padding[1], self.padding[3]),
+        }
         self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]"
         self.loop_dim_size["B"] = o_n
         self.loop_dim_size["K"] = o_c
@@ -335,6 +379,47 @@ class MatchNodeToZigZagParser:
             self.operand_source_dimension_mapping["I"]["C"]="K"
             self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"
     
+    def visit_conv3d(self):
+        conv3d_node: MatchOpConv3D = self.match_node.ops["conv3d"]
+        self.strides = conv3d_node.strides
+        self.dilations = conv3d_node.dilation
+        self.padding = conv3d_node.padding
+        self.kernel_size = conv3d_node.kernel_size
+        # get sizes
+        o_n, o_c, o_d, o_h, o_w = [self.get_dim_name_by_name(key).size for key in ["B","K","OD","OY","OX"]]
+        i_d, i_h, i_w = [self.get_dim_name_by_name(key).size for key in ["ID","IY","IX"]]
+        w_cin = self.get_dim_name_by_name("C").size
+
+        self.workload_dimensions_relations = [
+            f"ix={self.strides[2]}*ox+{self.dilations[2]}*fx",
+            f"iy={self.strides[1]}*oy+{self.dilations[1]}*fy",
+            f"id={self.strides[0]}*od+{self.dilations[0]}*fd",
+        ]
+        self.workload_padding = {
+            "ID": (self.padding[0], self.padding[3]),
+            "IY": (self.padding[1], self.padding[4]),
+            "IX": (self.padding[2], self.padding[5]),
+        }
+        self.equation = "O[b][k][od][oy][ox]+=W[k][c][fd][fy][fx]*I[b][c][id][iy][ix]"
+        self.loop_dim_size["B"] = o_n
+        self.loop_dim_size["K"] = o_c
+        self.loop_dim_size["C"] = w_cin
+        self.loop_dim_size["OD"] = o_d
+        self.loop_dim_size["OY"] = o_h
+        self.loop_dim_size["OX"] = o_w
+        self.loop_dim_size["FD"] = self.kernel_size[0]
+        self.loop_dim_size["FY"] = self.kernel_size[1]
+        self.loop_dim_size["FX"] = self.kernel_size[2]
+        # dependencies dims
+        self.pr_loop_dim_size["ID"] = i_d
+        self.pr_loop_dim_size["IY"] = i_h
+        self.pr_loop_dim_size["IX"] = i_w
+        self.operand_source_dimension_mapping["I"]["ID"]="OD"
+        self.spatially_unrolled_dimensions.append("FD")
+        if conv3d_node.depthwise:
+            self.operand_source_dimension_mapping["I"]["C"]="K"
+            self.equation = "O[b][k][od][oy][ox]+=W[k][c][fd][fy][fx]*I[b][k][id][iy][ix]"
+
     def visit_dense(self):
         dense_node: MatchOpDense = self.match_node.ops["dense"]
 

@@ -97,8 +97,10 @@ class ZigZagMatchCostModel(CostModelEvaluation):
     
     def calc_relevancy_map(self):
         dense = "dense" in self.match_node.ops_occurrences
+        conv3d = "conv3d" in self.match_node.ops_occurrences
         conv2d = "conv2d" in self.match_node.ops_occurrences
         conv1d = "conv1d" in self.match_node.ops_occurrences
+        conv3d_dw = conv3d and self.match_node.ops["conv3d"].depthwise
         conv2d_dw = conv2d and self.match_node.ops["conv2d"].depthwise
         conv1d_dw = conv1d and self.match_node.ops["conv1d"].depthwise
         add = (not dense) and (not conv2d) and "add" in self.match_node.ops_occurrences
@@ -107,6 +109,12 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                 "I": ["C", "OY", "OX"],
                 "O": ["K", "OY", "OX"],
                 "W": ["K", "C", "FY", "FX"],
+            }
+        elif conv3d:
+            ordered_relevant_loops = {
+                "I": [['OD','OY','OX','C'],[("C" if not (conv2d_dw or conv1d_dw) else "K"), "OD", "OY", "OX"]][1],
+                "O": [['OD','OY','OX','K'],["K", "OD", "OY", "OX"]][1],
+                "W": [['K','C','FD','FY','FX'],["K", "C", "FD", "FY", "FX"]][1],
             }
         elif conv2d or conv1d:
             ordered_relevant_loops = {
@@ -127,9 +135,12 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.relevancy_map = ordered_relevant_loops
 
     def calc_sizes_per_mem_level(self):
+        conv3d = "conv3d" in self.match_node.ops_occurrences
         conv2d = "conv2d" in self.match_node.ops_occurrences
         conv1d = "conv1d" in self.match_node.ops_occurrences
-        if conv2d:
+        if conv3d:
+            strides = self.match_node.ops["conv3d"].strides
+        elif conv2d:
             strides = self.match_node.ops["conv2d"].strides
         elif conv1d:
             strides = self.match_node.ops["conv1d"].strides + (1,)
@@ -140,7 +151,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                 reldim: [prod(
                     [val[1] for m_lev in range(memory_level+1) for val in self.temp_mapping[operand][m_lev] if val[0] == reldim] +
                     [val[1] for val in self.spatial_sizes if val[0]==reldim] + [
-                        strides[0 if reldim=="OY" else 1] if operand in self.input_operands and reldim in ["OY","OX"] else 1
+                        strides[0 if (reldim=="OY" and conv3d) or reldim=="OD" else 1 if (reldim=="OY" and conv3d) or (reldim=="OX" and not conv3d) else 2] if operand in self.input_operands and reldim in ["OD","OY","OX"] else 1
                     ]
                 ) for memory_level in range(len(self.temp_mapping[operand]))]
                 for reldim in self.relevancy_map[operand]
@@ -208,9 +219,12 @@ class ZigZagMatchCostModel(CostModelEvaluation):
             if "fx" in self.layer.layer_attrs["dimension_relations"][0] and sizes_per_mem_level["W"]["FX"][0]>1:
                 if sizes_per_mem_level["I"]["OX"][0] != sizes_per_mem_level["I"]["OX"][1]:
                     sizes_per_mem_level["I"]["OX"][0] += sizes_per_mem_level["W"]["FX"][0]
-            if "fy" in self.layer.layer_attrs["dimension_relations"][0] and sizes_per_mem_level["W"]["FY"][0]>1:
+            if "fy" in self.layer.layer_attrs["dimension_relations"][1] and sizes_per_mem_level["W"]["FY"][0]>1:
                 if sizes_per_mem_level["I"]["OY"][0] != sizes_per_mem_level["I"]["OY"][1]:
                     sizes_per_mem_level["I"]["OY"][0] += sizes_per_mem_level["W"]["FY"][0]
+            if "fd" in self.layer.layer_attrs["dimension_relations"][2] and sizes_per_mem_level["W"]["FD"][0]>1:
+                if sizes_per_mem_level["I"]["OD"][0] != sizes_per_mem_level["I"]["OD"][1]:
+                    sizes_per_mem_level["I"]["OD"][0] += sizes_per_mem_level["W"]["FD"][0]
         for operand in self.operands:
             if self.layer.memory_operand_links[operand] in lowest_const_mem.operands:
                 mem_bytes-=prod([val[0] for val in sizes_per_mem_level[operand].values()])*self.precision[operand]//8
