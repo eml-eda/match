@@ -1,14 +1,19 @@
 import os
-import pathlib
 import json
+import pathlib
 import subprocess
 from typing import Dict, List
-from mako.template import Template
+
 import numpy as np
-from tvm import relay as relay_tvm
-import match
-from tvm.ir import IRModule
+
+from mako.template import Template
+
 import tvm
+from tvm import relay as relay_tvm
+from tvm.ir import IRModule
+
+import match
+
 
 def get_default_inputs(mod: IRModule=None, params: Dict[str, tvm.runtime.ndarray.NDArray]={}, input_files: List[str]=[], min_input_val=None, max_input_val=None):
     default_inputs = []
@@ -224,3 +229,31 @@ def save_all_schedules():
         scheds_file.writelines(searched_schedules)
     # with open(f"{get_output_path()}/match_searched_tmaps.log","w") as scheds_file:
     #     scheds_file.writelines(tmap_searched)
+    
+
+def format_c_code(code: str) -> str:
+    try: # astyle
+        result = subprocess.run(
+            ["astyle", "--style=kr", "--stdout"],
+            input=code.encode(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        if result.returncode == 0:
+            return result.stdout.decode()
+    except FileNotFoundError:
+        pass
+    
+    try: # clang-format
+        result = subprocess.run(
+            ["clang-format"],
+            input=code.encode(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        if result.returncode == 0:
+            return result.stdout.decode()
+    except FileNotFoundError:
+        pass
+
+    return code

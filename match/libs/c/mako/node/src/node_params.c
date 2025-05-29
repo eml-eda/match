@@ -130,7 +130,7 @@ MatchOps ${name}_ops_cnt_ = (MatchOps){
     .ops = ${name}_ops_
 };
 
-MatchCtx ${name}_ctx_ = (MatchCtx){
+volatile MatchCtx ${name}_ctx_ = (MatchCtx){
     .ctx_extension = 0x0,
     .tensors = &${name}_tensors_cnt_,
     .ops = &${name}_ops_cnt_,
@@ -139,10 +139,13 @@ MatchCtx ${name}_ctx_ = (MatchCtx){
     .pattern_name = ${pattern_name}
 };
 
-MatchCtx* ${name}_ctx = &${name}_ctx_;
+volatile MatchCtx* ${name}_ctx = &${name}_ctx_;
 
 % for block_idx,block in enumerate(schedule.blocks):
 % for loop_idx,lp in enumerate(block.loops):
-int ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
+volatile int ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
 % endfor
 % endfor
+
+// Node Profiling
+volatile node_stats_t ${name}_stats = {0};

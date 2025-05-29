@@ -8,17 +8,20 @@ import re
 import subprocess
 
 import numpy as np
+
+from mako.template import Template
+
+import tvm
+from tvm import relay
+
 from match.compile.c_graph import MatchCompilerCGraph
 from match.runtime.graph.graph import MatchTVMGraphRuntime
 from match.relay.get_relay import get_dyn_relay_from, get_relay_from
-from match.utils import save_all_relay,add_save_relay,reset_relay_list,reset_output_path,\
-                        set_output_path,reset_schedules,save_all_schedules
+from match.utils import save_all_relay,reset_relay_list,reset_output_path,set_output_path,reset_schedules,save_all_schedules,format_c_code
 from match.compile.c_aot import MatchCompilerCAoT
-from mako.template import Template
-
 from match.utils.utils import c_friendly_npvalue, get_executor, get_random_np_array, numpy_dtype_to_c_type, set_executor, set_model_name
-import tvm
-from tvm import relay
+
+
 
 EXCUTOR_COMPILER_CLS = {"aot":MatchCompilerCAoT, "graph":MatchCompilerCGraph}    
 
@@ -256,6 +259,8 @@ class MatchModel:
                 host_module=host_module,
             )
             subprocess.getoutput(f"rm {host_only_lib_path}")
+            
+            # Generate host graph runtime
             graph_runtime_template_data = graph_runtime.generate()
             graph_runtime_template_data["debug"] = debug
             graph_runtime_template_data["debug_fallback"] = debug_fallback
@@ -263,21 +268,54 @@ class MatchModel:
             graph_runtime_template_data["profile_fallback"] = profile_fallback
             try:
                 with open(f"{build_dir}/codegen/host/src/{model_name}_graph.c","w") as run_file:
-                    run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/src/graph.c").render(**graph_runtime_template_data))
+                    run_file.write(format_c_code(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/src/graph.c").render(**graph_runtime_template_data)))
                 with open(f"{build_dir}/codegen/host/include/{model_name}_graph.h","w") as run_file:
-                    run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/include/graph.h").render(**graph_runtime_template_data))
+                    run_file.write(format_c_code(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/include/graph.h").render(**graph_runtime_template_data)))
                 # params
                 with open(f"{build_dir}/codegen/host/src/{model_name}_params_data.c","w") as run_file:
-                    run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/src/params_data.c").render(**graph_runtime_template_data))
+                    run_file.write(format_c_code(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/src/params_data.c").render(**graph_runtime_template_data)))
                 with open(f"{build_dir}/codegen/host/include/{model_name}_params_data.h","w") as run_file:
-                    run_file.write(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/include/params_data.h").render(**graph_runtime_template_data))
+                    run_file.write(format_c_code(Template(filename = os.path.dirname(__file__)+"/../libs/c/mako/match/include/params_data.h").render(**graph_runtime_template_data)))
             except Exception as e:
                 # with open(f"{build_dir}/codegen/host/src/{model_name}_graph.html", "wb") as output_file:
                     # import mako
                     # output_file.write(mako.exceptions.html_error_template().render())
                 print(f"[TEMPLATE WRITER] Error processing graph runtime template")
                 raise e
+            
+            # Generate exec_modules offloaded graph runtimes when separate_build is needed
+            for exec_module in target.exec_modules:
+                if exec_module.separate_build:
+                    em_runtime_template_data = graph_runtime_template_data
+                    em_runtime_template_data['nodes'] = [node for node in graph_runtime_template_data['nodes'] if node.schedule and node.schedule.exec_module.name == exec_module.name]
+                    em_runtime_template_data['exec_module'] = exec_module
+                    em_runtime_template_data["mem_apis"] = exec_module.match_mem_apis()
+                    em_runtime_template_data["sync_apis"] = exec_module.match_sync_apis()
+                    em_runtime_template_data["platform_apis"] = exec_module.match_platform_apis()
+                    em_runtime_template_data["comp_apis"] = exec_module.match_comp_apis()
+                    
+                    try:
+                        template = os.path.dirname(__file__) + "/../libs/c/mako/match/src/offload_runtime_main.c"
+                        content = format_c_code(Template(filename=template).render(**em_runtime_template_data))
+                        run_filename = f"{build_dir}/codegen/host/src/{model_name}_offload_runtime_main.{exec_module.name}.c"
+                        with open(run_filename, "w") as f:
+                            f.write(content)
+                    except Exception as e:
+                        print(f"[TEMPLATE WRITER] Error processing {exec_module.name} runtime main.")
+                        raise e      
+                    
+                    try:
+                        template = os.path.dirname(__file__) + "/../libs/c/mako/match/include/offload_runtime_payload.h"
+                        content = format_c_code(Template(filename=template).render(**em_runtime_template_data))
+                        payload_filename = f"{build_dir}/codegen/host/include/{model_name}_{exec_module.name}_runtime_payload.h"
+                        with open(payload_filename, "w") as f:
+                            f.write(content)
+                    except Exception as e:
+                        print(f"[TEMPLATE WRITER] Error processing {exec_module.name} runtime payload header.")
+                        raise e    
+                     
             subprocess.getoutput(f"rm {build_dir}/mod.tar")
+            
         # create codegen if it doesn't exist
         if not Path(abs_out_path+"/codegen").is_dir():
             subprocess.getoutput(f"mkdir {abs_out_path}/codegen")

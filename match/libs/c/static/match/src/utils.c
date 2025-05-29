@@ -26,16 +26,16 @@ int match_byte_checksum_check(const char* data, int size, int checksum) {
     return sum - checksum;
 }
 
-void handle_int_classifier(int* output_pt, int classes, int runtime_status){
+void handle_int_classifier(int* output_pt, int classes, int runtime_status) {
     int max_idx = 0;
     int max_val = output_pt[0];
-    printf("[MATCH OUTPUT] Values:\n%d, ", max_val);
-    for(int idx=1; idx<classes; idx++){
+    printf("[MATCH OUTPUT] Values:\r\n%d, ", max_val);
+    for (int idx = 1; idx < classes; idx++) {
         printf("%d, ", output_pt[idx]);
-        if(output_pt[idx]>max_val){
+        if (output_pt[idx] > max_val) {
             max_val = output_pt[idx];
             max_idx = idx;
         }
     }
-    printf("\n[MATCH OUTPUT] Label predicted %d with value %d\n", max_idx, max_val);
+    printf("\r\n[MATCH OUTPUT] Label predicted %d with value %d\r\n", max_idx, max_val);
 }

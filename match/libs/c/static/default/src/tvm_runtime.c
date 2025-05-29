@@ -31,7 +31,7 @@ void __attribute__((noreturn)) TVMPlatformAbort(tvm_crt_error_t error_code) {
 int TVMPlatformMemoryAllocate(size_t num_bytes, DLDevice dev, void** out_ptr) {
     *out_ptr = malloc(num_bytes);
     // Return nonzero exit code to caller on failure to allocate
-    if (*out_ptr == NULL){
+    if (*out_ptr == NULL) {
         return 1;
     }
     return 0;
@@ -42,9 +42,7 @@ int TVMPlatformMemoryFree(void* ptr, DLDevice dev) {
     return 0;
 }
 
-void TVMLogf(const char* msg, ...) {
-    printf(msg);
-}
+void TVMLogf(const char* msg, ...) { printf(msg); }
 
 TVM_DLL int TVMFuncRegisterGlobal(const char* name, TVMFunctionHandle f, int override) { return 0; }
 

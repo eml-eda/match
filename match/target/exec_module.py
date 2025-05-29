@@ -38,6 +38,9 @@ class MemoryApis:
         # MATCH decides the pointer but it doesn't store it
         # the exec module lib should keep it
         self.alloc_buffer = ""
+        
+        self.shared_memory_extern_addr = "offload_args"
+        
         """
         APIs and flags from the legacy lib
         DEFAULT_LAYOUT = {"O":"NCHW","I":"NCHW","W":"NCHW","X":"NCHW","Y":"NCHW"}
@@ -91,6 +94,11 @@ class PlatformApis:
         # and then freed
         self.init_module = ""
         self.free_module = ""
+        
+        self.smp_configured_core_guard = ""
+        self.smp_primary_core_guard = ""
+        
+        self.print_fn = "printf"
 
         """
         APIs and flags from the legacy lib
@@ -118,6 +126,7 @@ class SyncApis:
         # memory movement
         self.wait_buffer_parallel_tasks = "" # TODO: test
         self.wait_buffer_tile_computation = "" # TODO: test
+        self.smp_barrier = ""
         """
         unused APIs
         self.wait_prev_tile_computation = "" # not used
@@ -158,14 +167,25 @@ class ExecModule(ABC):
                  name: str="default_module",
                  libs_required: Dict[str, ModuleLib] = {},
                  **kwargs):
-        self.name=name
+        self.name = name
         self.FULL_DIM = sys.maxsize
         self.zigzag_optimal_spatial_mapping = None
         self.libs_required = libs_required
-        self.module_options=dict()
+        self.module_options = dict()
         self.backend = "ZigZag"
         # currently only ZigZag has been actually tested
         self.schedule_engine = "ZigZag"
+        # Requires a separate build -> main has to be generated
+        self.separate_build = False 
+        # Symmetric Multiprocessing -> same code on all cores
+        self.is_smp = False
+        # Shared Memory address
+        self.shared_memory_extern_addr = "offload_args"
+        # Only used when separated_build is True - TODO this should be reconsidered for paralell node execution
+        self.host_send_task_fn = ""
+        self.host_wait_end_of_task_fn = ""
+        self.timer_start_fn = ""
+        self.time_stop_fn = ""
 
     def include_libs(self):
         return []
