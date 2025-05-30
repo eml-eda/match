@@ -12,6 +12,7 @@ typedef enum {
     MATCH_OP_RIGHT_SHIFT = 7,
     MATCH_OP_CAST = 8,
     MATCH_OP_CONV1D = 9,
+    MATCH_OP_CONV3D = 10,
 } MATCH_OPS_CODE;
 
 #endif

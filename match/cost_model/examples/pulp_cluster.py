@@ -80,7 +80,6 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         temporal_mapping,
         access_same_data_considered_as_no_access=True,
     ):
-        self.ACCEPTED_UNEVEN_TILE_DIMENSIONS_ACT_OUT = ("K", "C")
         super(PulpClusterCostModel,self).__init__(
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=temporal_mapping,
@@ -94,8 +93,10 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
             min_innermost_loops=min([len(temporal_mapping_dict[operand][0]) for operand in operand_list])
             new_innermost_loops=min_innermost_loops
             max_tile_found=False
+            c_k_mapping = "C" in layer.layer_attrs["operand_source_dimension_mapping"]["I"] and layer.layer_attrs["operand_source_dimension_mapping"]["I"]["C"]=="K"
+            ACCEPTED_UNEVEN_TILE_DIMENSIONS_ACT_OUT = ("K", "C") if not c_k_mapping else ("C",)
             for idx in range(min_innermost_loops, len(temporal_mapping_dict["I"][0])):
-                if (not max_tile_found) and (temporal_mapping_dict["I"][0][idx][0] in self.ACCEPTED_UNEVEN_TILE_DIMENSIONS_ACT_OUT):
+                if (not max_tile_found) and (temporal_mapping_dict["I"][0][idx][0] in ACCEPTED_UNEVEN_TILE_DIMENSIONS_ACT_OUT):
                     new_innermost_loops=idx+1
                 else:
                     max_tile_found = True

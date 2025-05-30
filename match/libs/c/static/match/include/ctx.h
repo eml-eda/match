@@ -68,6 +68,18 @@ typedef struct MatchTensors_t {
 
 typedef struct {
     int idx;
+    int strides[3];
+    int dilation[3];
+    int padding[6];
+    int kernel_size[3];
+    int depthwise;
+    int groups;
+    const char* data_layout;
+    const char* kernel_layout;
+} MatchConv3DAttrs;
+
+typedef struct {
+    int idx;
     int strides[2];
     int dilation[2];
     int padding[4];

@@ -146,12 +146,13 @@ class ZigZagMatchCostModel(CostModelEvaluation):
             strides = self.match_node.ops["conv1d"].strides + (1,)
         else:
             strides = (1,1)
+        stride_length = len(strides)
         self.size_per_mem_level = {
             operand: {
                 reldim: [prod(
                     [val[1] for m_lev in range(memory_level+1) for val in self.temp_mapping[operand][m_lev] if val[0] == reldim] +
                     [val[1] for val in self.spatial_sizes if val[0]==reldim] + [
-                        strides[0 if (reldim=="OY" and conv3d) or reldim=="OD" else 1 if (reldim=="OY" and conv3d) or (reldim=="OX" and not conv3d) else 2] if operand in self.input_operands and reldim in ["OD","OY","OX"] else 1
+                        strides[0 if (reldim=="OY" and stride_length<3) or reldim=="OD" else 1 if (reldim=="OY" and stride_length>2) or (reldim=="OX" and stride_length<3) else 2] if operand in self.input_operands and reldim in ["OD","OY","OX"] else 1
                     ]
                 ) for memory_level in range(len(self.temp_mapping[operand]))]
                 for reldim in self.relevancy_map[operand]
@@ -215,14 +216,15 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         lowest_const_mem = self.mem_hierarchy_dict[constant_mem_key][0]
         mem_bytes = lowest_const_mem.memory_instance.size//8
         sizes_per_mem_level = self.size_per_mem_level
-        if "I" in self.operands:
-            if "fx" in self.layer.layer_attrs["dimension_relations"][0] and sizes_per_mem_level["W"]["FX"][0]>1:
+        if "I" in self.operands and "W" in self.operands:
+            dim_relations = " ; ".join(self.layer.layer_attrs["dimension_relations"])
+            if "FX" in sizes_per_mem_level["W"] and "fx" in dim_relations and sizes_per_mem_level["W"]["FX"][0]>1:
                 if sizes_per_mem_level["I"]["OX"][0] != sizes_per_mem_level["I"]["OX"][1]:
                     sizes_per_mem_level["I"]["OX"][0] += sizes_per_mem_level["W"]["FX"][0]
-            if "fy" in self.layer.layer_attrs["dimension_relations"][1] and sizes_per_mem_level["W"]["FY"][0]>1:
+            if "FY" in sizes_per_mem_level["W"] and "fy" in dim_relations and sizes_per_mem_level["W"]["FY"][0]>1:
                 if sizes_per_mem_level["I"]["OY"][0] != sizes_per_mem_level["I"]["OY"][1]:
                     sizes_per_mem_level["I"]["OY"][0] += sizes_per_mem_level["W"]["FY"][0]
-            if "fd" in self.layer.layer_attrs["dimension_relations"][2] and sizes_per_mem_level["W"]["FD"][0]>1:
+            if "FD" in sizes_per_mem_level["W"] and "fd" in dim_relations and sizes_per_mem_level["W"]["FD"][0]>1:
                 if sizes_per_mem_level["I"]["OD"][0] != sizes_per_mem_level["I"]["OD"][1]:
                     sizes_per_mem_level["I"]["OD"][0] += sizes_per_mem_level["W"]["FD"][0]
         for operand in self.operands:

@@ -2,6 +2,7 @@ import math
 import os
 from match.node.node import MatchNode
 from match.ops.conv2d import MatchOpConv2D
+from match.ops.conv3d import MatchOpConv3D
 from match.partition.utils import add_checks_get_first_op
 from match.schedule.buffer import MatchMemBuffer
 from match.schedule.schedule import MatchSchedule
@@ -76,6 +77,11 @@ class PulpCluster(ExecModule):
                     w_tensor.data = w_tensor.data.transpose(1,0)
                     w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]
                 w_tensor.layout = "CN"
+            elif "conv3d" in w_tensor.name:
+                if w_tensor.layout=="DHWIO":
+                    w_tensor.data = w_tensor.data.transpose(4,0,1,2,3)
+                    w_tensor.dims = [w_tensor.dims[4], w_tensor.dims[0], w_tensor.dims[1], w_tensor.dims[2], w_tensor.dims[3]]
+                w_tensor.layout = "ODHWI"
             elif "conv2d" in w_tensor.name:
                 if w_tensor.layout=="HWIO":
                     w_tensor.data = w_tensor.data.transpose(3,0,1,2)
@@ -106,6 +112,15 @@ class PulpCluster(ExecModule):
                                                    num_bytes=im2col_size_l1))
             # I searched in the pulp_nn lib but also for DW convs the pwt buffer(bufferB in pulp_nn_depthwise_generic declaration)
             # doesnt seem to be used anywhere...
+        elif engine=="ZigZag" and "conv3d" in pattern_name:
+            inp_tensor: MatchTensor = match_node.var_tensors[match_node.var_names[0]]
+            conv: MatchOpConv3D = match_node.ops["conv3d"]
+            filter_shape = conv.kernel_size
+            tile_inp_chs = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[4].size
+            im2col_size_l1 = 2 * self.NUM_CORES * math.prod(filter_shape) * tile_inp_chs
+            if im2col_size_l1:
+                schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="L1_SCRATCHPAD",
+                                                   num_bytes=im2col_size_l1))
 
     def platform_apis_def(self, platform_apis: PlatformApis=None, pattern_name: str="conv2d"):
         platform_apis.init_platform = "offload_to_pulp_cluster"
