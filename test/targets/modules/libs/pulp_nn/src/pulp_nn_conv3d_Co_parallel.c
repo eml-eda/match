@@ -426,3 +426,124 @@ void pulp_nn_conv3d_Co_parallel(
    }
    pi_cl_team_barrier(0);
 }
+
+
+void pulp_nn_conv3d_naive(
+  const uint8_t * pInBuffer,
+  uint8_t *       pIm2ColBuffer,
+  const int8_t *  bias,
+  uint8_t *       pOutBuffer,
+  const int8_t *  pWeight,
+  int32_t *       k,
+  int32_t *       lambda,
+  const uint16_t  out_mult,
+  const uint16_t  out_shift,
+  const uint16_t  dim_in_x,
+  const uint16_t  dim_in_y,
+  const uint16_t  dim_in_d,
+  const uint16_t  ch_in,
+  const uint16_t  dim_out_x,
+  const uint16_t  dim_out_y,
+  const uint16_t  dim_out_d,
+  const uint16_t  ch_out,
+  const uint16_t  dim_kernel_x,
+  const uint16_t  dim_kernel_y,
+  const uint16_t  dim_kernel_d,
+  const uint16_t  padding_y_top,
+  const uint16_t  padding_y_bottom,
+  const uint16_t  padding_x_left,
+  const uint16_t  padding_x_right,
+  const uint16_t  padding_d_front,
+  const uint16_t  padding_d_back,
+  const uint16_t  stride_x,
+  const uint16_t  stride_y,
+  const uint16_t  stride_d,
+  int             flag_relu,
+  int             flag_batch_norm
+){
+  int core_id = pi_core_id();
+  if(!core_id) {
+      printf("pulp_nn_conv3d_Co_parallel: dim_in_d=%d, dim_in_y=%d, dim_in_x=%d, ch_in=%d, dim_out_d=%d, dim_out_y=%d, dim_out_x=%d, ch_out=%d, dim_kernel_d=%d, dim_kernel_y=%d, dim_kernel_x=%d\n",
+          dim_in_d, dim_in_y, dim_in_x, ch_in,
+          dim_out_d, dim_out_y, dim_out_x, ch_out,
+          dim_kernel_d, dim_kernel_y, dim_kernel_x);
+      printf("pulp_nn_conv3d_Co_parallel: padding_y_top=%d, padding_y_bottom=%d, padding_x_left=%d, padding_x_right=%d, padding_d_front=%d, padding_d_back=%d\n",
+          padding_y_top, padding_y_bottom,
+          padding_x_left, padding_x_right,
+          padding_d_front, padding_d_back);
+      printf("pulp_nn_conv3d_Co_parallel: stride_y=%d, stride_x=%d, stride_d=%d\n",
+          stride_y, stride_x, stride_d);
+      printf("pulp_nn_conv3d_Co_parallel: flag_relu=%d, flag_batch_norm=%d\n",
+          flag_relu, flag_batch_norm);
+      printf("pulp_nn_conv3d_Co_parallel: out_mult=%d, out_shift=%d\n",
+          out_mult, out_shift);
+      printf("pulp_nn_conv3d_Co_parallel: first 4 weights [%d %d %d %d] first 4 acts [%d %d %d %d] first 4 scales [%d %d %d %d] first 4 biases [%d %d %d %d]\n",
+          pWeight[0], pWeight[1], pWeight[2], pWeight[3],
+          pInBuffer[0], pInBuffer[1], pInBuffer[2], pInBuffer[3],
+          k[0], k[1], k[2], k[3],
+          lambda[0], lambda[1], lambda[2], lambda[3]);
+      // Initialize the L1 scratchpad memory
+      for(int out_depth_idx=0; out_depth_idx<dim_out_d; out_depth_idx++) {
+          for(int out_y_idx=0; out_y_idx<dim_out_y; out_y_idx++) {
+              for(int out_x_idx=0; out_x_idx<dim_out_x; out_x_idx++) {
+                  for(int out_ch_idx=0; out_ch_idx<ch_out; out_ch_idx++) {
+                      int out_scale = k[out_ch_idx];
+                      int out_bias = lambda[out_ch_idx];
+                      int res = 0;
+                      for(int kernel_d=0; kernel_d<dim_kernel_d; kernel_d++) {
+                          int inp_depth_idx = out_depth_idx * stride_d - padding_d_front + kernel_d;
+                          if(inp_depth_idx < 0 || inp_depth_idx >= dim_in_d) {
+                              continue;
+                          }
+                          for(int kernel_y=0; kernel_y<dim_kernel_y; kernel_y++) {
+                              int inp_y_idx = out_y_idx * stride_y - padding_y_top + kernel_y;
+                              if(inp_y_idx < 0 || inp_y_idx >= dim_in_y) {
+                                  continue;
+                              }
+                              for(int kernel_x=0; kernel_x<dim_kernel_x; kernel_x++) {
+                                  int inp_x_idx = out_x_idx * stride_x - padding_x_left + kernel_x;
+                                  if(inp_x_idx < 0 || inp_x_idx >= dim_in_x) {
+                                      continue;
+                                  }
+                                  for(int in_ch_idx=0; in_ch_idx<ch_in; in_ch_idx++) {
+                                      uint8_t in_val = pInBuffer[
+                                          inp_depth_idx * dim_in_y * dim_in_x * ch_in +
+                                          inp_y_idx * dim_in_x * ch_in + inp_x_idx * ch_in + in_ch_idx
+                                      ];
+                                      int8_t weight_val = pWeight[
+                                          out_ch_idx * dim_kernel_d * dim_kernel_y * dim_kernel_x * ch_in +
+                                          kernel_d * dim_kernel_y * dim_kernel_x * ch_in +
+                                          kernel_y * dim_kernel_x * ch_in +
+                                          kernel_x * ch_in + in_ch_idx
+                                      ];
+                                      // printf("Processing: out_depth_idx=%d, out_y_idx=%d, out_x_idx=%d, out_ch_idx=%d, inp_depth_idx=%d, inp_y_idx=%d, inp_x_idx=%d, in_ch_idx=%d, in_val=%d, weight_val=%d mult should be %d res was %d so now should be %d\n",
+                                          // out_depth_idx, out_y_idx, out_x_idx, out_ch_idx,
+                                          // inp_depth_idx, inp_y_idx, inp_x_idx, in_ch_idx,
+                                          // in_val, weight_val, in_val * weight_val,
+                                          // res, res + in_val * weight_val);
+                                      res += in_val * weight_val;
+                                  }
+                              }
+                          }
+                      }
+                      // printf("Final result for out_depth_idx=%d, out_y_idx=%d, out_x_idx=%d, out_ch_idx=%d is %d\n",
+                          // out_depth_idx, out_y_idx, out_x_idx, out_ch_idx, res);
+                      res *= out_scale;
+                      // printf("After scaling by %d, result is %d\n", out_scale, res);
+                      res += out_bias;
+                      // printf("After adding bias %d, result is %d\n", out_bias, res);
+                      res = res >> out_shift;
+                      // printf("After shifting by %d, result is %d\n", out_shift, res);
+                      res = res > 0 ? res : 0; // ReLU activation
+                      // printf("After ReLU, result is %d\n", res);
+                      int out_idx = out_depth_idx * dim_out_y * dim_out_x * ch_out +
+                          out_y_idx * dim_out_x * ch_out +
+                          out_x_idx * ch_out + out_ch_idx;
+                      pOutBuffer[out_idx] = (uint8_t) res;
+                  }
+              }
+          }
+      }
+  }
+  pi_cl_team_barrier(0);
+}

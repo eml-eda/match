@@ -620,7 +620,12 @@ void pulp_nn_conv3d_wrapper(void* args){
             pad_top, pad_bottom, pad_left, pad_right
         );
     #endif
-    pulp_nn_conv3d_Co_parallel(
+    #ifdef CLUSTER_LIB_USE_NAIVE_CONV3D
+    pulp_nn_conv3d_naive
+    #else
+    pulp_nn_conv3d_Co_parallel
+    #endif
+    (
         // activations pt  
         tensors[0].pt, // acts pt
         // im2col
@@ -652,7 +657,7 @@ void pulp_nn_conv3d_wrapper(void* args){
         pad_right, // pad right
         pad_front, // pad front
         pad_back, // pad back
-        conv_attrs->strides[0], // stride width
+        conv_attrs->strides[2], // stride width
         conv_attrs->strides[1], // stride height
         conv_attrs->strides[0], // stride depth
         1, // activation is on

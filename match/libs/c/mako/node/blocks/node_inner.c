@@ -76,8 +76,12 @@
         % endfor
         % for const_tensor in schedule.tensors.values():
             % if const_tensor.tensor_type=="const":
+                % if exec_module.separate_build:
                 void* ${name}_${const_tensor.name}_pt = (void*) real_args[${tensor_cnt}];\
                 <% tensor_cnt += 1 %>
+                % else:
+                void* ${name}_${const_tensor.name}_pt = ${name}_${const_tensor.name}_data;\
+                % endif
             % endif
         % endfor
     % endif
@@ -252,7 +256,7 @@
                         ${name}_${tensor.name}->pt = ${name}_${tensor.name}->pts[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}] + (tile_mem_offset>0?tile_mem_offset:0);
                         % for t_dim_idx, t_dim in enumerate(tensor.dims):
                             % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependencies for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]] or any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
-                                ${name}_${tensor.name}_tiles_[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].curr_idx = ${name}_${t_dim.name}->global_idx;
+                                ${name}_${tensor.name}_tiles_[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}*${tensor.num_dims}+${t_dim_idx}].curr_idx = ${name}_${t_dim.name}->global_idx;
                             % endif
                         % endfor
                     % endif
