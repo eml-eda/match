@@ -14,6 +14,10 @@
 #include "pulp.h"
 #include "bench/bench.h"
 #include "pulp_nn/pulp_nn_kernels.h"
+
+typedef float16 fp16;
+typedef fp16 v2f16 __attribute__((vector_size (4)));
+
 #endif
 
 
@@ -75,6 +79,8 @@ void pulp_nn_pw_conv2d_wrapper(MatchCtx* ctx);
 void pulp_nn_hoparallel_conv2d_wrapper(MatchCtx* ctx);
 
 void pulp_nn_add_wrapper(MatchCtx* ctx);
+
+void pulp_nn_dense_fp16_wrapper(MatchCtx* ctx);
 
 void pulp_nn_wrapper(MatchCtx* ctx);
 

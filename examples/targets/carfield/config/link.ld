@@ -77,11 +77,9 @@ SECTIONS {
     *(.bulk.*)
   } > l2
 
-  .l2_heap : ALIGN(32) {
+  .l2_heap (NOLOAD) : ALIGN(32) {
     __l2_heap_start = .;
-    *(.l2_heap)
-    *(.l2_heap.*)
-    . = ALIGN(32);
+    . = ORIGIN(l2) + LENGTH(l2) - LENGTH(l2_common);
     __l2_heap_end = .;
   } > l2
 
