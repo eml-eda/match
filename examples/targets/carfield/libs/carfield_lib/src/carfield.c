@@ -115,10 +115,19 @@ static dif_rv_plic_t plic0;
 void carfield_init_plic() {
     // Reset PLIC
     dif_rv_plic_reset(&plic0);
+    
     // Set global interrupt enable in CVA6 csr
-    asm volatile("csrw  mstatus, %0\n" : : "r"(GLOBAL_IRQ_ENABLE));
+    unsigned long mstatus;
+    asm volatile ("csrr %0, mstatus" : "=r"(mstatus));
+    mstatus |= GLOBAL_IRQ_ENABLE;
+    asm volatile ("csrw mstatus, %0" :: "r"(mstatus));
+
     // Set external interrupt enable in CVA6 csr
-    asm volatile("csrw  mie, %0\n" : : "r"(EXTERNAL_IRQ_ENABLE));
+    unsigned long mie;
+    asm volatile ("csrr %0, mie" : "=r"(mie));
+    mie |= EXTERNAL_IRQ_ENABLE;
+    asm volatile ("csrw mie, %0" :: "r"(mie));
+
     // Setup PLIC
     mmio_region_t plic_base_addr = mmio_region_from_addr(PLIC_BASE_ADDRESS);
     dif_result_t t = dif_rv_plic_init(plic_base_addr, &plic0);

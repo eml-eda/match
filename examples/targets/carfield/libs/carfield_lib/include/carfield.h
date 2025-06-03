@@ -39,7 +39,7 @@ void carfield_free_ram(void* ext, size_t size);
 extern volatile uint32_t last_completed_node_id;
 extern volatile uint32_t last_task_error_code;
 
-#define GLOBAL_IRQ_ENABLE   0x00001808
+#define GLOBAL_IRQ_ENABLE   (1UL << 3)
 #define EXTERNAL_IRQ_ENABLE 0x00000800
 #define PLIC_BASE_ADDRESS   0x04000000
 

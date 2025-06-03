@@ -47,7 +47,7 @@ export PULP_SDK_HOME    = $(PULPRT_HOME)
 PULP_APPS = pulp_cluster_runtime
 PULP_APP_SRCS = $(MATCH_COMMON_SRCS) $(MATCH_pulp_cluster_OFFLOAD_SRC) $(PULPRT_HOME)/lib/libc/minimal/io.c $(PULPRT_HOME)/lib/libc/minimal/prf.c 
 
-PULP_CFLAGS = -O3 $(MATCH_INCLUDES) -DCLUSTER_COMPILATION -DARCHI_CLUSTER_NB_PE=8 -I$(PULPRT_HOME)/lib/libc/minimal/include -D__pulp_cluster__
+PULP_CFLAGS = -O3 $(MATCH_INCLUDES) -DCLUSTER_COMPILATION -DARCHI_CLUSTER_NB_PE=8 -I$(PULPRT_HOME)/lib/libc/minimal/include -D__pulp_cluster__ -Dhalf=float16 -D_Float16=float16
 PULPD_ELF_REMOVE_SECTIONS := --remove-section .l1cluster_g --remove-section .bss_l1
 
 -include $(PULP_SDK_HOME)/install/rules/pulp.mk
@@ -61,7 +61,7 @@ build-offload:
 	$(PULPD_RISCV)-objcopy $(PULPD_ELF_REMOVE_SECTIONS) $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime;
 
 	@echo "Generating objdump..."
-	$(PULPD_RISCV)-objdump -d -S $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime > $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime.dump;
+	$(PULPD_RISCV)-objdump -drwCS $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime > $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime.dump;
 
 	@echo "Runtime offload build done."
 
@@ -74,7 +74,7 @@ build-offload:
 CAR_SW_DIR  := $(CAR_ROOT)/sw
 CHS_ROOT 	?= $(shell $(BENDER) path cheshire)
 
-CHS_SW_GCC_BINROOT  ?= /usr/pack/riscv-1.0-kgf/riscv64-gcc-11.2.0/bin
+CHS_SW_GCC_BINROOT  ?= /usr/pack/riscv-1.0-kgf/riscv64-gcc-14.2.0/bin
 
 -include $(CHS_ROOT)/cheshire.mk
 CHS_BOOTMODE ?= 0 # default passive bootmode
@@ -105,7 +105,7 @@ $(HOST_LIB): $(HOST_LIB_SRCS_O)
 $(CAR_SW_DIR)/%.car.o: $(CAR_SW_DIR)/%.c
 	$(CHS_SW_CC) $(CAR_SW_INCLUDES) $(CHS_SW_CCFLAGS) -c $< -o $@
 
-HOST_FLAGS := -T$(HOST_LD_SCRIPT) -Wno-pointer-to-int-cast -DIntClustNumCores=8 -g
+HOST_FLAGS := -T$(HOST_LD_SCRIPT) -Wno-pointer-to-int-cast -DIntClustNumCores=8 -Dhalf=_Float16 -g -march=rv64gc_zifencei
 
 
 
@@ -123,5 +123,5 @@ build-host: $(HOST_LIB) build-payload
 	@echo $(HOST_LIB_SRCS_O)
 	$(CHS_SW_CC) $(HOST_INCLUDES) $(MATCH_INCLUDES) $(CHS_SW_LDFLAGS) $(HOST_FLAGS) -o $(BUILD_DIR)/host.elf $(HOST_LIB) $(MATCH_COMMON_SRCS) $(MATCH_HOST_SRC) $(CHS_SW_LIBS)
 	@echo "Generating objdump"
-	@$(CHS_SW_OBJDUMP) -d -S $(BUILD_DIR)/host.elf > $(BUILD_DIR)/host.dump
+	@$(CHS_SW_OBJDUMP) -drwCS $(BUILD_DIR)/host.elf > $(BUILD_DIR)/host.dump
 	@echo "Host build done"
