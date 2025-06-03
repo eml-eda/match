@@ -5,6 +5,9 @@
 #include "carfield_lib/mbox.h"
 #include "carfield_lib/utils.h"
 
+#include "pulp_nn/pulp_nn_kernels.h"
+#include "pulp_nn_fp16/pulp_nn_kernels_fp16.h"
+
 //#define CLUSTER_LIB_DEBUG
 #define DEBUG_CALLOC_L1_SCRATCHPAD  0
 #define DEBUG_BLOCKING_DMA          0
@@ -58,6 +61,11 @@ void cluster_sync_cores(MatchCtx* ctx)
 
 void cluster_lib_init(MatchCtx* ctx)
 {
+    #ifdef CLUSTER_LIB_DEBUG
+    for (int i = 0; i < 20000; i++) {
+        asm volatile("fence rw,rw":::"memory");
+    }
+    #endif
     dma_transfer_ = dma_transfer_create();
     #ifdef CLUSTER_LIB_DEBUG
     mini_printf("[PULP] Yo! Cluster is alive! DMA counter is %d\r\n", dma_transfer_);
@@ -719,6 +727,36 @@ void pulp_nn_add_wrapper(MatchCtx* ctx){
     );
 }
 
+
+void pulp_nn_dense_fp16_wrapper(MatchCtx* ctx) {
+    MatchTensor* tensors = ctx->tensors->tensors;
+    int num_ops = ctx->ops->num_ops;
+    int num_tensors = ctx->tensors->num_tensors;
+    int out_ch = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*2+1].size;
+    int inp_ch = tensors[0].tiles[L1_SCRATCHPAD*2+1].size;
+    #ifdef CLUSTER_LIB_DEBUG
+        if(rt_core_id() == 0) {
+            mini_printf("[PULP][KER] pulp_nn_linear_fp16: ");
+            mini_printf("Out. tile (%d,) | ", out_ch);
+            mini_printf("Inp. tile (%d,)\r\n", inp_ch);
+        }
+    #endif
+    pulp_nn_linear_fp16(
+        // activations pt  
+        (float16*)tensors[0].pt, // acts pt
+        // weights pt
+        (float16*)tensors[1].pt, // weights pt
+        // output pt
+        (float16*)tensors[num_tensors-1].pt, // output pt
+        // bias pt
+        num_tensors>4 ? (float16*)NULL : (float16*)tensors[2].pt, // bias pt
+        // dims
+        inp_ch,
+        out_ch
+    );
+}
+
+
 void pulp_nn_wrapper(MatchCtx* ctx){
     
     switch(ctx->pattern_name){
@@ -728,9 +766,9 @@ void pulp_nn_wrapper(MatchCtx* ctx){
         case conv2d:
             pulp_nn_hoparallel_conv2d_wrapper(ctx);
             break;
-        case dense_out:
-            pulp_nn_dense_out_int_wrapper(ctx);
-            break;
+        //case dense_out:
+        //    pulp_nn_dense_out_int_wrapper(ctx);
+        //    break;
         // case pulp_nn_dw_conv2d_less_4_pattern:
         //     pi_team_offload_preset(pulp_nn_dw_conv2d_less_4_wrapper, ctx);
         //     break;
@@ -743,6 +781,8 @@ void pulp_nn_wrapper(MatchCtx* ctx){
         case add_requant:
             pulp_nn_add_wrapper(ctx);
             break;
+        case dense_fp16:
+            pulp_nn_dense_fp16_wrapper(ctx);
         default:
             break;
     }
@@ -805,6 +845,16 @@ uint32_t cluster_timer_stop() {
         return time;
     }
 }
+
+
+
+double __attribute__((weak)) __extendhfdf2(float16 val)
+{
+  float res;
+  __asm__ __volatile__ ("fcvt.s.h %0, %1": "=f"(res): "f"(val) :);
+  return (double) res;
+}
+
 
 
 #endif

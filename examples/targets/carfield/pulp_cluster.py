@@ -9,7 +9,7 @@ from match.target.exec_module import ComputationalApis, ExecModule, MemoryApis, 
 from match.cost_model.examples.pulp_cluster import PulpClusterCostModel
 from match.target.memory_inst import MemoryInst
 from match.tensor.tensor import MatchTensor
-from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
+from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant, has_dtype
 from match.partition.partitioning_pattern import PartitioningPattern
 
 class PulpCluster(ExecModule):
@@ -19,6 +19,7 @@ class PulpCluster(ExecModule):
                                           libs_required={
                                               "carfield_lib": ModuleLib(name="carfield_lib", base_path=os.path.dirname(__file__)+"/libs/carfield_lib"),
                                               "pulp_nn": ModuleLib(name="pulp_nn", base_path=os.path.dirname(__file__)+"/libs/pulp_nn"),
+                                              "pulp_nn_fp16": ModuleLib(name="pulp_nn", base_path=os.path.dirname(__file__)+"/libs/pulp_nn_fp16"),
                                           })
         self.NUM_CORES = num_cores
         self.L1_SCRATCHPAD_KB_SIZE = l1_kb_size
@@ -188,6 +189,11 @@ class PulpCluster(ExecModule):
             add = is_op("add")(dense, is_constant()) | is_op("add")(is_op("cast")(dense),is_constant())
             return add
         
+        def dense_fp16():
+            dense = is_op("nn.dense")(wildcard(), wildcard()) 
+            dense_add = is_op("add")(dense, is_constant())
+            return dense_add
+        
         def add_pt_requant():
             cast_a = is_op("cast")(wildcard())
             cast_b = is_op("cast")(wildcard())
@@ -201,6 +207,11 @@ class PulpCluster(ExecModule):
 
         def only_out_uint8(node):
             return add_checks_get_first_op(node, "cast").attrs.dtype=="uint8"
+        
+        def only_out_fp16(node):
+            is_fp16 = add_checks_get_first_op(node, "nn.dense").attrs.out_dtype == "float16"
+            is_fp16 |= getattr(node.attrs, "out_dtype", None) == "float16"
+            return is_fp16
 
         def only_std_convs(node):
             conv = add_checks_get_first_op(node, "nn.conv2d")
@@ -239,7 +250,8 @@ class PulpCluster(ExecModule):
             return True
 
         return [
-            PartitioningPattern(name="dense_out",pattern=dense_pt_out),
+            #PartitioningPattern(name="dense_out",pattern=dense_pt_out),
+            PartitioningPattern(name="dense_fp16",pattern=dense_fp16,additional_checks=only_out_fp16),
             PartitioningPattern(name="dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
             PartitioningPattern(name="conv2d",pattern=conv_pt_requant,additional_checks=only_std_convs),
             PartitioningPattern(name="depthwise_conv2d",pattern=conv_pt_requant,additional_checks=only_dw_convs),
