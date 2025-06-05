@@ -1,0 +1,27 @@
+def @main(%nn_cross_entropy_with_logits_0_pred: Tensor[(1, 4), float32], %nn_log_softmax_1_y: Tensor[(1, 4), float32], %nn_dense_4_x: Tensor[(1, 128), float32], %nn_max_pool2d_6_x: Tensor[(1, 8, 8, 8), float32], %nn_relu_7_x: Tensor[(1, 8, 8, 8), float32], %nn_conv2d_9_x: Tensor[(1, 4, 8, 8), float32], %data: Tensor[(1, 4, 8, 8), float32], %conv0_weight: Tensor[(8, 4, 3, 3), float32], %conv0_bias: Tensor[(8), float32], %dense0_weight: Tensor[(4, 128), float32], %label: Tensor[(1, 4), float32]) -> (Tensor[(4, 128), float32], Tensor[(8), float32], Tensor[(8, 4, 3, 3), float32]) {
+  %0 = ones(shape=[], dtype="float32") /* ty=float32 */;
+  %1 = negative(%0) /* ty=float32 */;
+  %2 = multiply(%1, %label) /* ty=Tensor[(1, 4), float32] */;
+  %3 = sum(%2, axis=[-1], keepdims=True) /* ty=Tensor[(1, 1), float32] */;
+  %4 = exp(%nn_log_softmax_1_y) /* ty=Tensor[(1, 4), float32] */;
+  %5 = multiply(%3, %4) /* ty=Tensor[(1, 4), float32] */;
+  %6 = subtract(%2, %5) /* ty=Tensor[(1, 4), float32] */;
+  %7 = reshape(%6, newshape=[1, 4]) /* ty=Tensor[(1, 4), float32] */;
+  %8 = transpose(%7, axes=None) /* ty=Tensor[(4, 1), float32] */;
+  %9 = zeros(shape=[1, 8, 8, 8], dtype="float32") /* ty=Tensor[(1, 8, 8, 8), float32] */;
+  %10 = nn.matmul(%7, %dense0_weight, units=None) /* ty=Tensor[(1, 128), float32] */;
+  %11 = reshape(%10, newshape=[1, 8, 4, 4]) /* ty=Tensor[(1, 8, 4, 4), float32] */;
+  %12 = less(%nn_relu_7_x, %9) /* ty=Tensor[(1, 8, 8, 8), bool] */;
+  %13 = nn.max_pool2d_grad(%11, %nn_max_pool2d_6_x, pool_size=[2, 2], strides=[2, 2], dilation=[], padding=[0, 0, 0, 0]) /* ty=Tensor[(1, 8, 8, 8), float32] */;
+  %14 = where(%12, %9, %13) /* ty=Tensor[(1, 8, 8, 8), float32] */;
+  %15 = tile(%14, reps=[1, 4, 1, 1]) /* ty=Tensor[(1, 32, 8, 8), float32] */;
+  %16 = reshape(%nn_conv2d_9_x, newshape=[1, -1, 0, 0]) /* ty=Tensor[(1, 4, 8, 8), float32] */;
+  %17 = reshape(%15, newshape=[-1, 1, 0, 0]) /* ty=Tensor[(32, 1, 8, 8), float32] */;
+  %18 = nn.conv2d(%16, %17, padding=[1, 1, 1, 1], groups=4, channels=32, kernel_size=[8, 8]) /* ty=Tensor[(1, 32, 3, 3), float32] */;
+  %19 = reshape(%18, newshape=[1, 4, 8, 3, 3]) /* ty=Tensor[(1, 4, 8, 3, 3), float32] */;
+  %20 = sum(%19, axis=[0]) /* ty=Tensor[(4, 8, 3, 3), float32] */;
+  %21 = nn.matmul(%8, %nn_dense_4_x, units=None) /* ty=Tensor[(4, 128), float32] */;
+  %22 = sum(%14, axis=[1], exclude=True) /* ty=Tensor[(8), float32] */;
+  %23 = transpose(%20, axes=[1, 0, 2, 3]) /* ty=Tensor[(8, 4, 3, 3), float32] */;
+  (%21, %22, %23)
+}
