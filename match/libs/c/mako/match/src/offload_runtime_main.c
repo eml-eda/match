@@ -6,6 +6,9 @@
 % for include in target.include_list:
     #include <${include}.h>
 % endfor
+% for include in exec_module.include_list():
+    #include <${include}.h>
+% endfor
 
 
 <%def name="primary_core_region()">
@@ -20,7 +23,7 @@ ${caller.body()}
 
 <%def name="smp_barrier()">
 % if exec_module.is_smp and sync_apis.smp_barrier != "":
-    ${sync_apis.smp_barrier}();
+    ${sync_apis.smp_barrier}(NULL);
 % endif
 </%def>
 

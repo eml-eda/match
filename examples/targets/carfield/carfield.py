@@ -83,5 +83,5 @@ class Carfield(MatchTarget):
     
     def host_memories(self):
         return [
-            MemoryInst(name="L2_SHARED_MEM",k_bytes=L2_SHARED_MEM_KB_SIZE),
+            MemoryInst(name="MEM_L2",k_bytes=L2_SHARED_MEM_KB_SIZE),
         ]

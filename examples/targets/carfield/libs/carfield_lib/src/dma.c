@@ -1,4 +1,4 @@
-#ifdef CLUSTER_COMPILATION
+#ifdef __pulp_cluster__
 
 #include <carfield_lib/dma.h>
 
@@ -77,4 +77,4 @@ void dma_mutex_unlock() {
   eu_mutex_unlock(dma_mutex);
 }
 
-#endif
+#endif // __pulp_cluster__

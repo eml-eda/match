@@ -19,7 +19,8 @@ class PulpCluster(ExecModule):
                                           libs_required={
                                               "carfield_lib": ModuleLib(name="carfield_lib", base_path=os.path.dirname(__file__)+"/libs/carfield_lib"),
                                               "pulp_nn": ModuleLib(name="pulp_nn", base_path=os.path.dirname(__file__)+"/libs/pulp_nn"),
-                                              "pulp_nn_fp16": ModuleLib(name="pulp_nn", base_path=os.path.dirname(__file__)+"/libs/pulp_nn_fp16"),
+                                              "pulp_nn_fp16": ModuleLib(name="pulp_nn_fp16", base_path=os.path.dirname(__file__)+"/libs/pulp_nn_fp16"),
+                                              "redmule": ModuleLib(name="redmule", base_path=os.path.dirname(__file__)+"/libs/redmule"),
                                           })
         self.NUM_CORES = num_cores
         self.L1_SCRATCHPAD_KB_SIZE = l1_kb_size
@@ -42,7 +43,7 @@ class PulpCluster(ExecModule):
     def module_memories(self):
         return [
             # from lower level to higher level memories
-            MemoryInst(name="L1_SCRATCHPAD",k_bytes=self.L1_SCRATCHPAD_KB_SIZE,sw_controlled=True),
+            MemoryInst(name="MEM_L1",k_bytes=self.L1_SCRATCHPAD_KB_SIZE,sw_controlled=True),
         ]
 
     def zigzag_optimal_spatial_mapping_def(self, match_node: MatchNode=None, pattern_name = "conv2d"):
@@ -109,7 +110,7 @@ class PulpCluster(ExecModule):
                 # CORES * (ks[0] * (tile_n_in + p[0] + p[2]) + ks[0])
                 im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
             if im2col_size_l1:
-                schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="L1_SCRATCHPAD",
+                schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="MEM_L1",
                                                    num_bytes=im2col_size_l1))
             # I searched in the pulp_nn lib but also for DW convs the pwt buffer(bufferB in pulp_nn_depthwise_generic declaration)
             # doesnt seem to be used anywhere...
@@ -132,8 +133,8 @@ class PulpCluster(ExecModule):
     def mem_apis_def(self, memory_apis: MemoryApis=None, pattern_name="conv2d"):
         memory_apis.mem_transfer = "handle_dma_transfer"
         memory_apis.alloc_buffer = "cluster_alloc_buffer"
-        memory_apis.init_memory["L1_SCRATCHPAD"] = "init_l1_scratchpad_memory"
-        memory_apis.free_memory["L1_SCRATCHPAD"] = "free_l1_scrachpad_memory"
+        memory_apis.init_memory["MEM_L1"] = "init_l1_scratchpad_memory"
+        memory_apis.free_memory["MEM_L1"] = "free_l1_scratchpad_memory"
         
         return memory_apis
     
@@ -148,7 +149,7 @@ class PulpCluster(ExecModule):
         return sync_apis
     
     def comp_apis_def(self, computational_apis: ComputationalApis=None, pattern_name: str="conv2d"):
-        computational_apis.compute_tile = "pulp_nn_wrapper"
+        computational_apis.compute_tile = "kernel_wrapper"
         return computational_apis
     
     def partitioning_patterns(self):
