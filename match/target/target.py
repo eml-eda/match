@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 from typing import List
+import copy
 
 import mako
 from match.opt.generator import ScheduleGenerator
@@ -224,6 +225,15 @@ class MatchTarget(ABC):
             pt_res.set_latency(latency)
             pt_res.set_energy(energy)
             self.add_pt_res_to_cache(pt_res)
+        else:
+            schedule = copy.deepcopy(schedule)
+            # update constants to use the node ones and not the cached ones
+            for tensor_name in schedule.tensors:
+                if tensor_name in match_node.const_tensors:
+                    schedule.tensors[tensor_name] = match_node.const_tensors[tensor_name]
+                    if tensor_name in schedule.tensor_tiles:
+                        for tile_idx in range(len(schedule.tensor_tiles[tensor_name])):
+                            schedule.tensor_tiles[tensor_name][tile_idx].tensor=match_node.const_tensors[tensor_name]
         save_codegen_schedule(node,schedule,latency,energy)
         return schedule,match_node,match_pt.exec_module,latency,energy
 
