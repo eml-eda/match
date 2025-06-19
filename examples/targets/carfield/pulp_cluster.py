@@ -79,16 +79,22 @@ class PulpCluster(ExecModule):
 
     def update_constants(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
         for w_tensor in match_node.const_tensors.values():
-            if "dense" in w_tensor.name and pattern_name=="flatten_dense_out":
-                if w_tensor.layout!="CN":
+            if "dense" in w_tensor.name and pattern_name == "flatten_dense_out":
+                if w_tensor.layout != "CN":
+                    w_tensor.data = w_tensor.data.transpose(1,0)
+                    w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]
+                w_tensor.layout = "CN"
+            elif "dense" in w_tensor.name and pattern_name == "dense_fp16":
+                # RedMulE expects weights in CN layout
+                if w_tensor.layout != "CN":
                     w_tensor.data = w_tensor.data.transpose(1,0)
                     w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]
                 w_tensor.layout = "CN"
             elif "conv2d" in w_tensor.name:
-                if w_tensor.layout=="HWIO":
+                if w_tensor.layout == "HWIO":
                     w_tensor.data = w_tensor.data.transpose(3,0,1,2)
                     w_tensor.dims = [w_tensor.dims[3], w_tensor.dims[0], w_tensor.dims[1], w_tensor.dims[2]]
-                elif w_tensor.layout=="OIHW":
+                elif w_tensor.layout == "OIHW":
                     w_tensor.data = w_tensor.data.transpose(0,2,3,1)
                     w_tensor.dims = [w_tensor.dims[0], w_tensor.dims[2], w_tensor.dims[3], w_tensor.dims[1]]
                 w_tensor.layout = "OHWI"
@@ -109,6 +115,8 @@ class PulpCluster(ExecModule):
             elif pattern_name=="depthwise_conv2d":
                 # CORES * (ks[0] * (tile_n_in + p[0] + p[2]) + ks[0])
                 im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
+            #elif pattern_name=="conv2d_fp16":
+            #    im2col_size_l1 = 2 * self.NUM_CORES * math.prod(filter_shape) * tile_inp_chs
             if im2col_size_l1:
                 schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="MEM_L1",
                                                    num_bytes=im2col_size_l1))
@@ -190,10 +198,18 @@ class PulpCluster(ExecModule):
             add = is_op("add")(dense, is_constant()) | is_op("add")(is_op("cast")(dense),is_constant())
             return add
         
-        def dense_fp16():
+        def dense():
             dense = is_op("nn.dense")(wildcard(), wildcard()) 
-            dense_add = is_op("add")(dense, is_constant())
-            return dense_add
+            dense_bias = is_op("add")(dense, is_constant()) | is_op("add")(is_constant(), dense)
+            return dense_bias
+        
+        def conv2d():
+            conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
+            conv2d_bias = is_op("add")(conv2d, is_constant()) | is_op("add")(is_constant(), conv2d)
+            return conv2d_bias
+            #conv2d_batch_mul = is_op("multiply")(conv2d_bias, is_constant()) | is_op("multiply")(is_constant(), conv2d_bias)
+            #conv2d_batch_add = is_op("add")(conv2d_batch_mul, is_constant()) | is_op("add")(is_constant(), conv2d_batch_mul)
+            #return conv2d_batch_add
         
         def add_pt_requant():
             cast_a = is_op("cast")(wildcard())
@@ -210,8 +226,9 @@ class PulpCluster(ExecModule):
             return add_checks_get_first_op(node, "cast").attrs.dtype=="uint8"
         
         def only_out_fp16(node):
-            is_fp16 = add_checks_get_first_op(node, "nn.dense").attrs.out_dtype == "float16"
-            is_fp16 |= getattr(node.attrs, "out_dtype", None) == "float16"
+            #is_fp16 = add_checks_get_first_op(node, "nn.dense").attrs.out_dtype == "float16"
+            #is_fp16 |= getattr(node.attrs, "out_dtype", None) == "float16"
+            is_fp16 = (node.args[0].checked_type.dtype == "float16")
             return is_fp16
 
         def only_std_convs(node):
@@ -252,10 +269,14 @@ class PulpCluster(ExecModule):
 
         return [
             #PartitioningPattern(name="dense_out",pattern=dense_pt_out),
-            PartitioningPattern(name="dense_fp16",pattern=dense_fp16,additional_checks=only_out_fp16),
+            PartitioningPattern(name="dense_fp16",pattern=dense,additional_checks=only_out_fp16),
+            PartitioningPattern(name="conv2d_fp16",pattern=conv2d,additional_checks=only_out_fp16),
             PartitioningPattern(name="dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
             PartitioningPattern(name="conv2d",pattern=conv_pt_requant,additional_checks=only_std_convs),
             PartitioningPattern(name="depthwise_conv2d",pattern=conv_pt_requant,additional_checks=only_dw_convs),
             PartitioningPattern(name="pointwise_conv2d",pattern=conv_pt_requant,additional_checks=only_pw_convs),
-            PartitioningPattern(name="add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8),
+            PartitioningPattern(name="add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8)
         ]
+        
+# [MATCH OUTPUT] Values:  1.218750, -3.525391, -2.291016, 0.780273, 2.294922, -2.683594,
+# [MATCH OUTPUT] Label predicted 4 with value 2.294922

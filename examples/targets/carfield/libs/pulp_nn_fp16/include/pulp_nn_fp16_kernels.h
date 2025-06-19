@@ -34,26 +34,26 @@ void pulp_nn_fp16_add(
 );
 
 void pulp_nn_fp16_conv2d(
-    const fp16 *__restrict__ input,         // Pointer to the input feature map   (dim_w x dim_h x dim_c)
-    fp16 *__restrict__       im2col,        // Pointer to the im2col buffer       
-    const fp16 *__restrict__ bias,          // Pointer to the bias matrix         (dim_p x dim_q x dim_k)
-    fp16 *__restrict__       output,        // Pointer to the output feature map  (dim_p x dim_q x dim_k)
-    const fp16 *__restrict__ weight,        // Pointer to the weights             (dim_r x dim_s x dim_c x dim_k)
-    const uint16_t           dim_w,         // Input Width
-    const uint16_t           dim_h,         // Input Height
-    const uint16_t           dim_c,         // Input Channels
-    const uint16_t           dim_p,         // Output Width
-    const uint16_t           dim_q,         // Output Height
-    const uint16_t           dim_k,         // Output Channels
-    const uint16_t           dim_r,         // Kernel Width
-    const uint16_t           dim_s,         // Kernel Height 
-    const uint16_t           pad_t,         // Padding Top
-    const uint16_t           pad_b,         // Padding Bottom
-    const uint16_t           pad_l,         // Padding Left
-    const uint16_t           pad_r,         // Padding Right
-    const uint16_t           stride_x,      // Stride Horizontal
-    const uint16_t           stride_y,      // Stride Vertical
-    int                      apply_relu     // Apply ReLU activation
+    const fp16 *__restrict__ input,         // Pointer to the input feature map
+    const fp16 *__restrict__ weight,        // Pointer to the weights
+    const fp16 *__restrict__ bias,          // Pointer to the bias vector
+    fp16 *__restrict__       output,        // Pointer to the output feature map
+    fp16 *__restrict__       im2col,        // Pointer to the im2col buffer
+    uint32_t                 dim_ix,        // Input Width
+    uint32_t                 dim_iy,        // Input Height
+    uint32_t                 dim_ic,        // Input Channels
+    uint32_t                 dim_ox,        // Output Width
+    uint32_t                 dim_oy,        // Output Height
+    uint32_t                 dim_oc,        // Output Channels
+    uint32_t                 dim_fx,        // Kernel Width
+    uint32_t                 dim_fy,        // Kernel Height 
+    uint32_t                 pad_t,         // Padding Top
+    uint32_t                 pad_b,         // Padding Bottom
+    uint32_t                 pad_l,         // Padding Left
+    uint32_t                 pad_r,         // Padding Right
+    uint32_t                 stride_x,      // Stride Horizontal
+    uint32_t                 stride_y,      // Stride Vertical
+    uint32_t                 apply_relu     // Apply ReLU activation
 );
 
 void pulp_nn_fp16_avgpool(
@@ -71,7 +71,7 @@ void pulp_nn_fp16_avgpool(
 void pulp_nn_fp16_copy(
     const fp16 *input,
     fp16 *output,
-    uint32_t size
+    uint32_t length
 );
 
 #endif // __PULP_NN_FP16_KERNELS_H__

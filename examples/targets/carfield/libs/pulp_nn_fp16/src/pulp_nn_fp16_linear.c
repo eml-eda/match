@@ -22,12 +22,13 @@ void pulp_nn_fp16_linear(
     int start = min(chunk * tid, dim_o);
     int stop = min(start + chunk, dim_o);
 
-    for (int j = start; j < stop; j++) {
-        fp16 sum = bias ? bias[j] : 0.0f;
-        for (int k = 0; k < dim_i; k++) {
-            sum += input[k] * weight[j * dim_i + k];
+    for (int o = start; o < stop; o++) {
+        fp16 sum = bias ? bias[o] : 0.0f;
+        for (int i = 0; i < dim_i; i++) {
+            int weight_idx = idx_IO(i, o, dim_i, dim_o); // CN in TVM
+            sum += input[i] * weight[weight_idx];
         }
-        output[j] = sum;
+        output[o] = sum;
     }
 }
 
