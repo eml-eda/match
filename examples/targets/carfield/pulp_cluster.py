@@ -115,8 +115,8 @@ class PulpCluster(ExecModule):
             elif pattern_name=="depthwise_conv2d":
                 # CORES * (ks[0] * (tile_n_in + p[0] + p[2]) + ks[0])
                 im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
-            #elif pattern_name=="conv2d_fp16":
-            #    im2col_size_l1 = 2 * self.NUM_CORES * math.prod(filter_shape) * tile_inp_chs
+            elif pattern_name=="conv2d_fp16":
+                im2col_size_l1 = 2 * self.NUM_CORES * math.prod(filter_shape) * tile_inp_chs
             if im2col_size_l1:
                 schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="MEM_L1",
                                                    num_bytes=im2col_size_l1))
