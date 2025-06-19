@@ -9,8 +9,8 @@ MEMORY {
   extrom (rx)    : ORIGIN = 0x00000000, LENGTH = 48K
   spm (rwx)      : ORIGIN = 0x10000000, LENGTH = 64K
   dram (rwx)     : ORIGIN = 0x80010000, LENGTH = 64M
-  l2 (rwx)       : ORIGIN = 0x78000000, LENGTH = (1M / 2) - 256 - 64
-  l2_common (rw) : ORIGIN = 0x78000000 + (1M / 2) - 256, LENGTH = 256
+  l2 (rwx)       : ORIGIN = 0x78000000, LENGTH = (768K) - 256 - 64
+  l2_common (rw) : ORIGIN = 0x78000000 + (768K) - 256, LENGTH = 256
   l1_pulpd (rw)  : ORIGIN = 0x50000000, LENGTH = 256K 
   l1_spatz (rw)  : ORIGIN = 0x51000000, LENGTH = 128K
 }

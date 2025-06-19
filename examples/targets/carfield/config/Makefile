@@ -121,7 +121,7 @@ build-payload: build-offload
 build-host: $(HOST_LIB) build-payload
 	@echo "Building host"
 	@echo $(HOST_LIB_SRCS_O)
-	$(CHS_SW_CC) $(HOST_INCLUDES) $(MATCH_INCLUDES) $(CHS_SW_LDFLAGS) $(HOST_FLAGS) -o $(BUILD_DIR)/host.elf $(HOST_LIB) $(MATCH_COMMON_SRCS) $(MATCH_HOST_SRC) $(CHS_SW_LIBS)
+	$(CHS_SW_CC) $(HOST_INCLUDES) $(MATCH_INCLUDES) $(CHS_SW_LDFLAGS) $(HOST_FLAGS) -o $(BUILD_DIR)/host.elf $(HOST_LIB) $(MATCH_COMMON_SRCS) $(MATCH_HOST_SRC) $(CHS_SW_LIBS) -lm
 	@echo "Generating objdump"
 	@$(CHS_SW_OBJDUMP) -drwCS $(BUILD_DIR)/host.elf > $(BUILD_DIR)/host.dump
 	@echo "Host build done"
