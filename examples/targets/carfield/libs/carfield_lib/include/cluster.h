@@ -20,6 +20,7 @@ extern const uint8_t __l2_common_end[];
 extern volatile dma_transfer_id_t dma_transfer_;
 extern volatile void* im2col_pt_;
 extern volatile void* pwt_pt_;
+extern volatile void* l1_scratchpad_pt_;
 
 // Cluster-Host Synchronization
 
@@ -104,6 +105,8 @@ void redmule_fp16_matmul_wrapper(MatchCtx* ctx);
 #define DEBUG_CALLOC_L1_SCRATCHPAD  0
 #define DEBUG_BLOCKING_DMA          0
 #define DEBUG_COUNT_CORE_SYNCS      0
+
+#define ALLOC_L1_ONCE               1
 
 // Float16 typedef for cluster
 

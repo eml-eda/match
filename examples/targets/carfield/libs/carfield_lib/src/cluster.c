@@ -14,6 +14,7 @@
 volatile dma_transfer_id_t dma_transfer_ = 0;
 volatile void* im2col_pt_ = NULL;
 volatile void* pwt_pt_ = NULL;
+volatile void* l1_scratchpad_pt_ = NULL;
 
 #if DEBUG_COUNT_CORE_SYNCS
 volatile int num_syncs[16] = {0};
@@ -69,23 +70,38 @@ void cluster_lib_init(MatchCtx* ctx)
     #endif
 }
 
-void* init_l1_scratchpad_memory(MatchCtx* ctx){
+void* init_l1_scratchpad_memory(MatchCtx* ctx) {
     #if DEBUG_CLUSTER_LIB
     mini_printf("[PULP] Inizialing L1 Scratchpad...\r\n");
     #endif
-    void* l1_memory_pt = pi_l1_malloc(0, MEM_L1_SIZE);
+
+    void *l1_memory_pt;
+
+    #if ALLOC_L1_ONCE
+    if (l1_scratchpad_pt_ == NULL) {
+        l1_scratchpad_pt_ = pi_l1_malloc(0, MEM_L1_SIZE);   
+    }
+    l1_memory_pt = l1_scratchpad_pt_;
+    #else
+    l1_memory_pt = pi_l1_malloc(0, MEM_L1_SIZE);
+    #endif
+
     #if DEBUG_CALLOC_MEM_L1
     for (int i = 0; i < MEM_L1_SIZE; i++)
         ((volatile char*)l1_memory_pt)[i] = 0;
     #endif
+
     #if DEBUG_CLUSTER_LIB
     mini_printf("[PULP] Success.\r\n");
     #endif
+
     return l1_memory_pt;
 }
 
 void free_l1_scratchpad_memory(MatchCtx* ctx, void* l1_memory_pt) {
+    #if !ALLOC_L1_ONCE
     pi_l1_free(0, l1_memory_pt, MEM_L1_SIZE);
+    #endif
 }
 
 
