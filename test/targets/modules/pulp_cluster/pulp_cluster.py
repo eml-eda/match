@@ -22,7 +22,7 @@ class PulpCluster(ExecModule):
                                               "pulp_mem": ModuleLib(name="pulp_mem", base_path=os.path.dirname(__file__)+"/../libs/pulp_mem"),
                                               "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/../libs/pulp_utils"),
                                               "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/../libs/pulp_utils"),
-                                              "pulp_train": ModuleLib(name="pulp_train", base_path=os.path.dirname(__file__)+"/../libs/pulp-trainlib", src_path=os.path.dirname(__file__)+"/../libs/pulp-trainlib/lib/sources", inc_path=os.path.dirname(__file__)+"/../libs/pulp-trainlib/lib/include/"),
+                                              "pulp_train": ModuleLib(name="pulp_train", base_path=os.path.dirname(__file__)+"/../libs/pulp_train"),
                                           })
         self.NUM_CORES = num_cores
         self.L1_SCRATCHPAD_KB_SIZE = l1_kb_size

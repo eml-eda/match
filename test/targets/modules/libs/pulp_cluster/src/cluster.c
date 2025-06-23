@@ -1,6 +1,6 @@
 #include <pulp_cluster/cluster.h>
-#include "pulp_conv2d_fp32.h" // FIXME: this should not be here. quick fix for the typedef
-#include "pulp_train_utils_fp32.h"
+#include <pulp_train/pulp_conv2d_fp32.h> // FIXME: this should not be here. quick fix for the typedef
+#include <pulp_train/pulp_train_utils_fp32.h>
 static void* im2col_pt_ = NULL;
 static void* pwt_pt_ = NULL;
 static DmaTransfer dma_transfer_;

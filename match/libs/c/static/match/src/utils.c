@@ -30,7 +30,7 @@ float match_float_checksum_check(float* data, int size, float checksum, int prin
     // Calculate checksum
     float sum = 0.0;
     int size_f = size / sizeof(float);
-
+    /*
     if(print_value){
         // Print array data for debugging
         printf("[LAYER OUTPUT] Values:\n");
@@ -39,14 +39,17 @@ float match_float_checksum_check(float* data, int size, float checksum, int prin
         }
         printf("\n");
     }
+    */
 
     // compute and return the checksum
     for (int i = 0; i < size_f; ++i) {        
         sum += data[i];
-    }   
+    } 
+    /*  
     if(print_value){
         printf("[LAYER OUTPUT] Computed Checksum: %f\n", sum);
     }
+    */
     // Compute the relative error (1e-20 gives numerical stability)
     return (sum - checksum) / (checksum + 1e-20);
 }

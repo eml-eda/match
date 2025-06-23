@@ -16,8 +16,6 @@ class ZigZagTransformMappingToSchedule:
                  zigzag_operands, zigzag_temporal_mapping, spatial_mapping, zigzag_operands_to_tensors,
                  platform_memories):
         self.match_node = match_node
-        self.mem_hierarchy = mem_hierarchy
-        self.mem_hierarchy_dict = mem_hierarchy_dict
         self.workload = workload
         self.zigzag_parser = zigzag_parser
         self.cme = cme
@@ -189,7 +187,8 @@ class ZigZagTransformMappingToSchedule:
                             ],
                         ) for idx,tm in enumerate(self.temporal_mapping)
                     ],
-                    backend="ZigZag"
+                    backend="ZigZag",
+                    num_buffers_for_computation=int(self.platform_memories[0].double_buffering_support)+1
                 )
             ],
             # ZigZag schedule shouldnt use intermediate tensors
