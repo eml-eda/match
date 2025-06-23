@@ -11,7 +11,8 @@ PULP_CORES = 8
 #L1_SCRATCHPAD_KB_SIZE = 128*1024
 #L2_SHARED_MEM_KB_SIZE = 256*1024
 
-L1_SCRATCHPAD_KB_SIZE = 32
+L1_SCRATCHPAD_KB_SIZE = 128
+#L2_SHARED_MEM_KB_SIZE = 480
 L2_SHARED_MEM_KB_SIZE = 256*1024
 L3_FLASH_KB_SIZE = 8*1024*1024
 
@@ -59,8 +60,8 @@ class Carfield(MatchTarget):
         self.init_funcs = ["carfield_init"]
         self.clean_funcs = ["carfield_shutdown"]
         # memory management ones
-        self.alloc_fn = "" # should use stack
-        self.free_fn = ""
+        self.alloc_fn = "malloc" # should use stack
+        self.free_fn = "free"
         # external memory management
         self.allocate_ext_mem = "carfield_init_ram"
         self.load_file_to_ext_mem_fn = "carfield_load_file_to_ram"
@@ -83,5 +84,5 @@ class Carfield(MatchTarget):
     
     def host_memories(self):
         return [
-            MemoryInst(name="L2_SHARED_MEM",k_bytes=L2_SHARED_MEM_KB_SIZE),
+            MemoryInst(name="MEM_L2",k_bytes=L2_SHARED_MEM_KB_SIZE),
         ]

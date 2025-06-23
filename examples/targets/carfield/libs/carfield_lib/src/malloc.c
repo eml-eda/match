@@ -6,12 +6,12 @@
  */
 
 #include "carfield_lib/malloc.h"
-#include "carfield_lib/carfield.h"
 #include "carfield_lib/printf.h"
 
 #include <stddef.h>
 #include <stdint.h>
 
+#define DEBUG_MALLOC 0
 
 uint8_t* memory_pool_l2 = &__l2_heap_start;
 block_header_t* free_list = NULL;
@@ -32,124 +32,107 @@ static inline block_header_t* offset_to_ptr(uint32_t offset) {
     return (block_header_t*)(memory_pool_l2 + offset);
 }
 
+static void print_free_list() {
+    mini_printf("Free list:\r\n");
+    block_header_t* curr = free_list;
+    while (curr != NULL) {
+        mini_printf("  Block at %p: size %d, is_free %d, next %p\r\n", 
+                    curr, (int)curr->size, curr->is_free, offset_to_ptr(curr->next));
+        curr = offset_to_ptr(curr->next);
+    }
+}
+
 /**
  * Initialize the memory allocator
  */
 void mem_init_l2(void) {
     // Create initial free block spanning the entire memory pool
     free_list = (block_header_t*)memory_pool_l2;
-    free_list->size = (uint32_t)l2_heap_size();
+    free_list->size = (uint32_t)l2_heap_size() - sizeof(block_header_t);
     free_list->is_free = 1;
     free_list->next = 0;
-
+#if DEBUG_MALLOC
     mini_printf("[MALLOC] L2 memory pool initialized with size %d bytes.\r\n", (int)free_list->size);
+#endif
 }
 
-/**
- * Allocate memory of specified size
- *
- * @param size Size of memory to allocate in bytes
- * @return Pointer to allocated memory or NULL if allocation fails
- */
-void* malloc_l2(size_t size) {
-    block_header_t *curr, *prev, *new_block;
-    void* result = NULL;
 
-    // Adjust size to include the header and ensure alignment (8-byte in this case)
-    size_t aligned_size = (size + sizeof(block_header_t) + 7) & ~7;
 
-    // Ensure minimum allocation size
-    if (aligned_size < MIN_ALLOC_SIZE + sizeof(block_header_t))
-        aligned_size = MIN_ALLOC_SIZE + sizeof(block_header_t);
+void *malloc_l2(size_t size) {
+    block_header_t *curr, *prev;
+    void *res = NULL;
 
-    // Initialize memory pool if not already done
-    if (free_list == NULL)
-        mem_init_l2();
+    size = (((size + sizeof(block_header_t) - 1) / sizeof(block_header_t)) + 2) * sizeof(block_header_t); // Align size to 8 bytes
+    if (size < MIN_ALLOC_SIZE) size = MIN_ALLOC_SIZE;
 
-    // First-fit search for a free block
-    prev = NULL;
+    if (free_list == NULL) mem_init_l2();
+
     curr = free_list;
+    prev = NULL;
 
     while (curr != NULL) {
-        if (curr->is_free && curr->size >= aligned_size) {
-            // Found a suitable block
-
-            // Split the block if it's significantly larger than requested
-            if (curr->size >= aligned_size + sizeof(block_header_t) + MIN_ALLOC_SIZE) {
-                new_block = (block_header_t*)((uint8_t*)curr + aligned_size);
-                new_block->size = curr->size - aligned_size;
+        if (curr->is_free && curr->size >= size) {
+            if (curr->size >= size + sizeof(block_header_t) + MIN_ALLOC_SIZE) {
+                block_header_t *new_block = (block_header_t*)((uint8_t*)curr + sizeof(block_header_t) + size);
+                new_block->size = curr->size - size - sizeof(block_header_t);
                 new_block->is_free = 1;
                 new_block->next = curr->next;
 
-                curr->size = aligned_size;
+                curr->size = (uint32_t)size;
                 curr->next = ptr_to_offset(new_block);
             }
-
-            // Mark block as allocated
             curr->is_free = 0;
 
-            // Return pointer to usable memory (after header)
-            result = (void*)((uint8_t*)curr + sizeof(block_header_t));
-            break;
+            res = (void*)((uint8_t*)curr + sizeof(block_header_t));
+#if DEBUG_MALLOC
+            mini_printf("[MALLOC] Allocated %d bytes at %p\r\n", (int)size, res);
+            print_free_list();
+#endif
+            return res;
         }
 
         prev = curr;
         curr = offset_to_ptr(curr->next);
     }
-
-    mini_printf("[MALLOC] Allocated %d bytes block in L2 at %p.\r\n", (int)size, result);
-    return result;
+#if DEBUG_MALLOC
+    mini_printf("[MALLOC] Could not find suitable block in free list.\r\n");
+#endif
+    return NULL;
 }
 
-/**
- * Free previously allocated memory
- *
- * @param ptr Pointer to memory to free
- */
+
 void free_l2(void* ptr) {
-    block_header_t *block, *next, *prev;
+    if (ptr == NULL) return;
 
-    if (ptr == NULL)
-        return;
+    block_header_t *curr, *prev, *next;
 
-    // Get the block header from the pointer
-    block = (block_header_t*)((uint8_t*)ptr - sizeof(block_header_t));
+    curr = (block_header_t*)((uint8_t*)ptr - sizeof(block_header_t));
+    curr->is_free = 1;
 
-    // Sanity check - ensure the pointer is within our heap
-    if ((uint8_t*)block < memory_pool_l2 ||
-        (uint8_t*)block >= memory_pool_l2 + l2_heap_size())
-        return;  // Ignore attempts to free memory outside our heap
-
-    // Mark block as free
-    block->is_free = 1;
-
-    // Coalesce with adjacent free blocks
-
-    // Find the previous block
-    prev = NULL;
-    next = free_list;
-    while (next != NULL && next < block) {
-        prev = next;
-        next = offset_to_ptr(next->next);
+    next = offset_to_ptr(curr->next);
+    if (next != NULL && next->is_free) {
+        curr->size += sizeof(block_header_t) + next->size;
+        curr->next = next->next;
     }
 
-    // Merge with next block if adjacent and free
-    if (next && ((uint8_t*)block + block->size == (uint8_t*)next) && next->is_free) {
-        block->size += next->size;
-        block->next = next->next;
-    } else {
-        block->next = ptr_to_offset(next);
+    prev = free_list;
+    if (prev == curr) goto end;
+
+    while (prev != NULL && offset_to_ptr(prev->next) != curr) {
+        prev = offset_to_ptr(prev->next);
     }
 
-    // Merge with previous block if adjacent and free
-    if (prev && ((uint8_t*)prev + prev->size == (uint8_t*)block) && prev->is_free) {
-        prev->size += block->size;
-        prev->next = block->next;
-    } else if (prev) {
-        prev->next = ptr_to_offset(block);
-    } else {
-        free_list = block;
+    if (prev != NULL && prev->is_free) {
+        prev->size += sizeof(block_header_t) + curr->size;
+        prev->next = curr->next;
     }
+
+end:
+#if DEBUG_MALLOC
+    mini_printf("[MALLOC] Freed memory at %p, size %d bytes\r\n", ptr, (int)curr->size);
+    print_free_list();
+#endif
+    return;
 }
 
 

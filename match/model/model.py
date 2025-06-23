@@ -181,7 +181,9 @@ class MatchModel:
         MatchModel.save_model_logs()
         MatchModel.gen_model_runtime_and_move_model(target=target, out_path=out_path,
                                                     model_name=self.model_name, executor=self.executor,
-                                                    match_inputs=match_inputs, debug=self.debug)
+                                                    match_inputs=match_inputs, debug=self.debug,
+                                                    debug_fallback=self.debug_fallback,
+                                                    profile=self.profile, profile_fallback=self.profile_fallback)
         self.model_runtime(target=target,out_path=out_path)
     
     def model_runtime(self, target=None, out_path:str="/build"):

@@ -72,7 +72,7 @@ int match_${model_name}_run_graph(
     % if node.fallback:
         #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
-    ${target.print_fn}("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}\r\n");
+    ${target.print_fn}("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}: '${node.fn_name}'\r\n");
     % if node.fallback:
         #endif
     % endif
