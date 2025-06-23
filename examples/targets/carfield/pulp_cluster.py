@@ -1,5 +1,6 @@
-import math
 import os
+import math
+
 from match.node.node import MatchNode
 from match.ops.conv2d import MatchOpConv2D
 from match.partition.utils import add_checks_get_first_op
@@ -9,33 +10,57 @@ from match.target.exec_module import ComputationalApis, ExecModule, MemoryApis, 
 from match.cost_model.examples.pulp_cluster import PulpClusterCostModel
 from match.target.memory_inst import MemoryInst
 from match.tensor.tensor import MatchTensor
-from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant, has_dtype
 from match.partition.partitioning_pattern import PartitioningPattern
 
+from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant, has_dtype
+
+
 class PulpCluster(ExecModule):
-    def __init__(self, num_cores: int=8, l1_kb_size: int=64, l2_kb_size: int=512,
-                 l3_kb_size: int=8912, async_dma: bool=False):
-        super(PulpCluster, self).__init__(name="pulp_cluster",
-                                          libs_required={
-                                              "carfield_lib": ModuleLib(name="carfield_lib", base_path=os.path.dirname(__file__)+"/libs/carfield_lib"),
-                                              "pulp_nn": ModuleLib(name="pulp_nn", base_path=os.path.dirname(__file__)+"/libs/pulp_nn"),
-                                              "pulp_nn_fp16": ModuleLib(name="pulp_nn_fp16", base_path=os.path.dirname(__file__)+"/libs/pulp_nn_fp16"),
-                                              "redmule": ModuleLib(name="redmule", base_path=os.path.dirname(__file__)+"/libs/redmule"),
-                                          })
+    def __init__(
+        self,
+        num_cores: int = 8,
+        l1_kb_size: int = 64,
+        l2_kb_size: int = 512,
+        l3_kb_size: int = 8912,
+        async_dma: bool = False,
+    ):
+        cur_path = os.path.dirname(__file__)
+        super(PulpCluster, self).__init__(
+            name="pulp_cluster",
+            libs_required={
+                "carfield_lib": ModuleLib(
+                    name="carfield_lib", base_path=cur_path + "/libs/carfield_lib"
+                ),
+                "pulp_nn": ModuleLib(
+                    name="pulp_nn", base_path=cur_path + "/libs/pulp_nn"
+                ),
+                "pulp_kernels": ModuleLib(
+                    name="pulp_kernels", base_path=cur_path + "/libs/pulp_kernels"
+                ),
+                "redmule": ModuleLib(
+                    name="redmule", base_path=cur_path + "/libs/redmule"
+                ),
+            },
+        )
         self.NUM_CORES = num_cores
         self.L1_SCRATCHPAD_KB_SIZE = l1_kb_size
         self.L2_SHARED_MEM_KB_SIZE = l2_kb_size
         self.L3_FLASH_KB_SIZE = l3_kb_size
         self.ASYNC_DMA = async_dma
         # self.schedule_engine = "basic"
-        self.separate_build = True # Requires separate compilation
-        self.is_smp = True # Execution model is Symmetric Multiprocessing
+        # Requires separate compilation
+        self.separate_build = True
+        # Execution model is Symmetric Multiprocessing
+        self.is_smp = True
+        # Shared memory extern address variable
         self.shared_memory_extern_addr = "offload_args"
+        # Timer functions
+        self.timer_start_fn = "cluster_timer_start"
+        self.timer_stop_fn = "cluster_timer_stop"
         # Host functions specific to this exec module
         self.host_send_task_fn = "pulp_cluster_send_task_mbox"
         self.host_wait_end_of_task_fn = "pulp_cluster_wait_end_of_task_mbox"
-        self.timer_start_fn = "cluster_timer_start"
-        self.timer_stop_fn = "cluster_timer_stop"
+        
 
     def include_list(self):
         return ["carfield_lib/cluster"]
@@ -43,36 +68,26 @@ class PulpCluster(ExecModule):
     def module_memories(self):
         return [
             # from lower level to higher level memories
-            MemoryInst(name="MEM_L1",k_bytes=self.L1_SCRATCHPAD_KB_SIZE,sw_controlled=True),
+            MemoryInst(name="MEM_L1", k_bytes=self.L1_SCRATCHPAD_KB_SIZE, sw_controlled=True),
         ]
 
-    def zigzag_optimal_spatial_mapping_def(self, match_node: MatchNode=None, pattern_name = "conv2d"):
+    def zigzag_optimal_spatial_mapping_def(
+        self, match_node: MatchNode = None, pattern_name="conv2d"
+    ):
         if pattern_name == "pointwise_conv2d":
-            return [
-                ("OY",8),("OX",2),("K",4)
-            ]
+            return [("OY", 8), ("OX", 2), ("K", 4)]
         elif pattern_name == "depthwise_conv2d":
-            return [
-                ("K",8),("OX",8),("OY",self.FULL_DIM)
-            ]
+            return [("K", 8), ("OX", 8), ("OY", self.FULL_DIM)]
         elif pattern_name == "conv2d":
-            return [
-                ("OY",8),("OX",2),("K",4)
-            ]
+            return [("OY", 8), ("OX", 2), ("K", 4)]
         elif pattern_name == "add_requant":
-            return [
-                ("OY",8),("OX",2)
-            ]
+            return [("OY", 8), ("OX", 2)]
         elif "dense" in pattern_name:
             # TODO: K 8 C 4
-            return [
-                ("K",8)
-            ]
+            return [("K", 8)]
         else:
             # DEFAULT LIKE CONV2D
-            return [
-                ("OY",8),("OX",2),("K",4)
-            ]
+            return [("OY", 8), ("OX", 2), ("K", 4)]
 
     def zigzag_cost_model(self):
         return PulpClusterCostModel
@@ -210,6 +225,10 @@ class PulpCluster(ExecModule):
             #conv2d_batch_mul = is_op("multiply")(conv2d_bias, is_constant()) | is_op("multiply")(is_constant(), conv2d_bias)
             #conv2d_batch_add = is_op("add")(conv2d_batch_mul, is_constant()) | is_op("add")(is_constant(), conv2d_batch_mul)
             #return conv2d_batch_add
+            
+        def avgpool2d():
+            avgpool2d = is_op("nn.avgpool2d")(wildcard())
+            return avgpool2d
         
         def add_pt_requant():
             cast_a = is_op("cast")(wildcard())
@@ -268,15 +287,15 @@ class PulpCluster(ExecModule):
             return True
 
         return [
-            #PartitioningPattern(name="dense_out",pattern=dense_pt_out),
+            # fp16
             PartitioningPattern(name="dense_fp16",pattern=dense,additional_checks=only_out_fp16),
             PartitioningPattern(name="conv2d_fp16",pattern=conv2d,additional_checks=only_out_fp16),
+            #PartitioningPattern(name="avgpool2d_fp16",pattern=avgpool2d,additional_checks=only_out_fp16),
+            # int8
+            #PartitioningPattern(name="dense_out",pattern=dense_pt_out),
             PartitioningPattern(name="dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
             PartitioningPattern(name="conv2d",pattern=conv_pt_requant,additional_checks=only_std_convs),
             PartitioningPattern(name="depthwise_conv2d",pattern=conv_pt_requant,additional_checks=only_dw_convs),
             PartitioningPattern(name="pointwise_conv2d",pattern=conv_pt_requant,additional_checks=only_pw_convs),
             PartitioningPattern(name="add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8)
         ]
-        
-# [MATCH OUTPUT] Values:  1.218750, -3.525391, -2.291016, 0.780273, 2.294922, -2.683594,
-# [MATCH OUTPUT] Label predicted 4 with value 2.294922

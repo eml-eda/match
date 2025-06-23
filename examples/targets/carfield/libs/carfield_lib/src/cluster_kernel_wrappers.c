@@ -13,7 +13,7 @@
 #include "pulp.h"
 
 #include "pulp_nn/pulp_nn_kernels.h"
-#include "pulp_nn_fp16/pulp_nn_fp16_kernels.h"
+#include "pulp_kernels/pulp_fp16_kernels.h"
 #include "redmule/redmule_kernels.h"
 
 
@@ -50,10 +50,13 @@ void kernel_wrapper(MatchCtx* ctx)
 
     // Pulp NN fp16
     #ifdef dense_fp16
-        case dense_fp16:        pulp_nn_fp16_dense_wrapper(ctx);        break;
+        case dense_fp16:        pulp_fp16_dense_wrapper(ctx);           break;
     #endif
     #ifdef conv2d_fp16
-        case conv2d_fp16:       pulp_nn_fp16_conv2d_wrapper(ctx);        break;
+        case conv2d_fp16:       pulp_fp16_conv2d_wrapper(ctx);          break;
+    #endif
+    #ifdef avgpool2d_fp16
+        case avgpool2d_fp16:    pulp_fp16_avgpool2d_wrapper(ctx);       break;
     #endif
 
         default:                wtf_wrapper(ctx);                       break;
@@ -314,10 +317,10 @@ void pulp_nn_add_wrapper(MatchCtx* ctx){
 
 
 
-/* ======== PULP-NN fp16 ======== */
+/* ======== pulp-kernels fp16 ======== */
 
 
-void pulp_nn_fp16_dense_wrapper(MatchCtx* ctx) {
+void pulp_fp16_dense_wrapper(MatchCtx* ctx) {
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
@@ -331,12 +334,12 @@ void pulp_nn_fp16_dense_wrapper(MatchCtx* ctx) {
     }
     
 #if DEBUG_CLUSTER_LIB
-    smp_printf("[PULP][KER] pulp_nn_linear_fp16: ");
+    smp_printf("[PULP][KER] pulp_fp16_linear: ");
     smp_printf("Out. tile (%d,) | ", out_ch);
     smp_printf("Inp. tile (%d,)\r\n", inp_ch);
 #endif
 
-    pulp_nn_fp16_linear(
+    pulp_fp16_linear(
         tensors[0].pt,             // Activations pt
         tensors[1].pt,             // Weights pt
         tensors[num_tensors-1].pt, // Output pt
@@ -347,7 +350,7 @@ void pulp_nn_fp16_dense_wrapper(MatchCtx* ctx) {
 }
 
 
-void pulp_nn_fp16_conv2d_wrapper(MatchCtx* ctx){
+void pulp_fp16_conv2d_wrapper(MatchCtx* ctx){
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
@@ -380,13 +383,13 @@ void pulp_nn_fp16_conv2d_wrapper(MatchCtx* ctx){
     int apply_relu = 0;
 
 #if DEBUG_CLUSTER_LIB
-    smp_printf("[PULP][KER] pulp_nn_fp16_conv2d: ");
+    smp_printf("[PULP][KER] pulp_fp16_conv2d: ");
     smp_printf("Out. tile (%d,%d,%d) | ", out_ch, out_height, out_width);
     smp_printf("Inp. tile (%d,%d,%d) | ", inp_ch, inp_height, inp_width);
     smp_printf("Pad ▲ %d ▼ %d ◄ %d ► %d\r\n", pad_top, pad_bottom, pad_left, pad_right);
 #endif
 
-    pulp_nn_fp16_conv2d(
+    pulp_fp16_conv2d(
         input, weight, bias, output, im2col,
         inp_width, inp_height, inp_ch,
         out_width,out_height, out_ch, 
@@ -397,6 +400,11 @@ void pulp_nn_fp16_conv2d_wrapper(MatchCtx* ctx){
     );
 }
 
+
+
+void pulp_fp16_avgpool2d_wrapper(MatchCtx* ctx){
+    // TODO add support in MATCH
+}
 
 
 
@@ -423,7 +431,7 @@ void redmule_fp16_dense_wrapper(MatchCtx* ctx) {
     if (num_tensors > 3) {
         // Copy Bias in output because RedMulE use same ptr for Y and Z
         // TODO check if using DMA is possible
-        pulp_nn_fp16_copy(bias, output, out_neurons);
+        pulp_fp16_copy(bias, output, out_neurons);
     } else {
         // If no bias, fill output with zeros
         for (int i = 0; i < out_neurons; i++) {

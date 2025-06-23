@@ -1,9 +1,10 @@
 #ifdef __pulp_cluster__
-#ifndef __PULP_NN_FP16_DEFINES_H__
-#define __PULP_NN_FP16_DEFINES_H__
+#ifndef __PULP_KERNELS_FP16_DEFINES_H__
+#define __PULP_KERNELS_FP16_DEFINES_H__
 
 #include <pulp.h>
 
+#define barrier         synch_barrier
 #define nthreads        (get_core_num())
 #define tid             (rt_core_id())
 
@@ -43,5 +44,5 @@ static inline int idx_IO(int i, int o, int dim_i, int dim_o) { // CN in TVM
     return i * dim_o + o;
 }
 
-#endif // __PULP_NN_FP16_DEFINES_H__
+#endif // __PULP_KERNELS_FP16_DEFINES_H__
 #endif // __pulp_cluster__

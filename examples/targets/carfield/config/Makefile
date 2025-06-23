@@ -19,17 +19,27 @@ MATCH_MODELS 		 = $(wildcard $(abspath $(BUILD_DIR))/codegen/*)
 MATCH_INCLUDES		 = -I${MATCH_TVM_CRT_DIR}/include \
 			 		   -I${MATCH_TVM_CRT_DIR}/src/runtime/crt/include \
 			 		   $(foreach model, $(MATCH_MODEL_DIRS), -I$(model)/include) \
-			 		   -I ./include/
+			 		   -I ./include/ -I $(BUILD_DIR)
 
 # Source files
-MATCH_ALL_SRCS =  $(foreach model, $(MATCH_MODEL_DIRS), $(wildcard $(model)/src/*.c)) $(shell find $(abspath $(SRC_DIR)) -name '*.c')  $(MATCH_TVM_CRT_DIR)/src/runtime/crt/common/crt_backend_api.c $(MATCH_TVM_CRT_DIR)/src/runtime/crt/memory/stack_allocator.c
+
+LIB_MATCH_SRCS 			= $(wildcard $(SRC_DIR)/match/*.c)
+LIB_CARFIELD_LIB_SRCS 	= $(wildcard $(SRC_DIR)/carfield_lib/*.c)
+LIB_PULP_NN_SRCS 		= $(wildcard $(SRC_DIR)/pulp_nn/*.c)
+LIB_PULP_KERNELS_SRCS   = $(wildcard $(SRC_DIR)/pulp_kernels/*.c)
+LIB_REDMULE_SRCS 		= $(wildcard $(SRC_DIR)/redmule/*.c)
+LIB_PULP_TRAINLIB_SRCS 	= $(wildcard $(SRC_DIR)/pulp_trainlib/*.c)
+
+MATCH_TVM_SRCS = $(SRC_DIR)/tvm_runtime.c \
+				 $(MATCH_TVM_CRT_DIR)/src/runtime/crt/common/crt_backend_api.c \
+				 $(MATCH_TVM_CRT_DIR)/src/runtime/crt/memory/stack_allocator.c
+MATCH_ALL_SRCS = $(foreach model, $(MATCH_MODEL_DIRS), $(wildcard $(model)/src/*.c)) $(wildcard $(SRC_DIR)/nodes/*/*.c) $(wildcard $(SRC_DIR)/*/default_inputs.c) $(wildcard $(SRC_DIR)/*/runtime.c) \
+				 $(LIB_CARFIELD_LIB_SRCS) $(LIB_MATCH_SRCS)
+
 MATCH_COMMON_SRCS = $(filter-out %.pulp_cluster.c %/main.c %/carfield.c, $(MATCH_ALL_SRCS))
-
-MATCH_HOST_SRC = $(filter %/main.c %/carfield.c, $(MATCH_ALL_SRCS))
-MATCH_pulp_cluster_OFFLOAD_SRC = $(filter %.pulp_cluster.c, $(MATCH_ALL_SRCS))
-
-
-
+MATCH_HOST_SRC = $(filter %/carfield.c, $(MATCH_ALL_SRCS)) $(SRC_DIR)/main.c $(MATCH_TVM_SRCS)
+MATCH_pulp_cluster_OFFLOAD_SRC = $(filter %.pulp_cluster.c, $(MATCH_ALL_SRCS)) \
+								 $(LIB_PULP_NN_SRCS) $(LIB_PULP_KERNELS_SRCS) $(LIB_REDMULE_SRCS)
 
 
 # Compile runtime payload
@@ -105,7 +115,7 @@ $(HOST_LIB): $(HOST_LIB_SRCS_O)
 $(CAR_SW_DIR)/%.car.o: $(CAR_SW_DIR)/%.c
 	$(CHS_SW_CC) $(CAR_SW_INCLUDES) $(CHS_SW_CCFLAGS) -c $< -o $@
 
-HOST_FLAGS := -T$(HOST_LD_SCRIPT) -Wno-pointer-to-int-cast -DIntClustNumCores=8 -Dhalf=_Float16 -g -march=rv64gc_zifencei
+HOST_FLAGS := -T$(HOST_LD_SCRIPT) -Wno-pointer-to-int-cast -DIntClustNumCores=8 -Dhalf=_Float16 -g -march=rv64gc_zifencei_zfh
 
 
 

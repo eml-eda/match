@@ -3,12 +3,12 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#include "pulp_nn_fp16/pulp_nn_fp16_defines.h"
-#include "pulp_nn_fp16/pulp_nn_fp16_kernels.h"
+#include "pulp_kernels/pulp_fp16_defines.h"
+#include "pulp_kernels/pulp_fp16_kernels.h"
 
 
 
-static void pulp_nn_fp16_conv2d_nhwc_ohwi_par_oc_naive(
+static void pulp_fp16_conv2d_nhwc_ohwi_par_oc_naive(
     const fp16   *input,      // NHWC
     const fp16   *weight,     // OHWI
     const fp16   *bias,       // O
@@ -67,7 +67,8 @@ static void pulp_nn_fp16_conv2d_nhwc_ohwi_par_oc_naive(
 }
 
 
-static void pulp_nn_fp16_conv2d_nhwc_ohwi_par_oc_im2col(
+// im2col per-patch like in PULP-NN
+static void pulp_fp16_conv2d_nhwc_ohwi_par_oc_im2col_pp(
     const fp16   *input,      // NHWC
     const fp16   *weight,     // OHWI
     const fp16   *bias,       // O
@@ -88,8 +89,7 @@ static void pulp_nn_fp16_conv2d_nhwc_ohwi_par_oc_im2col(
     uint32_t      stride_x,
     uint32_t      stride_y,
     uint32_t      apply_relu
-)
-{
+) {
     // Parallelize on output channel (dim_oc)
     uint32_t chunk = (dim_oc + nthreads - 1) / nthreads;
     uint32_t start_oc = tid * chunk;
@@ -134,7 +134,8 @@ static void pulp_nn_fp16_conv2d_nhwc_ohwi_par_oc_im2col(
 }
 
 
-void pulp_nn_fp16_conv2d(
+
+void pulp_fp16_conv2d(
     const fp16 *__restrict__ input,         // Pointer to the input feature map
     const fp16 *__restrict__ weight,        // Pointer to the weights
     const fp16 *__restrict__ bias,          // Pointer to the bias vector
@@ -156,7 +157,7 @@ void pulp_nn_fp16_conv2d(
     uint32_t                 stride_y,      // Stride Vertical
     uint32_t                 apply_relu     // Apply ReLU activation
 ) {
-    pulp_nn_fp16_conv2d_nhwc_ohwi_par_oc_im2col(
+    pulp_fp16_conv2d_nhwc_ohwi_par_oc_im2col_pp(
         input, weight, bias, output, im2col,
         dim_ix, dim_iy, dim_ic,
         dim_ox, dim_oy, dim_oc,

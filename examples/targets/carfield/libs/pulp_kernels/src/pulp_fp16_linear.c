@@ -5,11 +5,11 @@
 
 #include <pulp.h>
 
-#include "pulp_nn_fp16/pulp_nn_fp16_kernels.h"
-#include "pulp_nn_fp16/pulp_nn_fp16_defines.h"
+#include "pulp_kernels/pulp_fp16_kernels.h"
+#include "pulp_kernels/pulp_fp16_defines.h"
 
 
-void pulp_nn_fp16_linear(
+void pulp_fp16_linear(
     fp16 *__restrict__ input,
     fp16 *__restrict__ weight,
     fp16 *__restrict__ output,

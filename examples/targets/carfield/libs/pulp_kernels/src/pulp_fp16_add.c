@@ -5,12 +5,13 @@
 
 #include <pulp.h>
 
-#include "pulp_nn_fp16/pulp_nn_fp16_defines.h"
-#include "pulp_nn_fp16/pulp_nn_fp16_kernels.h"
+#include "pulp_kernels/pulp_fp16_defines.h"
+#include "pulp_kernels/pulp_fp16_kernels.h"
 
 
-void pulp_nn_fp16_copy(
-    const fp16 *__restrict__ input,
+void __attribute__ ((noinline))  pulp_fp16_add(
+    fp16 *__restrict__ input_a,
+    fp16 *__restrict__ input_b,
     fp16 *__restrict__ output,
     uint32_t length
 ) {
@@ -19,7 +20,7 @@ void pulp_nn_fp16_copy(
     uint32_t end = min(start + chunk, length);
 
     for (uint32_t i = start; i < end; i++) {
-        output[i] = input[i];
+        output[i] = input_a[i] + input_b[i];
     }
 }
 

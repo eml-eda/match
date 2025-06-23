@@ -1,6 +1,6 @@
 #ifdef __pulp_cluster__
-#ifndef __PULP_NN_FP16_VECTOR_H__
-#define __PULP_NN_FP16_VECTOR_H__
+#ifndef __PULP_KERNELS_FP16_VECTOR_H__
+#define __PULP_KERNELS_FP16_VECTOR_H__
 
 typedef fp16 v2f16 __attribute__((vector_size (4)));
 
@@ -22,6 +22,6 @@ static inline v2f16 vfadd(v2f16 a, v2f16 b) {
   return result;
 }
 
-#endif // __PULP_NN_FP16_VECTOR_H__
+#endif // __PULP_KERNELS_FP16_VECTOR_H__
 #endif // __pulp_cluster__
 

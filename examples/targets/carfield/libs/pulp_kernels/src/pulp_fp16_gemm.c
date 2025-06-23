@@ -4,12 +4,12 @@
 
 #include <pulp.h>
 
-#include "pulp_nn_fp16/pulp_nn_fp16_kernels.h"
-#include "pulp_nn_fp16/pulp_nn_fp16_defines.h"
+#include "pulp_kernels/pulp_fp16_kernels.h"
+#include "pulp_kernels/pulp_fp16_defines.h"
 
 
 // Assume (M x N) * (N x K) = (M x K)
-void pulp_nn_fp16_gemm(
+void pulp_fp16_gemm(
   const fp16 *__restrict__ input,   // M x N
   const fp16 *__restrict__ weight,  // N x K
   const fp16 *__restrict__ bias,    // M x K
