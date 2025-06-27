@@ -83,6 +83,7 @@ class MatchMemoryPlanner:
         )
         # remove constants allocated in the SoC already
         real_constant_tensors = list()
+        initial_available_soc_bytes = self.available_soc_bytes
         for tensor in sorted_mem_tensors:
             if tensor.is_constant and not tensor.stored_in_external_memory:
                 store_as_constant = True
@@ -105,6 +106,7 @@ class MatchMemoryPlanner:
             tensor.load_from_ext_mem_at = list()
         sorted_mem_tensors = [m_t for m_t in sorted_mem_tensors if m_t.name not in real_constant_tensors]
         tensors_allocated_at_time = {key:[] for key in self.calls_idxs}
+        self.available_soc_bytes = initial_available_soc_bytes
         free_size_at_time = {key:self.available_soc_bytes for key in self.calls_idxs}
         
         print(f"[MEM PLANNER] Moved actual constants to on-chip memory, now there are {self.available_soc_bytes} bytes of available on-chip memory")
@@ -134,8 +136,8 @@ class MatchMemoryPlanner:
         real_constant_tensors = list()
 
         for tensor in sorted_mem_tensors:
-            if (tensor.is_input or tensor.is_output) and len(tensor.load_from_ext_mem_at)==0:
-                if self.available_soc_bytes<=tensor.num_bytes:
+            if (tensor.is_input or tensor.is_output) and len(tensor.load_from_ext_mem_at)==0 and tensor.name not in tensor_fixed_to_ext_mem:
+                if self.available_soc_bytes>=tensor.num_bytes:
                     self.available_soc_bytes -= tensor.num_bytes
                     real_constant_tensors.append(tensor.name)
             

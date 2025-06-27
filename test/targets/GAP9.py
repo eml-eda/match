@@ -10,7 +10,7 @@ from tvm import relay
 # pulp config
 PULP_CORES = 8
 L1_SCRATCHPAD_KB_SIZE = 101
-L2_SHARED_MEM_KB_SIZE = 1496
+L2_SHARED_MEM_KB_SIZE = 1536
 L3_FLASH_KB_SIZE = 89128
 ASYNC_DMA = False
 
@@ -38,6 +38,7 @@ class GAP9(MatchTarget):
 
     def set_target_host(self):
         self.cpu_type = "riscv_cpu"
+        self.static_mem_plan = True
 
     def set_paths(self):
         self.makefile_path = os.path.dirname(__file__)+"/pulp_config_lib/Makefile.GAP9"
