@@ -97,6 +97,7 @@ class MatchMemoryPlanner:
                             free_size_at_time[time] -= tensor.num_bytes
                     real_constant_tensors.append(tensor.name)
                 else:
+                    tensor_fixed_to_ext_mem.append(tensor.name)
                     print(f"[MEMORY PLANNER] Constant tensor {tensor.name} will be stored in external memory")
             tensor.mem_offset_at = dict()
             tensor.stored_in_external_memory = False
@@ -131,22 +132,6 @@ class MatchMemoryPlanner:
         free_size_at_time = {key:self.available_soc_bytes for key in self.calls_idxs}
         # remove constants allocated in the SoC already
         real_constant_tensors = list()
-        for tensor in sorted_mem_tensors:
-            if tensor.is_constant and not tensor.stored_in_external_memory:
-                store_as_constant = True
-                for time in free_size_at_time:
-                    if time not in tensor.used_at and free_size_at_time[time]<=tensor.num_bytes:
-                        store_as_constant = False
-                        break
-                if store_as_constant:
-                    self.available_soc_bytes -= tensor.num_bytes
-                    for time in free_size_at_time:
-                        if time not in tensor.used_at:
-                            free_size_at_time[time] -= tensor.num_bytes
-                    real_constant_tensors.append(tensor.name)
-                else:
-                    print(f"[MEMORY PLANNER] Constant tensor {tensor.name} will be stored in external memory")
-            tensor.mem_offset_at = dict()
 
         for tensor in sorted_mem_tensors:
             if (tensor.is_input or tensor.is_output) and len(tensor.load_from_ext_mem_at)==0:
@@ -164,6 +149,7 @@ class MatchMemoryPlanner:
             tensor.stored_in_external_memory = False
             tensor.move_temp_to_ext_mem = list()
             tensor.load_from_ext_mem_at = list()
+            tensor.mem_offset_at = dict()
         
         for tensor in sorted_mem_tensors:
             allocate_tensor(

@@ -764,9 +764,9 @@ void pulp_nn_wrapper(MatchCtx* ctx){
                 pulp_nn_add_wrapper, ctx);
             break;
 
-        case conv2d_train:
+        /*case conv2d_train:
             pulp_train_conv2d_fp32_wrapper(ctx);    
-            break;
+            break;*/
 
         default:
             break;

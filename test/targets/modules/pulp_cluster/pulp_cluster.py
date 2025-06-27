@@ -260,7 +260,7 @@ class PulpCluster(ExecModule):
         def std_convs_fp32(node):
             conv = add_checks_get_first_op(node, "nn.conv2d")
             print('++++ This is a conv2d?')
-            return conv.checked_type.dtype == 'float32'
+            return conv.checked_type.dtype == 'float32' and conv.attrs.groups==1
 
         return [
             PartitioningPattern(name="dense_out",pattern=dense_pt_out),
@@ -271,5 +271,5 @@ class PulpCluster(ExecModule):
             PartitioningPattern(name="add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8),
         ] + [
             # add training layers
-            PartitioningPattern(name="conv2d_train", pattern=conv2dadd, additional_checks=std_convs_fp32),
+            # PartitioningPattern(name="conv2d_train", pattern=conv2dadd, additional_checks=std_convs_fp32),
         ]

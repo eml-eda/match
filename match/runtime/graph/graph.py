@@ -97,10 +97,13 @@ class MatchTVMGraphRuntime:
                     out_tensor_map[(node_id,0)] = mem_tensor
                     map_names[node["name"]] = (mem_tensor.name, mem_tensor.name, mem_tensor.name)
                 else:
-                    mem_tensor = MatchMemoryTensor(name=node["name"],is_input=True,
-                                                   is_output=node_id in heads,
-                                                   shape=tuple(shapes[node_id]),dtype=np.dtype(dtypes[node_id]),
-                                                   node_id=node_id, node_info=node)
+                    mem_tensor = MatchMemoryTensor(
+                        name=node["name"],is_input=True,
+                        is_output=node_id in heads,
+                        shape=tuple(shapes[node_id]),
+                        dtype=np.dtype(dtypes[node_id]),
+                        node_id=node_id, node_info=node
+                    )
                     mem_tensors.append(mem_tensor)
                     tensor_map[node["name"]] = mem_tensor
                     out_tensor_map[(node_id,0)] = mem_tensor
@@ -131,29 +134,56 @@ class MatchTVMGraphRuntime:
                         nop_maps[node["name"]+'_'+str(node_id)] = inputs[0]
                         input_ptr = inputs[0]
                         # give also the right name to the tensor
-                        id_out = False
+                        id_out = -1
                         tens_name = None
                         for head_idx,head in enumerate(heads):
                             if head==node_id:
-                                id_out = True
+                                id_out = head_idx
                                 tens_name = self.model_name+"_out_"+str(head_idx)
                                 break
-                        if id_out:
-                            input_ptr.is_output = True
-
-                            mem_tensor = out_tensor_map[(input_ptr.node_id,0)]
-                            del out_tensor_map[(input_ptr.node_id,0)]
-                            out_tensor_map[(node_id,0)] = mem_tensor
-
-                            #rename tensor name and activation name
-                            prev_tens_name = input_ptr.name
-                            input_ptr.name = tens_name
-                            activations[input_ptr.name] = activations[prev_tens_name]
-                            del activations[prev_tens_name]
-                            dtype_activations[input_ptr.name] = dtype_activations[prev_tens_name]
-                            del dtype_activations[prev_tens_name]
-                            map_names[input_ptr.name] = map_names[prev_tens_name]
-                            del map_names[prev_tens_name]
+                        if id_out>=0:
+                            if out_tensor_map[(input_ptr.node_id,0)].is_output:
+                                name_out = self.model_name+"_out_"+str(id_out)
+                                mem_tensor = MatchMemoryTensor(
+                                    name=name_out,
+                                    is_input=False,
+                                    is_output=True,
+                                    is_intermediate=False,
+                                    shape=tuple(shapes[node_id]),
+                                    dtype=np.dtype(dtypes[node_id]),
+                                    node_id=-1
+                                )
+                                out_tensor_map[(node_id,0)] = mem_tensor
+                                prev_tens_name = input_ptr.name
+                                activations[name_out] = activations[prev_tens_name]
+                                dtype_activations[name_out] = dtype_activations[prev_tens_name]
+                                map_names[name_out] = map_names[prev_tens_name]
+                            else:
+                                input_ptr.is_output = True
+                                mem_tensor = out_tensor_map[(input_ptr.node_id,0)]
+                                del out_tensor_map[(input_ptr.node_id,0)]
+                                out_tensor_map[(node_id,0)] = mem_tensor
+                                #rename tensor name and activation name
+                                prev_tens_name = input_ptr.name
+                                input_ptr.name = tens_name
+                                activations[input_ptr.name] = activations[prev_tens_name]
+                                del activations[prev_tens_name]
+                                dtype_activations[input_ptr.name] = dtype_activations[prev_tens_name]
+                                del dtype_activations[prev_tens_name]
+                                map_names[input_ptr.name] = map_names[prev_tens_name]
+                                del map_names[prev_tens_name]
+                            cnt_ = 0
+                            for head_idx,head in [(head_idx, head) for head_idx, head in enumerate(heads)][id_out+1:]:
+                                if head==node_id:
+                                    cnt_ += 1
+                                    out_tensor_map[(node_id,cnt_)] = MatchMemoryTensor(
+                                        name=self.model_name+"_out_"+str(head_idx),
+                                        is_input=False,
+                                        is_output=True,
+                                        is_intermediate=False,
+                                        shape=tuple(shapes[node_id]),dtype=np.dtype(dtypes[node_id]),
+                                        node_id=-1
+                                    )
                     continue
                 
                 match_node, schedule, match_node_name = (None, None, None)
@@ -240,12 +270,14 @@ class MatchTVMGraphRuntime:
                 mem_tensors.append(mem_tensor)
                 tensor_map[node["name"]+"_out"] = mem_tensor
                 outputs = [mem_tensor]
-                call_node = MatchGraphRuntimeNodeCall(inputs=inputs, outputs=outputs,
-                                                      name=self.model_name+"_node_"+str(node_id),
-                                                      fn_name=node["attrs"]["func_name"], node_info=node,
-                                                      node_id=node_id, node_name=match_node_name,
-                                                      schedule=schedule, match_node=match_node,
-                                                      dtype_output_node=dtypes[node_id])
+                call_node = MatchGraphRuntimeNodeCall(
+                    inputs=inputs, outputs=outputs,
+                    name=self.model_name+"_node_"+str(node_id),
+                    fn_name=node["attrs"]["func_name"], node_info=node,
+                    node_id=node_id, node_name=match_node_name,
+                    schedule=schedule, match_node=match_node,
+                    dtype_output_node=dtypes[node_id]
+                )
                 nodes.append(call_node)
                 nodes_map[node["name"]] = call_node
                 map_names[tens_name] = (call_node.name, node["name"]+"_out", node["name"])
@@ -291,7 +323,7 @@ class MatchTVMGraphRuntime:
         # compute the checksums in the correct data type            
         checksums = {}
         for activation_name, activation in activations.items():
-            print(activation_name, dtype_activations[activation_name])
+            # print(activation_name, dtype_activations[activation_name])
             if dtype_activations[activation_name] == 'float32':
                 checksums[activation_name] = np.frombuffer(activation.flatten(), dtype="float32").sum()
             else: # FIXME 
