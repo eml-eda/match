@@ -118,7 +118,7 @@ class PulpCluster(ExecModule):
                 # ((Tin_W_l1-Tker_W_l1+PAD_L+PAD_R+STRIDE_W)/STRIDE_W))
 
                 im2col_size_l1 = (
-                    filter_shape[0] * filter_shape[1] * tile_inp_chs *
+                    filter_shape[0] * filter_shape[1] * tile_inp_c *
                     ((tile_inp_h - filter_shape[0] + padding[0] + padding[2] + stride[0]) // stride[0]) *
                     ((tile_inp_w - filter_shape[1] + padding[1] + padding[3] + stride[1]) // stride[1])
                 ) * 4
@@ -253,7 +253,7 @@ class PulpCluster(ExecModule):
                 wildcard(), wildcard()
             )
             conv2d = is_op("cast")(conv2d) | conv2d
-            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard())
+            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard()) | conv2d
             return bias_add
 
         # checks for training
@@ -271,5 +271,5 @@ class PulpCluster(ExecModule):
             PartitioningPattern(name="add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8),
         ] + [
             # add training layers
-            # PartitioningPattern(name="conv2d_train", pattern=conv2dadd, additional_checks=std_convs_fp32),
+             PartitioningPattern(name="conv2d_train", pattern=conv2dadd, additional_checks=std_convs_fp32),
         ]
