@@ -20,7 +20,6 @@ void pulp_cluster_init() {
     pi_time_wait_us(10000);
     #endif
     struct pi_cluster_conf conf;
-    struct pi_cluster_task cluster_task = {0};
     // First open the cluster
     pi_cluster_conf_init(&conf);
     conf.id=0;
