@@ -660,8 +660,6 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     layer1_wgt.W = conv_attrs->kernel_size[1];
     layer1_wgt.H = conv_attrs->kernel_size[0];
     layer1_wgt.C = inp_ch;
-    layer1_bias.data = tensors[2].pts[L1_SCRATCHPAD]; // bias pt
-    layer1_bias.dim = out_ch;
 
     int MATMUL_TYPE = 9; // 2x2
     int HWC_LAYOUT = 1 - (conv_attrs->data_layout == "NCHW"); // Choose if data layout is CHW (=0) or HWC (=1)
@@ -669,7 +667,6 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     struct Conv2D_args C2D_args;
     C2D_args.input = &layer1_in; // OK
     C2D_args.coeff = &layer1_wgt; // OK
-    C2D_args.bias = &layer1_bias; // OK
     C2D_args.output = &layer1_out; // OK
     C2D_args.Lpad = pad_left; // OK
     C2D_args.Rpad = pad_right; // OK
@@ -687,24 +684,19 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     C2D_args.opt_matmul_type_ig = MATMUL_TYPE;// OK
     C2D_args.USE_IM2COL = 1; // IM2COL; set to 1 later
     C2D_args.USE_DMA_IM2COL = 0; // OK checkme
-    C2D_args.USE_BIASES = 1; // OK checkme
+
+    
+    if ( num_tensors > 3){
+        layer1_bias.data = tensors[2].pts[L1_SCRATCHPAD]; // bias pt
+        layer1_bias.dim = out_ch;
+        C2D_args.bias = &layer1_bias; 
+        C2D_args.USE_BIASES = 1; 
+    } else {
+        C2D_args.bias = NULL; 
+        C2D_args.USE_BIASES = 0; 
+    }
 
     pulp_conv2d_fp32_fw_cl(&C2D_args);
-
-    //(
-        /* Quantization parameters are not used */
-        //num_tensors>4? tensors[2].pts[L1_SCRATCHPAD]:NULL, // bnorm mul pt
-        //num_tensors>4? tensors[3].pts[L1_SCRATCHPAD]:NULL, // bnorm add pt
-        //1, // requant mult factor
-        //right_shift, // requant shift factor
-
-
-
-        //conv_attrs->strides[1], // stride width
-        //conv_attrs->strides[0], // stride height
-        //1, // activation is on
-        //num_tensors>4 // using bnorm or bias --> using bnorm on this pattern
-    //);
 }
 
 /*
@@ -764,9 +756,9 @@ void pulp_nn_wrapper(MatchCtx* ctx){
                 pulp_nn_add_wrapper, ctx);
             break;
 
-        /*case conv2d_train:
+        case conv2d_train:
             pulp_train_conv2d_fp32_wrapper(ctx);    
-            break;*/
+            break;
 
         default:
             break;
