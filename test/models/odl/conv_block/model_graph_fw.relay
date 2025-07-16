@@ -1,0 +1,30 @@
+def @main(%data_0: Tensor[(1, 64, 25, 5), float32], %param_1_train: Tensor[(64, 64, 1, 1), float32], %param_2_train: Tensor[(8), float32], %param_3_train: Tensor[(8), float32], %param_4_train: Tensor[(64, 1, 1), float32], %param_5_train: Tensor[(64, 1, 1), float32], %param_6_train: Tensor[(64, 1, 3, 3), float32], %param_7_train: Tensor[(64), float32], %param_8_train: Tensor[(8), float32], %param_9_train: Tensor[(8), float32], %param_10_train: Tensor[(64, 1, 1), float32], %param_11_train: Tensor[(64, 1, 1), float32], %param_12_train: Tensor[(64, 64, 1, 1), float32], %param_13_train: Tensor[(8), float32], %param_14_train: Tensor[(8), float32], %param_15_train: Tensor[(64, 1, 1), float32], %param_16_train: Tensor[(64, 1, 1), float32]) -> (Tensor[(1, 1536), float32], Tensor[(1, 64, 12, 2), float32], Tensor[(1, 64, 25, 5), float32], Tensor[(1, 64, 25, 5), float32], Tensor[(1, 64, 25, 5), float32], Tensor[(1, 8, 1000), float32], Tensor[(1, 64, 25, 5), float32], Tensor[(1, 64, 25, 5), float32], Tensor[(1, 64, 25, 5), float32], Tensor[(1, 8, 1000), float32], Tensor[(1, 64, 25, 5), float32], Tensor[(1, 64, 25, 5), float32], Tensor[(1, 64, 25, 5), float32], Tensor[(1, 8, 1000), float32], Tensor[(1, 64, 25, 5), float32]) {
+  %0 = nn.conv2d(%data_0, %param_1_train, padding=[0, 0, 0, 0], channels=64, kernel_size=[1, 1]) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %1 = reshape(%0, newshape=[0, 8, -1]) /* ty=Tensor[(1, 8, 1000), float32] */;
+  %2 = nn.instance_norm(%1, %param_2_train, %param_3_train) /* ty=Tensor[(1, 8, 1000), float32] */;
+  %3 = reshape(%2, newshape=[1, 64, 25, 5]) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %4 = multiply(%3, %param_4_train) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %5 = add(%4, %param_5_train) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %6 = nn.relu(%5) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %7 = nn.conv2d(%6, %param_6_train, padding=[1, 1, 1, 1], groups=64, channels=64, kernel_size=[3, 3]) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %8 = nn.bias_add(%7, %param_7_train) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %9 = reshape(%8, newshape=[0, 8, -1]) /* ty=Tensor[(1, 8, 1000), float32] */;
+  %10 = nn.instance_norm(%9, %param_8_train, %param_9_train) /* ty=Tensor[(1, 8, 1000), float32] */;
+  %11 = reshape(%10, newshape=[1, 64, 25, 5]) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %12 = multiply(%11, %param_10_train) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %13 = add(%12, %param_11_train) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %14 = nn.relu(%13) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %15 = nn.conv2d(%14, %param_12_train, padding=[0, 0, 0, 0], channels=64, kernel_size=[1, 1]) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %16 = reshape(%15, newshape=[0, 8, -1]) /* ty=Tensor[(1, 8, 1000), float32] */;
+  %17 = nn.instance_norm(%16, %param_13_train, %param_14_train) /* ty=Tensor[(1, 8, 1000), float32] */;
+  %18 = reshape(%17, newshape=[1, 64, 25, 5]) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %19 = multiply(%18, %param_15_train) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %20 = add(%19, %param_16_train) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %21 = nn.relu(%20) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %22 = nn.pad(%21, 0f /* ty=float32 */, pad_width=[[0, 0], [0, 0], [0, 0], [0, 0]]) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  %23 = nn.avg_pool2d(%22, pool_size=[2, 2], strides=[2, 2], padding=[0, 0, 0, 0]) /* ty=Tensor[(1, 64, 12, 2), float32] */;
+  %24 = nn.batch_flatten(%23) /* ty=Tensor[(1, 1536), float32] */;
+  %25 = reshape(%24, newshape=[0, 0]) /* ty=Tensor[(1, 1536), float32] */;
+  %26 = copy(%data_0) /* ty=Tensor[(1, 64, 25, 5), float32] */;
+  (%25, %23, %22, %20, %18, %16, %14, %13, %11, %9, %6, %5, %3, %1, %26)
+}
