@@ -1,7 +1,7 @@
 #include <pulp_cluster/cluster.h>
 #include <pulp_train/pulp_conv2d_fp32.h> // FIXME: this should not be here. quick fix for the typedef
 #include <pulp_train/pulp_conv_dw_fp32.h> // FIXME: this should not be here. quick fix for the typedef
-
+#include <pulp_train/pulp_conv_pw_fp32.h>
 #include <pulp_train/pulp_train_utils_fp32.h>
 static void* im2col_pt_ = NULL;
 static void* pwt_pt_ = NULL;
@@ -588,11 +588,13 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
+    int is_bias = num_tensors > 3? 1: 0; // check if bias is present
     int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
     
     int out_width, out_height, out_ch;
     int inp_width, inp_height, inp_ch;
+    int stride_h, stride_w;
     int pad_top, pad_bottom, pad_left, pad_right;
 
     if (conv_attrs->data_layout == "NCHW"){
@@ -625,6 +627,9 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
         pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
         pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
     }
+    stride_h = conv_attrs->strides[0];
+    stride_w = conv_attrs->strides[1];
+
     #ifdef CLUSTER_LIB_DEBUG
     printf("Out tile [%d %d %d] Inp tile [%d %d %d] pad ^ %d v %d < %d > %d\n", out_ch, out_height, out_width, inp_ch, inp_height, inp_width,
             pad_top, pad_bottom, pad_left, pad_right);
@@ -653,42 +658,67 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     layer1_wgt.H = conv_attrs->kernel_size[0];
     layer1_wgt.C = inp_ch;
 
-    int MATMUL_TYPE = 9; // 2x2
-    int HWC_LAYOUT = 1 - (conv_attrs->data_layout == "NCHW"); // Choose if data layout is CHW (=0) or HWC (=1)
-
-    struct Conv2D_args C2D_args;
-    C2D_args.input = &layer1_in; // OK
-    C2D_args.coeff = &layer1_wgt; // OK
-    C2D_args.output = &layer1_out; // OK
-    C2D_args.Lpad = pad_left; // OK
-    C2D_args.Rpad = pad_right; // OK
-    C2D_args.Upad = pad_top; // OK
-    C2D_args.Dpad = pad_bottom; // OK
-    C2D_args.stride_h = conv_attrs->strides[0]; // OK
-    C2D_args.stride_w = conv_attrs->strides[1]; // OK
-    C2D_args.i2c_buffer = im2col_pt_; // OK
-    C2D_args.bt_buffer = NULL; // transpose buffer : set to NULL for now
-    C2D_args.skip_wg_grad = 0;
-    C2D_args.skip_in_grad = 0;
-    C2D_args.HWC = HWC_LAYOUT;
-    C2D_args.opt_matmul_type_fw = MATMUL_TYPE;// OK - change later
-    C2D_args.opt_matmul_type_wg = MATMUL_TYPE;// OK 
-    C2D_args.opt_matmul_type_ig = MATMUL_TYPE;// OK
-    C2D_args.USE_IM2COL = 1; // IM2COL; set to 1 later
-    C2D_args.USE_DMA_IM2COL = 0; // OK checkme
-
-    
-    if ( num_tensors > 3){
+    if ( is_bias){
         layer1_bias.data = tensors[2].pts[L1_SCRATCHPAD]; // bias pt
         layer1_bias.dim = out_ch;
-        C2D_args.bias = &layer1_bias; 
-        C2D_args.USE_BIASES = 1; 
-    } else {
-        C2D_args.bias = NULL; 
-        C2D_args.USE_BIASES = 0; 
     }
 
-    pulp_conv2d_fp32_fw_cl(&C2D_args);
+    int MATMUL_TYPE = 9; // 2x2
+    int HWC_LAYOUT = 1 - (conv_attrs->data_layout == "NCHW"); // Choose if data layout is CHW (=0) or HWC (=1)
+    // special pointwise acceleration
+    if (layer1_wgt.W == 1 && layer1_wgt.H ==1 && !is_bias && 
+        stride_h == 1 && stride_w == 1 &&
+        pad_top == 0 && pad_bottom == 0 && pad_left == 0 && pad_right == 0){
+
+        struct PointWise_Conv_args PW_args;
+        PW_args.input = &layer1_in;
+        PW_args.coeff = &layer1_wgt;
+        PW_args.output = &layer1_out;
+        PW_args.skip_wg_grad = 0;
+        PW_args.skip_in_grad = 0;
+        PW_args.opt_matmul_type_fw = MATMUL_TYPE;
+        PW_args.opt_matmul_type_wg = MATMUL_TYPE;
+        PW_args.opt_matmul_type_ig = MATMUL_TYPE;
+        PW_args.HWC = HWC_LAYOUT;
+
+        pulp_conv_pw_fp32_fw_cl(&PW_args);
+
+    } else {
+    // generic kernel convolution
+
+        struct Conv2D_args C2D_args;
+        C2D_args.input = &layer1_in;
+        C2D_args.coeff = &layer1_wgt;
+        C2D_args.output = &layer1_out;
+        C2D_args.Lpad = pad_left;
+        C2D_args.Rpad = pad_right;
+        C2D_args.Upad = pad_top;
+        C2D_args.Dpad = pad_bottom;
+        C2D_args.stride_h = stride_h;
+        C2D_args.stride_w = stride_w;
+        C2D_args.i2c_buffer = im2col_pt_;
+        C2D_args.bt_buffer = NULL;
+        C2D_args.skip_wg_grad = 0;
+        C2D_args.skip_in_grad = 0;
+        C2D_args.HWC = HWC_LAYOUT;
+        C2D_args.opt_matmul_type_fw = MATMUL_TYPE;
+        C2D_args.opt_matmul_type_wg = MATMUL_TYPE;
+        C2D_args.opt_matmul_type_ig = MATMUL_TYPE;
+        C2D_args.USE_IM2COL = 1; // IM2COL; set to 1 later
+        C2D_args.USE_DMA_IM2COL = 0; // OK checkme
+
+        
+        if ( is_bias){
+            C2D_args.bias = &layer1_bias; 
+            C2D_args.USE_BIASES = 1; 
+        } else {
+            C2D_args.bias = NULL; 
+            C2D_args.USE_BIASES = 0; 
+        }
+
+        pulp_conv2d_fp32_fw_cl(&C2D_args);
+    }
+
 }
 
 
