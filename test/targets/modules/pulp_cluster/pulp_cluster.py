@@ -78,7 +78,7 @@ class PulpCluster(ExecModule):
                     w_tensor.data = w_tensor.data.transpose(1,0)
                     w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]
                 w_tensor.layout = "CN"
-            elif pattern_name == "conv2d_train":
+            elif pattern_name == "conv2d_train" or pattern_name == "conv2ddw_train":
                 pass
             elif "conv2d" in w_tensor.name:
                 if w_tensor.layout=="HWIO":
@@ -124,7 +124,8 @@ class PulpCluster(ExecModule):
                 ) * 4
                 print('HERE!', tile_inp_c, tile_inp_h, tile_inp_w, padding, filter_shape, stride)                
                 print(f"IM2COL SIZE L1: {im2col_size_l1/1024} KB")
-                #im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
+            elif pattern_name=="conv2ddw_train":
+                pass
 
             if im2col_size_l1:
                 schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="L1_SCRATCHPAD",
@@ -247,21 +248,38 @@ class PulpCluster(ExecModule):
             return True
         
         # training layers 
-        def conv2dadd():
+        def conv2d():
             #Create pattern for a 2D Conv block, with bias and ReLU.
             conv2d = is_op("nn.conv2d")(
                 wildcard(), wildcard()
             )
             conv2d = is_op("cast")(conv2d) | conv2d
-            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard()) | conv2d
-            return bias_add
+            #conv2d = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard()) | conv2d
+            return conv2d
 
         # checks for training
         def std_convs_fp32(node):
             conv = add_checks_get_first_op(node, "nn.conv2d")
             print('++++ This is a conv2d?')
             return conv.checked_type.dtype == 'float32' and conv.attrs.groups==1
-
+        
+        def dw_convs_fp32_pulp(node):
+            conv = add_checks_get_first_op(node, "nn.conv2d")
+            out_chs = conv.args[1].checked_type.shape[0]
+            in_chs = conv.args[1].checked_type.shape[1]
+            if conv.checked_type.dtype != 'float32':
+                return False
+            if conv.attrs.groups == 1:
+                return False
+            if conv.attrs.groups != out_chs or in_chs != 1 :
+                return False
+            if conv.attrs.data_layout!="NCHW":
+                return False
+            #add checks for stride (temp)
+            if conv.attrs.strides[0] != 1 or conv.attrs.strides[1] != 1:
+                return False
+            return True
+        
         return [
             PartitioningPattern(name="dense_out",pattern=dense_pt_out),
             PartitioningPattern(name="dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
@@ -271,5 +289,6 @@ class PulpCluster(ExecModule):
             PartitioningPattern(name="add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8),
         ] + [
             # add training layers
-             PartitioningPattern(name="conv2d_train", pattern=conv2dadd, additional_checks=std_convs_fp32),
+             PartitioningPattern(name="conv2d_train", pattern=conv2d, additional_checks=std_convs_fp32),
+             PartitioningPattern(name="conv2ddw_train", pattern=conv2d, additional_checks=dw_convs_fp32_pulp),
         ]

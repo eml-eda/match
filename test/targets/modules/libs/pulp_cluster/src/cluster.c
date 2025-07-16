@@ -1,5 +1,7 @@
 #include <pulp_cluster/cluster.h>
 #include <pulp_train/pulp_conv2d_fp32.h> // FIXME: this should not be here. quick fix for the typedef
+#include <pulp_train/pulp_conv_dw_fp32.h> // FIXME: this should not be here. quick fix for the typedef
+
 #include <pulp_train/pulp_train_utils_fp32.h>
 static void* im2col_pt_ = NULL;
 static void* pwt_pt_ = NULL;
@@ -629,21 +631,11 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     printf("Num tensors: %d\n", num_tensors);
     #endif
 
-
-    //inp_height, // input width
-    //inp_height, // input height
-    //inp_ch, // input channels
-    //out_width, // out width
-    //out_height, // out height
-    //out_ch, // out ch
-    //conv_attrs->kernel_size[1], // filter width
-    //conv_attrs->kernel_size[0], // filter height
-
     // setup the arguments. FIXME: merge with the precedent
     struct blob layer1_in, layer1_wgt, layer1_bias, layer1_out;
 
     /* check if all the fields of the layers are assigned*/
-    layer1_in.data = tensors[0].pts[L1_SCRATCHPAD], // acts pt //INPUT;
+    layer1_in.data = tensors[0].pts[L1_SCRATCHPAD];
     layer1_in.dim = inp_height*inp_width*inp_ch;
     layer1_in.W = inp_width;
     layer1_in.H = inp_height;
@@ -697,6 +689,97 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     }
 
     pulp_conv2d_fp32_fw_cl(&C2D_args);
+}
+
+
+void pulp_train_conv2ddw_fp32_wrapper(void* args){
+    MatchCtx* ctx = (MatchCtx*)args;
+    MatchTensor* tensors = ctx->tensors->tensors;
+    int num_ops = ctx->ops->num_ops;
+    int num_tensors = ctx->tensors->num_tensors;
+    int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
+    MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
+    
+    int out_width, out_height, out_ch;
+    int inp_width, inp_height, inp_ch;
+    int pad_top, pad_bottom, pad_left, pad_right;
+
+    if (conv_attrs->data_layout == "NCHW"){
+        // out chw
+        out_width = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+3].size; // out width
+        out_height = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+2].size; // out height
+        out_ch = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+1].size; // out ch
+        // inp chw
+        inp_width = tensors[0].tiles[L1_SCRATCHPAD*4+3].size; // out width
+        inp_height = tensors[0].tiles[L1_SCRATCHPAD*4+2].size; // out height
+        inp_ch = tensors[0].tiles[L1_SCRATCHPAD*4+1].size; // out ch
+        // pad
+        pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+        pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+3]));
+        pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+        pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+3]));
+    
+    } else {
+        // out hwc
+        out_width = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+2].size; // out width
+        out_height = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+1].size; // out height
+        out_ch = tensors[num_tensors-1].tiles[L1_SCRATCHPAD*4+3].size; // out ch
+        // inp hwc
+        inp_width = tensors[0].tiles[L1_SCRATCHPAD*4+2].size; // out width
+        inp_height = tensors[0].tiles[L1_SCRATCHPAD*4+1].size; // out height
+        inp_ch = tensors[0].tiles[L1_SCRATCHPAD*4+3].size; // out ch        
+        // pad
+        pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+        pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+        pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+1]));
+        pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[L1_SCRATCHPAD*4+2]));
+    }
+    #ifdef CLUSTER_LIB_DEBUG
+    printf("Out tile [%d %d %d] Inp tile [%d %d %d] pad ^ %d v %d < %d > %d\n", out_ch, out_height, out_width, inp_ch, inp_height, inp_width,
+            pad_top, pad_bottom, pad_left, pad_right);
+    printf("Num tensors: %d\n", num_tensors);
+    #endif
+
+    // setup the arguments. FIXME: merge with the precedent
+    struct blob layer1_in, layer1_wgt, layer1_bias, layer1_out;
+
+    /* check if all the fields of the layers are assigned*/
+    //layer1_in.data = tensors[0].pts[L1_SCRATCHPAD]; // acts pt //INPUT;
+    layer1_in.data = tensors[0].pt;
+    layer1_in.dim = inp_height*inp_width*inp_ch;
+    layer1_in.W = inp_width;
+    layer1_in.H = inp_height;
+    layer1_in.C = inp_ch;
+  
+    layer1_out.data = tensors[num_tensors-1].pts[L1_SCRATCHPAD]; // output pt 
+    layer1_out.dim = out_height*out_width*out_ch;
+    layer1_out.W = out_width;
+    layer1_out.H = out_height;
+    layer1_out.C = out_ch;
+  
+    layer1_wgt.data = tensors[1].pts[L1_SCRATCHPAD]; // weights pt    
+    layer1_wgt.dim = conv_attrs->kernel_size[0]*conv_attrs->kernel_size[1]*inp_ch*out_ch;
+    layer1_wgt.W = conv_attrs->kernel_size[1];
+    layer1_wgt.H = conv_attrs->kernel_size[0];
+    layer1_wgt.C = inp_ch;
+
+    int HWC_LAYOUT = 1 - (conv_attrs->data_layout == "NCHW"); // Choose if data layout is CHW (=0) or HWC (=1)
+
+    struct DepthWise_Conv_args DW_args;
+    DW_args.input = &layer1_in;
+    DW_args.coeff = &layer1_wgt;
+    DW_args.output = &layer1_out;
+    DW_args.Lpad = pad_left;
+    DW_args.Rpad = pad_right;
+    DW_args.Upad = pad_top;
+    DW_args.Dpad = pad_bottom;
+    DW_args.skip_wg_grad = 0;
+    DW_args.skip_in_grad = 0;
+    DW_args.HWC = HWC_LAYOUT;
+
+
+    pulp_conv_dw_fp32_fw_cl(&DW_args);
+
 }
 
 /*
@@ -760,6 +843,10 @@ void pulp_nn_wrapper(MatchCtx* ctx){
             pulp_train_conv2d_fp32_wrapper(ctx);    
             break;
 
+        case conv2ddw_train:
+            pulp_train_conv2ddw_fp32_wrapper(ctx);    
+            break;
+        
         default:
             break;
     }

@@ -265,6 +265,10 @@ struct kernel_DW_args {
   struct blob * input;
   struct blob * weights;
   struct blob * output;
+	int Lpad;
+	int Rpad;
+	int Upad;
+	int Dpad;
 };
 
 /**
