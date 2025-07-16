@@ -39,8 +39,12 @@ void dw_kernel_forward(void * kernel_DW_args) {
   uint32_t W_in = args->input->W;
   uint32_t pH = args->weights->H;
   uint32_t pW = args->weights->W;
+	int Lpad = args->Lpad;
+	int Rpad = args->Rpad;
+	int Upad = args->Upad;
+	int Dpad = args->Dpad;
   uint32_t H_out = args->output->H;
-  uint32_t W_out = args->output->W;
+  uint32_t W_out = args->output->W ;
 
   uint32_t blockSize = (C_in+NUM_CORES-1) / NUM_CORES;
   uint32_t start = pi_core_id()*blockSize;
@@ -48,22 +52,101 @@ void dw_kernel_forward(void * kernel_DW_args) {
 
   for (int ch=start; ch<stop; ch++) 
   {
-    for (int ho=0; ho<H_out; ho++) 
+    // upper margin
+    for (int ho=0; ho<Upad; ho++) 
     {
       for (int wo=0; wo<W_out; wo++)
+      { 
+        float temp = 0;
+        for (int wk=0; wk<pW; wk++)
+        {
+          if ((wo+wk-Lpad) <0 || (wo+wk-Lpad)>= W_in) continue; 
+          for (int hk=Upad; hk<pH; hk++) 
+          {  
+            int in_idx = (wo+wk-Lpad) + (ho+hk-Upad)*W_in + ch*H_in*W_in;
+            temp += coeffData[wk + hk*pW + ch*pH*pW] * inData[in_idx];
+          }
+        }
+        outData[wo + ho*W_out + ch*H_out*W_out] = temp;
+     }
+    }
+
+    // center out tensor
+    for (int ho=Upad; ho<H_out-Dpad; ho++) 
+    {
+      // left margin
+      for (int wo=0; wo<Lpad; wo++)
+      {
+        float temp = 0;
+        for (int wk=0; wk<pW; wk++)
+        {
+          if ((wo+wk-Lpad) <0 || (wo+wk-Lpad)>= W_in) continue;
+          for (int hk=0; hk<pH; hk++) 
+          {   
+            int in_idx = (wo+wk-Lpad) + (ho+hk-Upad)*W_in + ch*H_in*W_in;
+            temp += coeffData[wk + hk*pW + ch*pH*pW] * inData[in_idx];
+          }
+        }
+        outData[wo + ho*W_out + ch*H_out*W_out] = temp;
+      }
+
+
+      // center body 
+      for (int wo=Lpad; wo<W_out-Rpad; wo++)
       {
         float temp = 0;
         for (int hk=0; hk<pH; hk++) 
         {
           for (int wk=0; wk<pW; wk++)
           {
-            temp += coeffData[wk + hk*pW + ch*pH*pW] * inData[wo+wk + (ho+hk)*W_in + ch*H_in*W_in];
+            int in_idx = (wo+wk-Lpad) + (ho+hk-Upad)*W_in + ch*H_in*W_in;
+            temp += coeffData[wk + hk*pW + ch*pH*pW] * inData[in_idx];
           }
         }
         outData[wo + ho*W_out + ch*H_out*W_out] = temp;
       }
+
+      // right margin
+      for (int wo=W_out-Rpad; wo<W_out; wo++)
+      {
+        float temp = 0;
+        for (int wk=0; wk<pW; wk++)
+        {
+          if ((wo+wk-Lpad) <0 || (wo+wk-Lpad)>= W_in) continue;
+          for (int hk=0; hk<pH; hk++) 
+          {   
+            int in_idx = (wo+wk-Lpad) + (ho+hk-Upad)*W_in + ch*H_in*W_in;
+            temp += coeffData[wk + hk*pW + ch*pH*pW] * inData[in_idx];
+          }
+        }
+        outData[wo + ho*W_out + ch*H_out*W_out] = temp;
+     
+      }
     }
-  } 
+
+    // down margin
+    for (int ho=H_out-Dpad; ho<H_out; ho++) 
+    {
+      for (int wo=0; wo<W_out; wo++)
+      { 
+        float temp = 0;
+
+        for (int wk=0; wk<pW; wk++)
+        {
+          if ((wo+wk-Lpad) <0 || (wo+wk-Lpad)>= W_in) continue; 
+          for (int hk=0; hk<pH-Dpad; hk++) 
+          {  
+            int in_idx = (wo+wk-Lpad) + (ho+hk-Upad)*W_in + ch*H_in*W_in;
+            temp += coeffData[wk + hk*pW + ch*pH*pW] * inData[in_idx];
+          }
+        }
+        outData[wo + ho*W_out + ch*H_out*W_out] = temp;      
+     }
+    }
+
+
+  } // end parallel for 
+
 
 }
 

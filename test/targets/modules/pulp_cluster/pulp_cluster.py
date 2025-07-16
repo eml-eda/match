@@ -78,7 +78,7 @@ class PulpCluster(ExecModule):
                     w_tensor.data = w_tensor.data.transpose(1,0)
                     w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]
                 w_tensor.layout = "CN"
-            elif pattern_name == "conv2d_train":
+            elif pattern_name == "conv2d_train" or pattern_name == "conv2ddw_train":
                 pass
             elif "conv2d" in w_tensor.name:
                 if w_tensor.layout=="HWIO":
@@ -111,20 +111,21 @@ class PulpCluster(ExecModule):
                 tile_inp_c = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[1].size
                 tile_inp_h = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[2].size
                 tile_inp_w = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[3].size
-                print('HERE!', tile_inp_c, tile_inp_h, tile_inp_w, padding, filter_shape)                
-                # from the pulp-trainlib code
-                # define IM2COL_SIZE (Tker_H_l1*Tker_W_l1*Tin_C_l1*
-                # ((Tin_H_l1-Tker_H_l1+PAD_U+PAD_D+STRIDE_H)/STRIDE_H)*
-                # ((Tin_W_l1-Tker_W_l1+PAD_L+PAD_R+STRIDE_W)/STRIDE_W))
+                if  filter_shape[0] == 1 and filter_shape[1] == 1 and \
+                    padding[0] == 0 and padding[1] == 0 and padding[2] == 0 and padding[3] == 0 and \
+                    stride[0] == 1 and stride[1] == 1:
+                    # special pointwise acceleration do not need IM2COL buffer
+                    im2col_size_l1 = 0
 
-                im2col_size_l1 = (
-                    filter_shape[0] * filter_shape[1] * tile_inp_c *
-                    ((tile_inp_h - filter_shape[0] + padding[0] + padding[2] + stride[0]) // stride[0]) *
-                    ((tile_inp_w - filter_shape[1] + padding[1] + padding[3] + stride[1]) // stride[1])
-                ) * 4
-                print('HERE!', tile_inp_c, tile_inp_h, tile_inp_w, padding, filter_shape, stride)                
+                else: # standard conv2d
+                    im2col_size_l1 = (
+                        filter_shape[0] * filter_shape[1] * tile_inp_c *
+                        ((tile_inp_h - filter_shape[0] + padding[0] + padding[2] + stride[0]) // stride[0]) *
+                        ((tile_inp_w - filter_shape[1] + padding[1] + padding[3] + stride[1]) // stride[1])
+                    ) * 4
                 print(f"IM2COL SIZE L1: {im2col_size_l1/1024} KB")
-                #im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
+            elif pattern_name=="conv2ddw_train":
+                pass
 
             if im2col_size_l1:
                 schedule.buffers.append(
@@ -253,7 +254,7 @@ class PulpCluster(ExecModule):
             return True
         
         # training layers 
-        def conv2dadd():
+        def conv2d():
             #Create pattern for a 2D Conv block, with bias and ReLU.
             conv2d = is_op("nn.conv2d")(
                 wildcard(), wildcard()
@@ -267,7 +268,24 @@ class PulpCluster(ExecModule):
             conv = add_checks_get_first_op(node, "nn.conv2d")
             print('++++ This is a conv2d?')
             return conv.checked_type.dtype == 'float32' and conv.attrs.groups==1
-
+        
+        def dw_convs_fp32_pulp(node):
+            conv = add_checks_get_first_op(node, "nn.conv2d")
+            out_chs = conv.args[1].checked_type.shape[0]
+            in_chs = conv.args[1].checked_type.shape[1]
+            if conv.checked_type.dtype != 'float32':
+                return False
+            if conv.attrs.groups == 1:
+                return False
+            if conv.attrs.groups != out_chs or in_chs != 1 :
+                return False
+            if conv.attrs.data_layout!="NCHW":
+                return False
+            #add checks for stride (temp)
+            if conv.attrs.strides[0] != 1 or conv.attrs.strides[1] != 1:
+                return False
+            return True
+        
         return [
             PartitioningPattern(name="dense_out",pattern=dense_pt_out),
             PartitioningPattern(name="dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
@@ -277,5 +295,6 @@ class PulpCluster(ExecModule):
             PartitioningPattern(name="add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8),
         ] + [
             # add training layers
-            # PartitioningPattern(name="conv2d_train", pattern=conv2dadd, additional_checks=std_convs_fp32),
+             PartitioningPattern(name="conv2d_train", pattern=conv2d, additional_checks=std_convs_fp32),
+             PartitioningPattern(name="conv2ddw_train", pattern=conv2d, additional_checks=dw_convs_fp32_pulp),
         ]

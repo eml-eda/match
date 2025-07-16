@@ -34,7 +34,10 @@ void pulp_conv_dw_fp32_fw_cl ( void * DepthWise_Conv_args )
   ker_args.input = DW_args->input;
   ker_args.weights = DW_args->coeff;
   ker_args.output = DW_args->output;
-
+	ker_args.Lpad = DW_args->Lpad;
+	ker_args.Rpad = DW_args->Rpad;
+	ker_args.Upad = DW_args->Upad;
+	ker_args.Dpad = DW_args->Dpad;
   #ifdef GAP_SDK
             pi_team_offload_preset(
             #else

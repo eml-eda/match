@@ -15,7 +15,7 @@
 #else
 #define L1_SCRATCHPAD_SIZE 38*1024
 #endif
-#define CLUSTER_LIB_DEBUG
+//#define CLUSTER_LIB_DEBUG
 
 void offload_to_pulp_cluster(MatchCtx* ctx, void (inner_function)(unsigned int* args_inner_function),unsigned int* args);
 

@@ -172,7 +172,8 @@ void pulp_im2row_fp32(void * im2col_args){
                     uint32_t w_pad_cond = wk + wo*Wstr;
                     uint32_t h_pad_cond = hk + ho*Hstr;
 
-                    if ((padding>0)&&((h_pad_cond<Upad) || (w_pad_cond<Lpad) || (h_pad_cond>Ho+(Hk)-Dpad) || (w_pad_cond>Wo+(Wk)-Rpad))) {
+                    if ((padding>0)&&((h_pad_cond<Upad) || (w_pad_cond<Lpad) || 
+                        (h_pad_cond> Hin + Dpad) || (w_pad_cond+Lpad> Win + Rpad))) {
                       // Padding
                       i2c_buf[kernel_idx+segment_idx+i2c_inner_idx] = 0;
                       //printf("(pad) i2c_buf[%d]=%f                        kernel_idx=%d, segment_idx=%d, ho=%d\n", kernel_idx+segment_idx, i2c_buf[kernel_idx+segment_idx], kernel_idx, segment_idx, ho);

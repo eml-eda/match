@@ -161,7 +161,7 @@ inline int match_get_pad_x_of_tile(MatchTensorTile* tile){
 }
 
 inline int match_get_pad_y_of_tile(MatchTensorTile* tile){
-    return tile->dim->size-(tile->dim->curr_max_size+tile->curr_idx)<0?-(tile->dim->size-(tile->dim->curr_max_size+tile->curr_idx)):0;
+    return tile->dim->size-(tile->max_size+tile->curr_idx)<0?-(tile->dim->size-(tile->max_size+tile->curr_idx)):0;
 }
 
 #endif
