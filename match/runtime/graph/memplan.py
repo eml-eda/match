@@ -2,7 +2,7 @@
 from typing import List
 from match.runtime.graph.tensor import MatchMemoryTensor
 from match.runtime.graph.alloc import allocate_tensor
-from match.runtime.graph.utils import save_memory_allocation_graph
+from match.runtime.graph.utils import save_memory_allocation_graph, save_memory_allocation_graph_nodes_buffers
 
 class MatchMemoryPlanner:
     def __init__(
@@ -78,8 +78,8 @@ class MatchMemoryPlanner:
         print(f"[MEMORY PLANNER] All tensors allocated")
         save_memory_allocation_graph(
             sorted_mem_tensors,
-            available_soc_bytes=self.available_soc_bytes,
-            output_file=self.out_path+"/memory_plan_stage_1.png"
+            graph_output_file=self.out_path+"/memory_plan_stage_1.png",
+            metadata_output_file=self.out_path+"/memory_plan_stage_1_metadata.json"
         )
         # remove constants allocated in the SoC already
         real_constant_tensors = list()
@@ -125,8 +125,8 @@ class MatchMemoryPlanner:
         print("[MEMORY PLANNER] Moved to on-chip memory all possible constants and reallocated other tensors")
         save_memory_allocation_graph(
             sorted_mem_tensors,
-            available_soc_bytes=self.available_soc_bytes,
-            output_file=self.out_path+"/memory_plan_stage_2.png"
+            graph_output_file=self.out_path+"/memory_plan_stage_2.png",
+            metadata_output_file=self.out_path+"/memory_plan_stage_2_metadata.json"
         )
         # now check if inputs and outputs can stay always in SoC memory
         
@@ -182,9 +182,17 @@ class MatchMemoryPlanner:
         
         save_memory_allocation_graph(
             sorted_mem_tensors,
-            available_soc_bytes=self.available_soc_bytes,
-            output_file=self.out_path+"/memory_plan.png"
+            graph_output_file=self.out_path+"/memory_plan.png",
+            metadata_output_file=self.out_path+"/memory_plan_metadata.json"
         )
+        nodes_buffers = save_memory_allocation_graph_nodes_buffers(
+            mem_tensors_at=tensors_allocated_at_time,
+            calls_idxs=self.calls_idxs,
+            match_mem_size=soc_mem_needed,
+            output_file=self.out_path+"/memory_plan_node_buffers.json"
+        )
+        for node in self.nodes:
+            node.free_buffers = nodes_buffers[node.node_id]["empty_areas"]
         return soc_mem_needed, ext_mem_needed
 
     def generate(self):
@@ -192,7 +200,11 @@ class MatchMemoryPlanner:
         try:
             if self.algorithm=="match":
                 return self.match_mem_planner_impl(
-                    tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if tensor.is_output or tensor.is_input]
+                    tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if\
+                                             tensor.is_output\
+                                                or tensor.is_input\
+                                                    or tensor.is_constant
+                    ]
                 )
             else:
                 raise Exception(f"[MEMORY PLANNER] Algorithm {self.algorithm} not implemented")

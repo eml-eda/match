@@ -1,4 +1,5 @@
 #include <pulp_mem/malloc_wrapper.h>
+#include <pulp_mem/mem.h>
 #include <stdint.h>
 
 #ifdef PULP
@@ -36,9 +37,8 @@ void* malloc_wrapper(size_t size){
   // Allocate extra 4 bytes header in the first that stores the size
   size_t actual_size = size + 4;
   void* pointer = malloc_wrapped(actual_size);
-  if (pointer == NULL){
-      return NULL;
-  }
+  if (pointer == NULL)
+    return NULL; // Allocation failed
   // Write to this value as if it where a uint32_t
   ((uint32_t*)pointer)[0] = (uint32_t)size;
   // return the allocated section without the header
@@ -58,11 +58,13 @@ void free_wrapper(void* wrapped_pointer){
 }
 
 void log_peak_free(size_t size){
-   current_l2_alloc = current_l2_alloc - (uint32_t)size;
+    current_l2_alloc = current_l2_alloc - (uint32_t)size;
+    // printf("[LOG PEAK FREE] Current L2 alloc after free of %d is %d\n", size, current_l2_alloc);
 }
 
 void log_peak_alloc(size_t size){
    current_l2_alloc = current_l2_alloc + (uint32_t)size;
+//    printf("[LOG PEAK ALLOC] Current L2 alloc: %d, Peak L2 alloc: %d Size %d\n", current_l2_alloc, peak_l2_alloc, size);
    if (current_l2_alloc > peak_l2_alloc){
        peak_l2_alloc = current_l2_alloc;
    }

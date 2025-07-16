@@ -29,6 +29,9 @@ class ScheduleEngine(ABC):
     def transform_schedule(self):
         raise NotImplementedError()
     
+    def apply_constraints(self, schedule: MatchSchedule):
+        return schedule
+    
     def get_schedule(self):
         if self.schedule is None:
             raise ValueError("Schedule not generated yet.")

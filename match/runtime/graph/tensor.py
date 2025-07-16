@@ -43,6 +43,31 @@ class MatchMemoryTensor:
         self.used_at = list()
         self.mem_offset_at = dict()
         self.used_by_tvm = False
+        self.ext_mem_offset = -1
+
+    @property
+    def get_pt(self):
+        if (self.is_input or self.is_output) and not self.stored_in_external_memory:
+            return f"{self.name}_pt"
+        elif self.is_constant and not self.stored_in_external_memory:
+            return f"{self.name}_data_"
+        else:
+            return f"match_mem + {self.mem_offset}"
+    
+    def get_new_mem_offset(self, ext_mem_offset: int=0):
+        if (len(self.load_from_ext_mem_at)>0 and (not self.is_input and not self.is_output)) or (self.is_constant and self.stored_in_external_memory):
+            self.ext_mem_offset = ext_mem_offset 
+            return ext_mem_offset + (self.elems * self.dtype.itemsize)
+        else:
+            self.ext_mem_offset = -1
+            return ext_mem_offset
+
+    @property
+    def get_ext_pt(self):
+        if (self.is_input or self.is_output) and self.stored_in_external_memory:
+            return f"{self.name}_ext_pt"
+        else:
+            return f"match_ext_mem + {self.ext_mem_offset}"
 
     @property
     def lifetime(self):

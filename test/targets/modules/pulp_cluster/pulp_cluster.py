@@ -118,7 +118,7 @@ class PulpCluster(ExecModule):
                 # ((Tin_W_l1-Tker_W_l1+PAD_L+PAD_R+STRIDE_W)/STRIDE_W))
 
                 im2col_size_l1 = (
-                    filter_shape[0] * filter_shape[1] * tile_inp_chs *
+                    filter_shape[0] * filter_shape[1] * tile_inp_c *
                     ((tile_inp_h - filter_shape[0] + padding[0] + padding[2] + stride[0]) // stride[0]) *
                     ((tile_inp_w - filter_shape[1] + padding[1] + padding[3] + stride[1]) // stride[1])
                 ) * 4
@@ -127,8 +127,14 @@ class PulpCluster(ExecModule):
                 #im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
 
             if im2col_size_l1:
-                schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="L1_SCRATCHPAD",
-                                                   num_bytes=im2col_size_l1))
+                schedule.buffers.append(
+                    MatchMemBuffer(
+                        name="im2col",
+                        mem_name="L1_SCRATCHPAD",
+                        num_bytes=im2col_size_l1,
+                        required="train" not in pattern_name
+                    )
+                )
             # I searched in the pulp_nn lib but also for DW convs the pwt buffer(bufferB in pulp_nn_depthwise_generic declaration)
             # doesnt seem to be used anywhere...
 
@@ -253,7 +259,7 @@ class PulpCluster(ExecModule):
                 wildcard(), wildcard()
             )
             conv2d = is_op("cast")(conv2d) | conv2d
-            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard())
+            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard()) | conv2d
             return bias_add
 
         # checks for training

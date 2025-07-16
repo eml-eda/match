@@ -28,6 +28,7 @@
 #include <pulp_cluster/cluster_dev.h>
 #endif
 #include <pulp_mem/malloc_wrapper.h>
+#include <match/memory.h>
 
 #ifdef __cplusplus
 extern "C" {

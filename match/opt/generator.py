@@ -45,6 +45,7 @@ class ScheduleGenerator:
         )
         self.schedule_engine_classname = self.exec_module.schedule_engine
         self.schedule_engine_class = get_schedule_engine(self.exec_module.schedule_engine)
+        self.schedule_engine: ScheduleEngine = None
         self.schedule: MatchSchedule = None
         
     def parse(self):
@@ -54,20 +55,21 @@ class ScheduleGenerator:
             raise exc
 
     def generate(self):
-        schedule_engine = self.schedule_engine_class(self.target, self.exec_module,self.pattern_name,self.match_node)
-        schedule_engine.transform_schedule_for_engine()
+        self.schedule_engine = self.schedule_engine_class(self.target, self.exec_module,self.pattern_name,self.match_node)
+        self.schedule_engine.transform_schedule_for_engine()
         try:
-            schedule_engine.generate_schedule()
+            self.schedule_engine.generate_schedule()
         except Exception as exc:
             raise Exception(f"[SCHEDULER] No valid schedule found {exc}")
-        schedule_engine.transform_schedule()
-        self.schedule = schedule_engine.get_schedule()
+        self.schedule_engine.transform_schedule()
+        self.schedule = self.schedule_engine.get_schedule()
         self.exec_module.set_buffers_for_schedule(self.match_node, self.schedule,
                                                   self.pattern_name, self.schedule_engine_classname)
-        self.latency = schedule_engine.get_latency()
-        self.energy = schedule_engine.get_energy()
+        self.latency = self.schedule_engine.get_latency()
+        self.energy = self.schedule_engine.get_energy()
     
     def apply_constraints(self):
+        self.schedule = self.schedule_engine.apply_constraints(self.schedule)
         self.schedule = self.exec_module.constrain_schedule(self.schedule,self.match_node)
     
     def get_match_node(self):

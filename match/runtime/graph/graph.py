@@ -31,6 +31,8 @@ class MatchGraphRuntimeNodeCall:
         self.schedule = schedule
         self.match_node = match_node
         self.dtype_output_node = dtype_output_node
+        self.free_buffers = []
+    
 
 
 class MatchTVMGraphRuntime:
@@ -54,6 +56,7 @@ class MatchTVMGraphRuntime:
         self.mem_needed_bytes = 0
         self.match_inputs = match_inputs
         self.host_module = host_module
+        self.metadata = dict()
         self.dev = tvm.cpu(0)
 
     def generate(self):
@@ -318,14 +321,14 @@ class MatchTVMGraphRuntime:
                         mem_tensor_ = m_t
                     break
             if mem_tensor_ is not None:
-                np.frombuffer(activation.flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/golden/{self.model_name}_{activation_name}_data.hex"))
+                np.frombuffer(activation.flatten().tobytes(),dtype=mem_tensor_.dtype).tofile(Path(self.out_path+f"/golden/{self.model_name}_{activation_name}_data.hex"))
         
         # compute the checksums in the correct data type            
         checksums = {}
         for activation_name, activation in activations.items():
             # print(activation_name, dtype_activations[activation_name])
-            if dtype_activations[activation_name] == 'float32':
-                checksums[activation_name] = np.frombuffer(activation.flatten(), dtype="float32").sum()
+            if np.issubdtype(dtype_activations[activation_name], np.floating):
+                checksums[activation_name] = np.frombuffer(activation.flatten(), dtype="float32").astype(np.float64).sum()
             else: # FIXME 
                 checksums[activation_name] = np.frombuffer(activation.flatten().tobytes(),dtype="uint8").sum()
         

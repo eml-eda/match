@@ -30,6 +30,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         constrained_temporal_mapping=TemporalMapping(temporal_mapping_dict=constrained_temporal_mapping_dict,
                                                      layer_node=temporal_mapping.layer_node)
         self.is_tm_valid=valid
+        self.allocated_buffers = []
         super(ZigZagMatchCostModel,self).__init__(
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
             temporal_mapping=constrained_temporal_mapping,
@@ -236,9 +237,22 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                 pattern_name=self.pattern_name,
                 engine="ZigZag"
             )
-            for buff_tensor in schedule.buffers:
+            new_buffers = []
+            for buff_tensor in sorted(schedule.buffers, key=lambda buff: (-buff.required, -buff.num_bytes)):
                 var_mem_bytes-=buff_tensor.num_bytes
-                print(f"Available bytes {var_mem_bytes} buffer {buff_tensor.name} size {buff_tensor.num_bytes}")
+                if var_mem_bytes>=0:
+                    new_buffers.append(buff_tensor)
+                else:
+                    if not buff_tensor.required:
+                        # if the buffer is not required we can remove it from the schedule
+                        # and print a warning
+                        var_mem_bytes+=buff_tensor.num_bytes
+                        # print(f"WARNING: Buffer {buff_tensor.name} is not required but it cannot fit in memory, removing it from the schedule")
+                    else:
+                        # print(f"ERROR: Buffer {buff_tensor.name} is required but it cannot fit in memory, cannot continue")
+                        break
+            schedule.buffers = new_buffers
+            self.allocated_buffers = new_buffers
         
         if var_mem_bytes<0:
             return False

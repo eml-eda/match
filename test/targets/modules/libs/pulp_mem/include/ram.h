@@ -3,6 +3,8 @@
 
 #include <pulp_mem/mem.h>
 
+int pulp_is_ram_initialized(void);
+
 void* pulp_init_ram(int size);
 
 void pulp_load_file(const char* filename, void* ext_pt, int size);

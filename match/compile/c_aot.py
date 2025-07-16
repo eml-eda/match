@@ -8,6 +8,8 @@ import tvm
 from match.relay.utils.utils import create_build_dir
 import pathlib
 
+import tvm.relay
+
 
 def match_tvmc_compile_wrapper(model: TVMCModel, target: str = "match, c",
                             fuse_layers: bool = True,
@@ -76,6 +78,23 @@ def match_tvmc_compile_wrapper(model: TVMCModel, target: str = "match, c",
         pass_context_configs=pass_context_configs,
         mod_name=mod_name,
     )
+    # executor = tvm.relay.backend.Executor("aot", {
+    #     "interface-api": "c",     # exposes C interface
+    #     "unpacked-api": True,     # simpler calling convention
+    # })
+
+    # runtime = tvm.relay.backend.Runtime("crt")  # or "c", "cpp", etc.
+
+    # with tvm.transform.PassContext(opt_level=3, config={"tir.usmp.enable":1}):
+    #     factory = tvm.relay.build(
+    #         model.mod,  # your Relay IRModule
+    #         target="c",
+    #         executor=executor,
+    #         runtime=runtime,
+    #         params=model.params
+    #     )
+    #     metadata = factory.get_executor_codegen_metadata()
+
     # extract mlf file
     mlf = tarfile.TarFile(mlf_path)
     mlf.extractall(build_path)

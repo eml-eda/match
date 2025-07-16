@@ -10,8 +10,22 @@ from match.tensor.tensor import MatchTensor
 
 class MatchNodeToZigZagParser:
     def __init__(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
+        self.ACCELERATED_OP = ""
+        self.ACCELERATED_OP_VISIT_MAP = {
+            "conv2d": self.visit_conv2d,
+            "conv1d": self.visit_conv1d,
+            "dense": self.visit_dense,
+            "maxpool2d": self.visit_maxpool2d,
+            "add": self.visit_add,
+        }
+        self.W_TENSOR_NEEDED_FOR_OPS = (
+            "conv2d",
+            "conv1d",
+            "dense",
+        )
         self.match_node = match_node
         self.pattern_name = pattern_name
+        self.set_accelerated_supported_op()
         # prec
         self.o_intermediate_prec = 32
         self.o_prec = 8
@@ -46,6 +60,9 @@ class MatchNodeToZigZagParser:
         self.o_tensor = self.outs[0]
         self.w_tensor = None if self.num_vars>1 or self.num_consts==0 else self.consts[0]
 
+        if self.w_tensor is None and self.y_tensor is not None and self.ACCELERATED_OP in self.W_TENSOR_NEEDED_FOR_OPS:
+            self.w_tensor = self.y_tensor
+            self.y_tensor = None
         self.pr_loop_dim_size = {"IY":1, "IX":1} if self.w_tensor is not None else {}
         self.operand_source = {"W": [], "I": []} if self.w_tensor is not None else {"X":[], "Y":[]}
         self.constant_operands = ["W"] if self.w_tensor is not None else []
@@ -209,14 +226,18 @@ class MatchNodeToZigZagParser:
         tensor = self.o_tensor
         if name=="C":
             tensor = self.i_tensor
-        if name=="FY":
-            tensor = self.w_tensor
-        if name=="FX":
-            tensor = self.w_tensor
         if name=="IY":
             tensor = self.i_tensor
         if name=="IX":
             tensor = self.i_tensor
+        if name=="FY":
+            tensor = self.w_tensor
+            if tensor.tensor_type == "var":
+                name = "IY"
+        if name=="FX":
+            tensor = self.w_tensor
+            if tensor.tensor_type == "var":
+                name = "IX"
 
         if tensor is None:
             return self.match_node.default_dim
@@ -235,6 +256,7 @@ class MatchNodeToZigZagParser:
             
             if error_dim:
                 print(f"[ZIGZAG ENGINE] Error during dimension parsing, trying to get {name} from dims {[dim.name for dim in tensor.dims]} in tensor {tensor.name}")
+                breakpoint()
         return found_dim
     
     def get_operands(self):
@@ -264,20 +286,28 @@ class MatchNodeToZigZagParser:
             }
         }
     
-    def parse(self):
+    def set_accelerated_supported_op(self):
         # TODO: currently its a sort of priority queue of operations, should be done better
         if "conv2d" in self.match_node.ops_occurrences:
-            self.visit_conv2d()
+            self.ACCELERATED_OP = "conv2d"
         elif "conv1d" in self.match_node.ops_occurrences:
-            self.visit_conv1d()
+            self.ACCELERATED_OP = "conv1d"
         elif "dense" in self.match_node.ops_occurrences:
-            self.visit_dense()
+            self.ACCELERATED_OP = "dense"
         elif "maxpool2d" in self.match_node.ops_occurrences:
-            self.visit_maxpool2d()
+            self.ACCELERATED_OP = "maxpool2d"
         elif "add" in self.match_node.ops_occurrences:
-            self.visit_add()
+            self.ACCELERATED_OP = "add"
         else:
-            print("[ZIGZAG PARSER] Warning, no operator found to tile, continuing with default workload")
+            print("[ZIGZAG PARSER] Warning, no operator found to tile, not supported by our ZigZag parser currently!")
+
+    def parse(self):
+        if self.ACCELERATED_OP not in self.ACCELERATED_OP_VISIT_MAP:
+            print(f"[ZIGZAG PARSER] Warning, no operator found to tile, not supported by our ZigZag parser currently! {self.ACCELERATED_OP}")
+            return
+        else:
+            print(f"[ZIGZAG PARSER] Parsing {self.ACCELERATED_OP} operator")
+            self.ACCELERATED_OP_VISIT_MAP[self.ACCELERATED_OP]()
 
     def visit_maxpool2d(self):
         pass

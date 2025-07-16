@@ -1,11 +1,13 @@
+import json
+from typing import Dict, List
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from itertools import cycle
 
 def save_memory_allocation_graph(
     mem_tensors,
-    available_soc_bytes: int = 0,
-    output_file="memory_allocation.png"
+    graph_output_file="memory_allocation.png",
+    metadata_output_file="memory_allocation_metadata.json",
 ):
     """
     Generates and saves a graph of memory allocation over time, including tensor sizes.
@@ -34,8 +36,22 @@ def save_memory_allocation_graph(
 
     # Create legend handles for the dictionary
     legend_handles = []
-
+    metadata = dict()
     for tensor in mem_tensors:
+        metadata[tensor.name] = {
+            "num_bytes": tensor.num_bytes,
+            "last_usage": tensor.last_usage,
+            "mem_offset_at": tensor.mem_offset_at,
+            "load_from_ext_mem_at": tensor.load_from_ext_mem_at,
+            "move_temp_to_ext_mem": tensor.move_temp_to_ext_mem,
+            "used_at": tensor.used_at,
+            "abbreviated_name": abbreviate_name(tensor.name),
+            "is_intermediate": tensor.is_intermediate,
+            "is_constant": tensor.is_constant,
+            "is_input": tensor.is_input,
+            "is_output": tensor.is_output,
+            "node_id": tensor.node_id,
+        }
         color = tensor_colors[tensor.name]
         if abbreviate_name(tensor.name) not in [handle.get_label() for handle in legend_handles]:
             legend_handles.append(
@@ -85,6 +101,46 @@ def save_memory_allocation_graph(
     )
 
     plt.tight_layout()
-    plt.savefig(output_file, bbox_inches="tight")  # Ensure the legend is included in the saved image
+    plt.savefig(graph_output_file, bbox_inches="tight")  # Ensure the legend is included in the saved image
     plt.close(fig)  # Close the figure to prevent it from popping up in Jupyter
     print(f"[MEM PLANNER] Memory allocation graph saved")
+    json.dump(metadata, open(metadata_output_file, "w"), indent=4)
+    print(f"[MEM PLANNER] Memory allocation metadata saved to {metadata_output_file}")
+
+def save_memory_allocation_graph_nodes_buffers(
+    mem_tensors_at: Dict = None,
+    calls_idxs: List = None,
+    match_mem_size: int = 0,
+    output_file="memory_allocation.json"
+):
+    """
+    Generates and saves a graph of memory allocation over time, including tensor sizes.
+
+    Args:
+        mem_tensors (List[MatchMemoryTensor]): List of memory tensors with allocation details.
+        output_file (str): Path to save the generated graph.
+    """
+    metadata = dict()
+    for call_idx in calls_idxs:
+        metadata[call_idx] = {
+            "allocs": [],
+        }
+        allocs = []
+        for tensor in mem_tensors_at[call_idx]:
+            tensor_pt = tensor.mem_offset_at[call_idx]
+            allocs.append((tensor_pt, tensor_pt + tensor.num_bytes - 1, tensor.num_bytes))
+        metadata[call_idx]["allocs"] = allocs
+        allocs.sort(key=lambda x: x[0])
+        empty_areas = []
+        last_alloc = -1
+        for alloc in allocs:
+            if alloc[0] > last_alloc + 1:
+                empty_areas.append((last_alloc + 1, alloc[2]))
+            last_alloc = max(last_alloc, alloc[1])
+        if (last_alloc + 1) < match_mem_size:
+            empty_areas.append((last_alloc + 1, match_mem_size - (last_alloc + 1)))
+        metadata[call_idx]["empty_areas"] = empty_areas
+    json.dump(metadata, open(output_file, "w"), indent=4)
+    print(f"[MEM PLANNER] Memory allocation metadata saved to {output_file}")
+    return metadata
+            

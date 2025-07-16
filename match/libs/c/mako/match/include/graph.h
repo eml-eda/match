@@ -58,6 +58,12 @@ ${node.fn_name}(
 #endif
 % endfor
 
+void match_${model_name}_graph_load_files(void* match_mem, void* match_ext_mem);
+
+#if __${model_name}_FALLBACK_GRAPH_PROFILE__
+void match_${model_name}_graph_profile_summary(void);
+#endif
+
 int match_${model_name}_run_graph(
     % for rt_i in rt_inputs:
     ${rt_i.c_type}* ${rt_i.name}_${"ext_" if rt_i.stored_in_external_memory else ""}pt,

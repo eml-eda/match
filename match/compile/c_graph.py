@@ -75,6 +75,15 @@ def match_tvmc_graph_compile_wrapper(model: TVMCModel, target: str = "match, c",
         pass_context_configs=pass_context_configs,
         mod_name=mod_name,
     )
+    # with tvm.transform.PassContext(opt_level=3, config={
+    #     "tir.usmp.enable": True,
+    #     "tir.usmp.algorithm": "greedy_by_size",  # or "greedy_by_conflicts"
+    #     }):
+    #     lib = tvm.relay.build(tvm.ir.IRModule({"main":model.mod["main"]}), target="c", params=model.params,
+    #         executor=tvm.relay.backend.Executor("graph"), runtime=tvm.relay.backend.Runtime("crt"),
+    #     )
+    #     modd = tvm.contrib.graph_executor.GraphModule(lib["default"](tvm.cpu()))
+
     # extract mlf file
     mlf = tarfile.TarFile(mlf_path)
     mlf.extractall(build_path)

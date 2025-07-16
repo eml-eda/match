@@ -171,3 +171,7 @@ class ZigZagEngine(ScheduleEngine):
     
     def transform_schedule(self):
         return self.transform_schedule_(self.cme)
+    
+    def apply_constraints(self, schedule: MatchSchedule):
+        schedule.buffers = self.cme.allocated_buffers
+        return schedule

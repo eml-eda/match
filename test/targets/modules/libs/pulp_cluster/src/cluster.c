@@ -51,6 +51,8 @@ void free_l1_scrachpad_memory(MatchCtx* ctx, void* l1_memory_pt){
     #ifdef GAP_SDK
     pi_cl_l1_free(NULL, l1_memory_pt, L1_SCRATCHPAD_SIZE);
     #endif
+    im2col_pt_ = NULL;
+    pwt_pt_ = NULL;
 }
 
 void* cluster_alloc_buffer(const char* name, int tensor_l1_pt, int size, int mem, int buffer_idx){
@@ -660,7 +662,7 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     layer1_wgt.W = conv_attrs->kernel_size[1];
     layer1_wgt.H = conv_attrs->kernel_size[0];
     layer1_wgt.C = inp_ch;
-    layer1_bias.data = tensors[2].pts[L1_SCRATCHPAD]; // bias pt
+    layer1_bias.data = num_tensors>3? tensors[2].pts[L1_SCRATCHPAD]: NULL; // bias pt
     layer1_bias.dim = out_ch;
 
     int MATMUL_TYPE = 9; // 2x2
@@ -685,9 +687,9 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     C2D_args.opt_matmul_type_fw = MATMUL_TYPE;// OK - change later
     C2D_args.opt_matmul_type_wg = MATMUL_TYPE;// OK 
     C2D_args.opt_matmul_type_ig = MATMUL_TYPE;// OK
-    C2D_args.USE_IM2COL = 1; // IM2COL; set to 1 later
+    C2D_args.USE_IM2COL = im2col_pt_ != NULL; // IM2COL; set to 1 later
     C2D_args.USE_DMA_IM2COL = 0; // OK checkme
-    C2D_args.USE_BIASES = 1; // OK checkme
+    C2D_args.USE_BIASES = layer1_bias.data != NULL; // OK checkme
 
     pulp_conv2d_fp32_fw_cl(&C2D_args);
 
@@ -764,9 +766,9 @@ void pulp_nn_wrapper(MatchCtx* ctx){
                 pulp_nn_add_wrapper, ctx);
             break;
 
-        /*case conv2d_train:
-            pulp_train_conv2d_fp32_wrapper(ctx);    
-            break;*/
+        // case conv2d_train:
+        //     pulp_train_conv2d_fp32_wrapper(ctx);    
+        //     break;
 
         default:
             break;
