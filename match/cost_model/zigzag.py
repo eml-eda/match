@@ -238,7 +238,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
             )
             for buff_tensor in schedule.buffers:
                 var_mem_bytes-=buff_tensor.num_bytes
-                print(f"Available bytes {var_mem_bytes} buffer {buff_tensor.name} size {buff_tensor.num_bytes}")
+                # print(f"Available bytes {var_mem_bytes} buffer {buff_tensor.name} size {buff_tensor.num_bytes}")
         
         if var_mem_bytes<0:
             return False

@@ -97,7 +97,7 @@ class PulpCluster(ExecModule):
             padding = conv.padding
             filter_shape = conv.kernel_size
             stride = conv.strides
-            tile_inp_chs = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[3].size
+            tile_inp_chs = schedule.tensor_tiles[inp_tensor.name][1].tiled_dims[3].size
             im2col_size_l1 = 0
             # im2col size only for std convs
             if pattern_name=="conv2d":
@@ -108,9 +108,9 @@ class PulpCluster(ExecModule):
                 im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
             elif pattern_name=="conv2d_train":
                 # size in bytes
-                tile_inp_c = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[1].size
-                tile_inp_h = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[2].size
-                tile_inp_w = schedule.tensor_tiles[inp_tensor.name][0].tiled_dims[3].size
+                tile_inp_c = schedule.tensor_tiles[inp_tensor.name][1].tiled_dims[1].size
+                tile_inp_h = schedule.tensor_tiles[inp_tensor.name][1].tiled_dims[2].size
+                tile_inp_w = schedule.tensor_tiles[inp_tensor.name][1].tiled_dims[3].size
                 if  filter_shape[0] == 1 and filter_shape[1] == 1 and \
                     padding[0] == 0 and padding[1] == 0 and padding[2] == 0 and padding[3] == 0 and \
                     stride[0] == 1 and stride[1] == 1:
@@ -123,7 +123,7 @@ class PulpCluster(ExecModule):
                         ((tile_inp_h - filter_shape[0] + padding[0] + padding[2] + stride[0]) // stride[0]) *
                         ((tile_inp_w - filter_shape[1] + padding[1] + padding[3] + stride[1]) // stride[1])
                     ) * 4
-                print(f"IM2COL SIZE L1: {im2col_size_l1/1024} KB")
+                # print(f"IM2COL SIZE L1: {im2col_size_l1/1024} KB")
             elif pattern_name=="conv2ddw_train":
                 pass
 
