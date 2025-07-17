@@ -62,6 +62,7 @@ class MatchNodeToZigZagParser:
 
         if self.w_tensor is None and self.y_tensor is not None and self.ACCELERATED_OP in self.W_TENSOR_NEEDED_FOR_OPS:
             self.w_tensor = self.y_tensor
+            self.num_vars = 1
             self.y_tensor = None
         self.pr_loop_dim_size = {"IY":1, "IX":1} if self.w_tensor is not None else {}
         self.operand_source = {"W": [], "I": []} if self.w_tensor is not None else {"X":[], "Y":[]}
@@ -335,6 +336,7 @@ class MatchNodeToZigZagParser:
         # dependencies dims
         self.pr_loop_dim_size["IY"] = i_h
         if conv1d_node.depthwise:
+            self.loop_dim_size["C"] = 1
             self.operand_source_dimension_mapping["I"]["C"]="K"
             self.equation = "O[b][k][oy][ox]+=W[k][c][fy]*I[b][k][iy]"
         
@@ -362,6 +364,7 @@ class MatchNodeToZigZagParser:
         self.pr_loop_dim_size["IY"] = i_h
         self.pr_loop_dim_size["IX"] = i_w
         if conv2d_node.depthwise:
+            self.loop_dim_size["C"] = 1
             self.operand_source_dimension_mapping["I"]["C"]="K"
             self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"
     
