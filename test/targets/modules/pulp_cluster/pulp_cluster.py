@@ -260,8 +260,8 @@ class PulpCluster(ExecModule):
                 wildcard(), wildcard()
             )
             conv2d = is_op("cast")(conv2d) | conv2d
-            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard()) | conv2d
-            return bias_add
+#            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard()) | conv2d
+            return conv2d
 
         # checks for training
         def std_convs_fp32(node):

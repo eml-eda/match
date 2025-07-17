@@ -83,7 +83,7 @@ void handle_dma_transfer(
     if(!tensor->num_dims) return;
 
     #ifdef CLUSTER_LIB_DEBUG
-    printf("Handle transfer params tensor l2 pt %d tensor l1 pt %d transfer type %d tensor type %d ext mem %d int mem %d\n",
+    printf("Handle transfer params tensor l2 pt 0x%x tensor l1 pt 0x%x transfer type %d tensor type %d ext mem %d int mem %d\n",
         tensor_l2_pt, tensor_l1_pt, match_transfer_type, match_tensor_type, ext_mem, int_mem);
     for(int idx=0; idx<tensor->num_dims; idx++) printf(" [L2: %d L1: %d]", tensor->tiles[L2_SHARED_MEM*tensor->num_dims+idx].size, tensor->tiles[L1_SCRATCHPAD*tensor->num_dims+idx].size);
     printf("\n");
@@ -642,26 +642,26 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     struct blob layer1_in, layer1_wgt, layer1_bias, layer1_out;
 
     /* check if all the fields of the layers are assigned*/
-    layer1_in.data = tensors[0].pts[L1_SCRATCHPAD];
+    layer1_in.data = tensors[0].pt;
     layer1_in.dim = inp_height*inp_width*inp_ch;
     layer1_in.W = inp_width;
     layer1_in.H = inp_height;
     layer1_in.C = inp_ch;
   
-    layer1_out.data = tensors[num_tensors-1].pts[L1_SCRATCHPAD]; // output pt 
+    layer1_out.data = tensors[num_tensors-1].pt; // output pt 
     layer1_out.dim = out_height*out_width*out_ch;
     layer1_out.W = out_width;
     layer1_out.H = out_height;
     layer1_out.C = out_ch;
   
-    layer1_wgt.data = tensors[1].pts[L1_SCRATCHPAD]; // weights pt    
+    layer1_wgt.data = tensors[1].pt; // weights pt    
     layer1_wgt.dim = conv_attrs->kernel_size[0]*conv_attrs->kernel_size[1]*inp_ch*out_ch;
     layer1_wgt.W = conv_attrs->kernel_size[1];
     layer1_wgt.H = conv_attrs->kernel_size[0];
     layer1_wgt.C = inp_ch;
 
     if ( is_bias){
-        layer1_bias.data = tensors[2].pts[L1_SCRATCHPAD]; // bias pt
+        layer1_bias.data = tensors[2].pt; // bias pt
         layer1_bias.dim = out_ch;
     }
 
@@ -706,7 +706,7 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
         C2D_args.opt_matmul_type_fw = MATMUL_TYPE;
         C2D_args.opt_matmul_type_wg = MATMUL_TYPE;
         C2D_args.opt_matmul_type_ig = MATMUL_TYPE;
-        C2D_args.USE_IM2COL = 1; // IM2COL; set to 1 later
+        C2D_args.USE_IM2COL = (im2col_pt_ != NULL); 
         C2D_args.USE_DMA_IM2COL = 0; // OK checkme
 
         
@@ -776,20 +776,19 @@ void pulp_train_conv2ddw_fp32_wrapper(void* args){
     struct blob layer1_in, layer1_wgt, layer1_bias, layer1_out;
 
     /* check if all the fields of the layers are assigned*/
-    //layer1_in.data = tensors[0].pts[L1_SCRATCHPAD]; // acts pt //INPUT;
     layer1_in.data = tensors[0].pt;
     layer1_in.dim = inp_height*inp_width*inp_ch;
     layer1_in.W = inp_width;
     layer1_in.H = inp_height;
     layer1_in.C = inp_ch;
   
-    layer1_out.data = tensors[num_tensors-1].pts[L1_SCRATCHPAD]; // output pt 
+    layer1_out.data = tensors[num_tensors-1].pt; // output pt 
     layer1_out.dim = out_height*out_width*out_ch;
     layer1_out.W = out_width;
     layer1_out.H = out_height;
     layer1_out.C = out_ch;
   
-    layer1_wgt.data = tensors[1].pts[L1_SCRATCHPAD]; // weights pt    
+    layer1_wgt.data = tensors[1].pt; // weights pt    
     layer1_wgt.dim = conv_attrs->kernel_size[0]*conv_attrs->kernel_size[1]*inp_ch*out_ch;
     layer1_wgt.W = conv_attrs->kernel_size[1];
     layer1_wgt.H = conv_attrs->kernel_size[0];
