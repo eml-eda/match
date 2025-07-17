@@ -199,7 +199,7 @@ int match_${model_name}_run_graph(
     #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
     % if node.dtype_output_node=="float32":
-    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, relative error between output and checksum by %.4f\n", match_float_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__, 0));
+    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, relative error between output and checksum by %.4f\n", match_float_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
     % else:
     printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, output differs from checksum by %d\n", match_byte_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
     % endif
