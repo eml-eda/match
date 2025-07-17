@@ -144,6 +144,7 @@ class ZigZagEngine(ScheduleEngine):
             self.latency=-1
             self.cme=None
             print(f"[ZIGZAG_ENGINE] No valid loop ordering found: {exc}")
+            # breakpoint()
             raise Exception(f"[ZIGZAG_ENGINE] No valid loop ordering found: {exc}")
         self.zigzag_temporal_mapping = self.cme.temporal_mapping.mapping_dic_stationary
         if DEBUG_MODE_MATCH:

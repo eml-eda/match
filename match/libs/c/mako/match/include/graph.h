@@ -1,6 +1,8 @@
 #ifndef __MATCH_${model_name}_RUN_GRAPH_H__
 #define __MATCH_${model_name}_RUN_GRAPH_H__
 
+#define nan 0.0
+
 % for include in target.include_list:
 #include <${include}.h>
 % endfor
@@ -14,6 +16,9 @@
 % for mem_tensor in mem_tensors:
 % if mem_tensor.is_input or mem_tensor.is_output:
 #define __${model_name}_GRAPH_${mem_tensor.name}_FROM_EXTERNAL_MEM__ ${int(mem_tensor.stored_in_external_memory)}
+% if len(mem_tensor.used_at)==0:
+#define __${model_name}_GRAPH_${mem_tensor.name}_UNUSED__ 1
+% endif
 % endif
 % endfor
 #define __${model_name}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__ ${sum([mem_tensor.num_bytes for mem_tensor in mem_tensors if (mem_tensor.is_input or mem_tensor.is_output) and mem_tensor.stored_in_external_memory])}

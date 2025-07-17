@@ -1,6 +1,6 @@
 # Compiler and flags
 CORE ?= 8
-
+FC_APP_MAIN_STACK_SIZE = 8192
 
 # Paths
 platform=gvsoc

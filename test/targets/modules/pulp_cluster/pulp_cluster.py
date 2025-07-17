@@ -12,6 +12,8 @@ from match.tensor.tensor import MatchTensor
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
 from match.partition.partitioning_pattern import PartitioningPattern
 
+TRAIN_USE_ONLY_FC = True  # Set to True to use only fully connected layers in training patterns
+
 class PulpCluster(ExecModule):
     def __init__(self, num_cores: int=8, l1_kb_size: int=64, l2_kb_size: int=512,
                  l3_kb_size: int=8912, async_dma: bool=False):
@@ -116,7 +118,6 @@ class PulpCluster(ExecModule):
                     stride[0] == 1 and stride[1] == 1:
                     # special pointwise acceleration do not need IM2COL buffer
                     im2col_size_l1 = 0
-
                 else: # standard conv2d
                     im2col_size_l1 = (
                         filter_shape[0] * filter_shape[1] * tile_inp_c *
@@ -265,11 +266,21 @@ class PulpCluster(ExecModule):
 
         # checks for training
         def std_convs_fp32(node):
+            if TRAIN_USE_ONLY_FC:
+                return False
             conv = add_checks_get_first_op(node, "nn.conv2d")
-            print('++++ This is a conv2d?')
-            return conv.checked_type.dtype == 'float32' and conv.attrs.groups==1
+            if conv.checked_type.dtype != 'float32':
+                return False
+            if conv.attrs.groups != 1:
+                return False
+            # check for dilated convs
+            if any([int(val)!=1 for val in conv.attrs.dilation]):
+                return False
+            return True
         
         def dw_convs_fp32_pulp(node):
+            if TRAIN_USE_ONLY_FC:
+                return False
             conv = add_checks_get_first_op(node, "nn.conv2d")
             out_chs = conv.args[1].checked_type.shape[0]
             in_chs = conv.args[1].checked_type.shape[1]
@@ -280,6 +291,9 @@ class PulpCluster(ExecModule):
             if conv.attrs.groups != out_chs or in_chs != 1 :
                 return False
             if conv.attrs.data_layout!="NCHW":
+                return False
+            # check for dilated convs
+            if any([int(val)!=1 for val in conv.attrs.dilation]):
                 return False
             #add checks for stride (temp)
             if conv.attrs.strides[0] != 1 or conv.attrs.strides[1] != 1:

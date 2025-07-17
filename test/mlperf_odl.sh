@@ -25,7 +25,7 @@ run_odl_test() {
 models=("kws" "vww" "imcls")
 targets=("pulp_open" "GAP9")
 directions=("fw" "bw")
-NAME_BASE_DIR="conv_accelerated"
+NAME_BASE_DIR="baseline_graph_fix_constants"
 # Map target names to directory names
 declare -A target_dirs
 target_dirs["pulp_open"]="popen"
