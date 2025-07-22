@@ -6,17 +6,19 @@ struct pi_cluster_task cluster_task = {0};
 void pulp_cluster_init() {
     #ifdef GAP_SDK
     pi_time_wait_us(10000);
-    pi_freq_set(PI_FREQ_DOMAIN_FC, 50000000);
+    pi_freq_set(PI_FREQ_DOMAIN_FC, 370000000);
     pi_time_wait_us(10000);
-    pi_freq_set(PI_FREQ_DOMAIN_CL, 50000000);
+    pi_freq_set(PI_FREQ_DOMAIN_CL, 370000000);
     pi_time_wait_us(10000);
-    pi_freq_set(PI_FREQ_DOMAIN_PERIPH, 50000000);
+    pi_freq_set(PI_FREQ_DOMAIN_PERIPH, 370000000);
     pi_time_wait_us(10000);
     #else
     pi_time_wait_us(10000);
-    pi_freq_set(PI_FREQ_DOMAIN_FC, 100000000);
+    pi_freq_set(PI_FREQ_DOMAIN_FC, 370000000);
     pi_time_wait_us(10000);
-    pi_freq_set(PI_FREQ_DOMAIN_CL, 100000000);
+    pi_freq_set(PI_FREQ_DOMAIN_CL, 370000000);
+    pi_time_wait_us(10000);
+    pi_freq_set(PI_FREQ_DOMAIN_PERIPH, 370000000);
     pi_time_wait_us(10000);
     #endif
     struct pi_cluster_conf conf;

@@ -17,10 +17,16 @@ int main(int argc,char** argv){
     
     match_runtime_ctx match_ctx;
 
+    // allocate match memory and external memory
     #if defined(__${default_model}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__) && __${default_model}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__>0
     void* match_ext_mem = ${target.allocate_ext_mem}(__${default_model}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__*${int(golden_cpu_model)+1});
     int ext_mem_offset = 0;
     #endif
+    #if defined(__${default_model}_GRAPH_PROFILE__) && __${default_model}_GRAPH_PROFILE__
+    ${target.timestamp_type} start,end;
+    start = ${target.start_get_timestamp_api}();
+    #endif
+    // setting inputs pointers and loading files
     % for inp_name,inp in match_inputs.items():
     #if !defined(__${default_model}_GRAPH_${inp_name}_FROM_EXTERNAL_MEM__) || !__${default_model}_GRAPH_${inp_name}_FROM_EXTERNAL_MEM__
     ${inp["c_type"]}* ${inp_name}_pt = ${inp_name}_default;
@@ -30,6 +36,12 @@ int main(int argc,char** argv){
     ${target.load_file_to_ext_mem_fn}("${default_model}_${inp_name}_data.hex", ${inp_name}_pt, ${inp["bytes"]});
     #endif
     % endfor
+    #if defined(__${default_model}_GRAPH_PROFILE__) && __${default_model}_GRAPH_PROFILE__
+    end = ${target.end_get_timestamp_api}();
+    int constants_loading_cycles = (int)(end - start);
+    printf("Input files loading took %d cycles\n", constants_loading_cycles);
+    #endif
+    // setting outputs pointers
     % for out_idx,(out_name,out) in enumerate(match_outputs.items()):
     % if out["is_copy_of"]:
     void* ${out_name}_pt = ${out["is_copy_of"]}_pt;

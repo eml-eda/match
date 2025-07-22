@@ -260,6 +260,7 @@ class MatchModel:
                 host_module=host_module,
             )
             subprocess.getoutput(f"rm {host_only_lib_path}")
+            graph_runtime.parse_host_lib_for_extra_dynamic_mem(host_lib_path=f"{build_dir}/codegen/host/src/lib1.c")
             graph_runtime_template_data = graph_runtime.generate()
             graph_runtime_template_data["debug"] = debug
             graph_runtime_template_data["debug_fallback"] = debug_fallback

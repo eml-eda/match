@@ -58,6 +58,32 @@ class MatchTVMGraphRuntime:
         self.host_module = host_module
         self.metadata = dict()
         self.dev = tvm.cpu(0)
+        self.fallback_kernel_extra_dynamic_mem = dict()
+        self.max_extra_dynamic_mem = 0
+
+    def parse_host_lib_for_extra_dynamic_mem(self, host_lib_path: str="match/runtime/graph/host_lib.c"):
+        func_name = ""
+        with open(host_lib_path, "r") as f:
+            for line in f:
+                if "TVM_DLL int32_t" in line and line[-2]=="{":
+                    # this is a function that allocates dynamic memory
+                    # get the function name
+                    func_name = line.strip().split()[2].split("(")[0]
+                if func_name!="" and "#ifdef __cplusplus" in line:
+                    func_name = ""
+                if func_name!="" and "TVMBackendAllocWorkspace" in line:
+                    splitted_line = line.strip().split()
+                    buffer_name = splitted_line[1]
+                    buffer_size = int(splitted_line[5].split(")")[1][:-1])
+                    if func_name not in self.fallback_kernel_extra_dynamic_mem:
+                        self.fallback_kernel_extra_dynamic_mem[func_name] = {"total": 0, "buffers": []}
+                    self.fallback_kernel_extra_dynamic_mem[func_name]["buffers"].append((buffer_name, buffer_size))
+                    self.fallback_kernel_extra_dynamic_mem[func_name]["total"] += buffer_size
+        self.max_extra_dynamic_mem = max(
+            [self.fallback_kernel_extra_dynamic_mem[func_name]["total"] for func_name in self.fallback_kernel_extra_dynamic_mem]
+        )
+        print(f"[MEM PLANNER] Found {len(self.fallback_kernel_extra_dynamic_mem)} functions with extra dynamic memory allocations")
+        print(f"[MEM PLANNER] Maximum extra dynamic memory needed: {self.max_extra_dynamic_mem} bytes")
 
     def generate(self):
         tensor_map = {}
@@ -68,10 +94,18 @@ class MatchTVMGraphRuntime:
         nodes = []
         dtypes = self.mod_info["attrs"]["dltype"][1]
         shapes = self.mod_info["attrs"]["shape"][1]
+        storage_ids = self.mod_info["attrs"]["storage_id"][1]
         heads = [head[0] for head in self.mod_info["heads"]]    # list of the output nodes
         nop_maps = dict()
         activations = dict()
         dtype_activations = dict()
+        storage_ids_size = dict()
+        for i, storage_id in enumerate(storage_ids):
+            tensor_size = np.prod(shapes[i]) * np.dtype(dtypes[i]).itemsize
+            if storage_id not in storage_ids_size or tensor_size > storage_ids_size[storage_id]:
+                storage_ids_size[storage_id] = tensor_size
+        extra_dynamic_buffer_id = 0
+        extra_dynamic_buffers = []
         for match_inp in self.match_inputs.values():
             activations[match_inp["name"]] = match_inp["np_values"]
             dtype_activations[match_inp["name"]] = match_inp["np_values"].dtype
@@ -93,7 +127,8 @@ class MatchTVMGraphRuntime:
                         shape=param.shape,
                         dtype=np.dtype(param.dtype),
                         node_id=node_id,
-                        node_info=node
+                        node_info=node,
+                        tvm_memplan_storage_id=storage_ids[node_id]
                     )
                     mem_tensors.append(mem_tensor)
                     tensor_map[node["name"]] = mem_tensor
@@ -105,7 +140,8 @@ class MatchTVMGraphRuntime:
                         is_output=node_id in heads,
                         shape=tuple(shapes[node_id]),
                         dtype=np.dtype(dtypes[node_id]),
-                        node_id=node_id, node_info=node
+                        node_id=node_id, node_info=node,
+                        tvm_memplan_storage_id=storage_ids[node_id]
                     )
                     mem_tensors.append(mem_tensor)
                     tensor_map[node["name"]] = mem_tensor
@@ -116,7 +152,8 @@ class MatchTVMGraphRuntime:
                             name=node["name"]+"_out",is_input=False,
                             is_output=node_id in heads,
                             shape=tuple(shapes[node_id]),dtype=np.dtype(dtypes[node_id]),
-                            node_id=-1, node_info=node
+                            node_id=-1, node_info=node,
+                            tvm_memplan_storage_id=storage_ids[node_id]
                         )
                         mem_tensors.append(mem_tensor_out)
                         out_tensor_map[(node_id,0)] = mem_tensor_out
@@ -154,7 +191,9 @@ class MatchTVMGraphRuntime:
                                     is_intermediate=False,
                                     shape=tuple(shapes[node_id]),
                                     dtype=np.dtype(dtypes[node_id]),
-                                    node_id=-1
+                                    node_id=-1,
+                                    node_info=node,
+                                    tvm_memplan_storage_id=storage_ids[node_id]
                                 )
                                 out_tensor_map[(node_id,0)] = mem_tensor
                                 prev_tens_name = input_ptr.name
@@ -185,7 +224,9 @@ class MatchTVMGraphRuntime:
                                         is_output=True,
                                         is_intermediate=False,
                                         shape=tuple(shapes[node_id]),dtype=np.dtype(dtypes[node_id]),
-                                        node_id=-1
+                                        node_id=-1,
+                                        node_info=node,
+                                        tvm_memplan_storage_id=storage_ids[node_id]
                                     )
                     continue
                 
@@ -204,7 +245,8 @@ class MatchTVMGraphRuntime:
                                     original_constant_val=w_tensor.original_data,
                                     shape=w_tensor.data.shape,
                                     dtype=w_tensor.dtype,node_id=node_id,
-                                    node_info=node
+                                    node_info=node,
+                                    tvm_memplan_storage_id=storage_ids[node_id]
                                 )
                                 mem_tensors.append(mem_tensor)
                                 tensor_map[w_tensor.name] = mem_tensor
@@ -229,7 +271,9 @@ class MatchTVMGraphRuntime:
                     name=tens_name,is_output=id_out!=-1,
                     is_intermediate=id_out==-1,
                     shape=tuple(shapes[node_id]),dtype=np.dtype(dtypes[node_id]),
-                    node_id=node_id
+                    node_id=node_id,
+                    node_info=node,
+                    tvm_memplan_storage_id=storage_ids[node_id]
                 )
                 out_tensor_map[(node_id,0)] = mem_tensor
                 if mem_tensor.is_output:
@@ -243,7 +287,9 @@ class MatchTVMGraphRuntime:
                                 is_output=True,
                                 is_intermediate=False,
                                 shape=tuple(shapes[node_id]),dtype=np.dtype(dtypes[node_id]),
-                                node_id=-1
+                                node_id=-1,
+                                node_info=node,
+                                tvm_memplan_storage_id=storage_ids[node_id]
                             )
                 mem_tensor.update_last_usage(node_id)
                 # get the activations values for debugging purposes
@@ -284,11 +330,29 @@ class MatchTVMGraphRuntime:
                 nodes.append(call_node)
                 nodes_map[node["name"]] = call_node
                 map_names[tens_name] = (call_node.name, node["name"]+"_out", node["name"])
+
+                if "match" not in node["name"] and call_node.fn_name in self.fallback_kernel_extra_dynamic_mem:
+                    for buffer_name, buffer_size in self.fallback_kernel_extra_dynamic_mem[call_node.fn_name]["buffers"]:
+                        mem_tensor_extra = MatchMemoryTensor(
+                            name=f"TVM_EXTRA_DYNAMIC_BUFFER_{extra_dynamic_buffer_id}_{buffer_name}",
+                            is_intermediate=True,
+                            is_extra_dynamic=True,
+                            extra_dynamic_buffer_id=extra_dynamic_buffer_id,
+                            shape=(buffer_size,),
+                            dtype=np.dtype("uint8"),
+                            node_id=node_id,
+                        )
+                        extra_dynamic_buffers.append(mem_tensor_extra)
+                        mem_tensor_extra.update_last_usage(node_id)
+                        extra_dynamic_buffer_id += 1
         
         # set memory planner and run it
         self.mem_planner = MatchMemoryPlanner(
             mem_tensors=mem_tensors,
+            extra_dynamic_buffers=extra_dynamic_buffers,
             available_soc_bytes=self.target.soc_memory_bytes,
+            max_extra_dynamic_mem=self.max_extra_dynamic_mem,
+            fallback_kernel_extra_dynamic_mem=self.fallback_kernel_extra_dynamic_mem,
             calls_idxs=[node.node_id for node in nodes],
             nodes=nodes,
             out_path=self.out_path,
@@ -347,5 +411,7 @@ class MatchTVMGraphRuntime:
             "activations": activations,
             "map_names": map_names,
             "checksums": checksums,
+            "tvm_memplan_storage_ids_size": storage_ids_size,
+            "total_tvm_memplan_storage_size": sum(storage_ids_size.values())
         }
         return template_data

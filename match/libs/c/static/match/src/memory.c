@@ -27,24 +27,33 @@ void match_free_workspace(void){
     match_num_allocs = 0;
 }
 
+void* alloc_in_workspace(int i, int size){
+    void* ptr = match_mem + match_workspaces_offsets[i];
+    match_workspaces_offsets[i] += size; // Move the offset forward
+    match_workspaces_sizes[i] -= size; // Reduce the size of the workspace
+    match_workspaces_allocs[match_num_allocs] = ptr; // Store the pointer in the allocs array
+    match_num_allocs++;
+    return ptr;
+}
+
 void* match_try_alloc_from_match_mem(int size){
     if(match_mem == 0x0){
         // printf("[MATCH] match_mem is not set. Cannot allocate from match memory.\n");
         return 0x0;
     }
     
+    // Check if there is the perfect fit in match_mem(workspace created ad hoc)
+    for(int i = 0; i < match_num_workspaces; i++){
+        if(match_workspaces_sizes[i] == size)
+            return alloc_in_workspace(i, size);
+    }
     // Check if there is enough space in match_mem
     for(int i = 0; i < match_num_workspaces; i++){
         if(match_workspaces_sizes[i] >= size){
-            void* ptr = match_mem + match_workspaces_offsets[i];
-            match_workspaces_offsets[i] += size; // Move the offset forward
-            match_workspaces_sizes[i] -= size; // Reduce the size of the workspace
-            match_workspaces_allocs[match_num_allocs] = ptr; // Store the pointer in the allocs array
-            match_num_allocs++;
-            return ptr;
+            return alloc_in_workspace(i, size);
         }
     }
-    
+    // not enough space in match_mem, should return NULL
     return 0x0;
 }
 

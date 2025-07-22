@@ -14,12 +14,13 @@ void* tvm_fallback_resource_handle_;
 
 // Perf counters kernels
 #if __${model_name}_FALLBACK_GRAPH_PROFILE__
-int sum_kernel_comp_cyc = 0;
-% for  node in nodes:
+int constants_loading_cycles = 0;
+// int sum_kernel_comp_cyc = 0;
+% for node in nodes:
 int ${node.name}_perf_cnt;
 % endfor
 // Perf Counters Mem Transfers
-int sum_mem_transfer_cyc = 0;
+// int sum_mem_transfer_cyc = 0;
 % for mem_tensor in mem_tensors:
 % for  node in nodes:
 % if node.node_id in mem_tensor.move_temp_to_ext_mem:
@@ -52,11 +53,11 @@ void match_${model_name}_graph_profile_summary(void){
     % for node in nodes:
     printf("[${node.fn_name}]\t%d\n", ${node.name}_perf_cnt );
     % endfor
-    printf("Total node cycles\t%d\n", sum_kernel_comp_cyc );
-    printf("Total memory cycles\t%d\n", sum_mem_transfer_cyc );
+    // printf("Total node cycles\t%d\n", sum_kernel_comp_cyc );
+    // printf("Total memory cycles\t%d\n", sum_mem_transfer_cyc );
 
     printf("\nProfiling Mem Transfers Performance\n");
-
+    printf("[file_constants_off_chip_loading LOAD]\tBytes:\t${sum([m_t.num_bytes for m_t in mem_tensors if m_t.is_constant and m_t.stored_in_external_memory])}\tCycles:\t%d\n", constants_loading_cycles);
     % for  node in nodes:
     % for mem_tensor in mem_tensors:
     % if node.node_id in mem_tensor.move_temp_to_ext_mem:
@@ -101,10 +102,17 @@ int match_${model_name}_run_graph(
     % endif
     match_set_match_mem_pt(match_mem);
 
+    #if __${model_name}_GRAPH_PROFILE__
+    start = ${target.start_get_timestamp_api}();
+    #endif
     match_${model_name}_graph_load_files(match_mem, match_ext_mem);
-
+    #if __${model_name}_GRAPH_PROFILE__
+    end = ${target.end_get_timestamp_api}();
+    constants_loading_cycles = (int)(end - start);
+    #endif
     % for node in nodes:
-    % for (free_buffer_off, free_buffer_size) in node.free_buffers:
+    % for (free_buffer_off, free_buffer_size, free_buffer_name) in node.free_buffers:
+    // alloc buffer ${free_buffer_name} of size ${free_buffer_size} at offset ${free_buffer_off}
     match_alloc_workspace(${free_buffer_off}, ${free_buffer_size});
     % endfor
     #if __${model_name}_GRAPH_DEBUG__
@@ -125,7 +133,7 @@ int match_${model_name}_run_graph(
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
     ${mem_tensor.name}_cp_to_ext_mem_cyc = (int)(end - start);
-    sum_mem_transfer_cyc += ${mem_tensor.name}_cp_to_ext_mem_cyc;
+    // sum_mem_transfer_cyc += ${mem_tensor.name}_cp_to_ext_mem_cyc;
     #endif
     % endif
     % if node.node_id in mem_tensor.load_from_ext_mem_at:
@@ -141,7 +149,7 @@ int match_${model_name}_run_graph(
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
     ${mem_tensor.name}_cp_from_ext_mem_cyc = (int)(end - start);
-    sum_mem_transfer_cyc += ${mem_tensor.name}_cp_from_ext_mem_cyc;
+    // sum_mem_transfer_cyc += ${mem_tensor.name}_cp_from_ext_mem_cyc;
     #endif
     % endif
     % endfor
@@ -167,8 +175,7 @@ int match_${model_name}_run_graph(
     end = ${target.end_get_timestamp_api}();
     time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
     ${node.name}_perf_cnt = (int)(end - start);
-    sum_kernel_comp_cyc += ${node.name}_perf_cnt;
-    printf("[${model_name} GRAPH] TVM node ${node.name} done, took %fms\n", time_elapsed_ms);
+    // sum_kernel_comp_cyc += ${node.name}_perf_cnt;
     #endif
     % else:
     % for node_in in [inp__ for inp__ in node.inputs if inp__.is_constant]:
@@ -190,8 +197,8 @@ int match_${model_name}_run_graph(
     end = ${target.end_get_timestamp_api}();
     time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
     ${node.name}_perf_cnt = (int)(end - start);
-    sum_kernel_comp_cyc += ${node.name}_perf_cnt;
-    printf("[${model_name} GRAPH] MATCH node ${node.name} done, took %fms\n", time_elapsed_ms);
+    // sum_kernel_comp_cyc += ${node.name}_perf_cnt;
+    // printf("[${model_name} GRAPH] MATCH node ${node.name} done, took %fms\n", time_elapsed_ms);
     #endif
     % endif
     #if __${model_name}_GRAPH_DEBUG__
@@ -207,7 +214,10 @@ int match_${model_name}_run_graph(
     #endif
     % endif
     #endif
+    % if len(node.free_buffers)>0:
+    // free extra buffers allocated
     match_free_workspace();
+    % endif
     % endfor
 
     % for mem_tensor in [m_t__ for m_t__ in mem_tensors if -1 in m_t__.move_temp_to_ext_mem]:
@@ -218,7 +228,7 @@ int match_${model_name}_run_graph(
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
     ${mem_tensor.name}_cp_to_ext_mem_cyc = (int)(end - start);
-    sum_mem_transfer_cyc += ${mem_tensor.name}_cp_to_ext_mem_cyc;
+    // sum_mem_transfer_cyc += ${mem_tensor.name}_cp_to_ext_mem_cyc;
     #endif
     % endfor
 

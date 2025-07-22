@@ -36,6 +36,7 @@ void free_wrapped(void* ptr, size_t size){
 void* malloc_wrapper(size_t size){
   // Allocate extra 4 bytes header in the first that stores the size
   size_t actual_size = size + 4;
+//   printf("[malloc_wrapper] Allocating %d bytes (actual size %d)\n", size, actual_size);
   void* pointer = malloc_wrapped(actual_size);
   if (pointer == NULL)
     return NULL; // Allocation failed
@@ -59,6 +60,8 @@ void free_wrapper(void* wrapped_pointer){
 
 void log_peak_free(size_t size){
     current_l2_alloc = current_l2_alloc - (uint32_t)size;
+    if(!current_l2_alloc)
+        printf("\nPeak dynamic memory allocated in L2: %d bytes\n", peak_l2_alloc);
     // printf("[LOG PEAK FREE] Current L2 alloc after free of %d is %d\n", size, current_l2_alloc);
 }
 

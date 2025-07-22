@@ -159,8 +159,8 @@ def try_to_allocate(
         tensor.load_from_ext_mem_at = list()
         tensor.move_temp_to_ext_mem = list()
         tensor.stored_in_external_memory = True
-        if tensor.is_output:
-            print(f"[MEMORY PLANNER] Tensor {tensor.name} is an output tensor")
+        # if tensor.is_output:
+            # print(f"[MEMORY PLANNER] Tensor {tensor.name} is an output tensor")
         for time in range(tensor.start_usage, tensor.last_usage+1):
             if time in calls_idxs:
                 if time in tensor.used_at:
@@ -295,8 +295,8 @@ def try_allocate_easy(
     tens_size: int=1, time: int=0
 ):
     
-    print('tens_size:', tens_size)
-    print('available_soc_bytes', available_soc_bytes)
+    # print('tens_size:', tens_size)
+    # print('available_soc_bytes', available_soc_bytes)
     # allocate a single time
     allocated = False
     # check if theres enough space from the last tensor to the end of the memory

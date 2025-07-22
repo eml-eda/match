@@ -41,6 +41,7 @@ def save_memory_allocation_graph(
         metadata[tensor.name] = {
             "num_bytes": tensor.num_bytes,
             "last_usage": tensor.last_usage,
+            "mem_offset": tensor.mem_offset,
             "mem_offset_at": tensor.mem_offset_at,
             "load_from_ext_mem_at": tensor.load_from_ext_mem_at,
             "move_temp_to_ext_mem": tensor.move_temp_to_ext_mem,
@@ -48,6 +49,12 @@ def save_memory_allocation_graph(
             "abbreviated_name": abbreviate_name(tensor.name),
             "is_intermediate": tensor.is_intermediate,
             "is_constant": tensor.is_constant,
+            "stored_in_external_memory": tensor.stored_in_external_memory,
+            "name": tensor.name,
+            "tvm_memplan_storage_id": tensor.tvm_memplan_storage_id,
+            "ext_mem_offset": tensor.ext_mem_offset,
+            "shape": tensor.shape,
+            "dtype": str(tensor.dtype),
             "is_input": tensor.is_input,
             "is_output": tensor.is_output,
             "node_id": tensor.node_id,
@@ -111,6 +118,7 @@ def save_memory_allocation_graph_nodes_buffers(
     mem_tensors_at: Dict = None,
     calls_idxs: List = None,
     match_mem_size: int = 0,
+    save_every_empty_areas: bool = False,
     output_file="memory_allocation.json"
 ):
     """
@@ -126,19 +134,23 @@ def save_memory_allocation_graph_nodes_buffers(
             "allocs": [],
         }
         allocs = []
+        tvm_extra_dynamic_empty_areas = []
         for tensor in mem_tensors_at[call_idx]:
             tensor_pt = tensor.mem_offset_at[call_idx]
-            allocs.append((tensor_pt, tensor_pt + tensor.num_bytes - 1, tensor.num_bytes))
+            if tensor.is_extra_dynamic:
+                tvm_extra_dynamic_empty_areas.append((tensor_pt, tensor.num_bytes, tensor.name))
+            allocs.append((tensor_pt, tensor_pt + tensor.num_bytes, tensor.num_bytes))
         metadata[call_idx]["allocs"] = allocs
         allocs.sort(key=lambda x: x[0])
-        empty_areas = []
-        last_alloc = -1
-        for alloc in allocs:
-            if alloc[0] > last_alloc + 1:
-                empty_areas.append((last_alloc + 1, alloc[2]))
-            last_alloc = max(last_alloc, alloc[1])
-        if (last_alloc + 1) < match_mem_size:
-            empty_areas.append((last_alloc + 1, match_mem_size - (last_alloc + 1)))
+        empty_areas = tvm_extra_dynamic_empty_areas
+        if save_every_empty_areas:
+            last_alloc = 0
+            for alloc_idx, alloc in enumerate(allocs):
+                if alloc[0] > last_alloc:
+                    empty_areas.append((last_alloc, alloc[0] - last_alloc, f"EMPTY_AREA_NODE_{call_idx}_{alloc_idx}"))
+                last_alloc = alloc[1]
+            if last_alloc < match_mem_size:
+                empty_areas.append((last_alloc, match_mem_size - last_alloc, f"EMPTY_AREA_NODE_{call_idx}_LAST"))
         metadata[call_idx]["empty_areas"] = empty_areas
     json.dump(metadata, open(output_file, "w"), indent=4)
     print(f"[MEM PLANNER] Memory allocation metadata saved to {output_file}")
