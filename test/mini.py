@@ -81,6 +81,71 @@ def create_dense_conv_dense_ex(inp_features:int=256,out_features:int=128,
     mod = mod.from_expr(x)
     return mod, params
 
+def create_dense_conv_dense_fp16_ex(inp_features:int=256,out_features:int=128,
+                            inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
+                            padding:Tuple=(0,0,0,0),strides:Tuple=(1,1),
+                            groups:int=1,requant_pattern:bool=False,
+                            right_shift:int=1,**kwargs):
+    # Using input_0 to be used with create_demo_file
+    x = relay.var("input_0", relay.TensorType((1,inp_features), "float16"))
+    # Get or generate weight_values
+    weights_1 = create_random_array((out_features*math.prod(inp_shape),inp_features),"float16")
+    weights_2 = create_random_array((inp_features,out_features)+fil_shape,"float16")
+    weights_3 = create_random_array((out_features,inp_features*math.prod([int(inp_shape[idx]/strides[idx]) for idx in range(len(inp_shape))])), "float16")
+    # Get or generate bias values
+    bias_1 = create_random_array((out_features*math.prod(inp_shape),), "float16")
+    bias_2 = create_random_array((inp_features,), "float16")
+    bias_3 = create_random_array((out_features,), "float16")
+    # Generate the conv2d call
+    # define weights and bias variables
+    weights_1_name = "dense_1_weights"
+    bias_1_name = "dense_1_bias"
+    weights_2_name = "conv_weights"
+    bias_2_name = "conv_bias"
+    weights_3_name = "dense_2_weights"
+    bias_3_name = "dense_2_bias"
+
+    # define relay input vars
+    w_1 = relay.var(weights_1_name, relay.TensorType(weights_1.shape, weights_1.dtype))
+    w_2 = relay.var(weights_2_name, relay.TensorType(weights_2.shape, weights_2.dtype))
+    w_3 = relay.var(weights_3_name, relay.TensorType(weights_3.shape, weights_3.dtype))
+    b_1 = relay.var(bias_1_name, relay.TensorType(bias_1.shape, bias_1.dtype))
+    b_2 = relay.var(bias_2_name, relay.TensorType(bias_2.shape, bias_2.dtype))
+    b_3 = relay.var(bias_3_name, relay.TensorType(bias_3.shape, bias_3.dtype))
+
+    # define weights and bias values in params
+    params = {
+        weights_1_name: weights_1,
+        bias_1_name: bias_1,
+        weights_2_name: weights_2,
+        bias_2_name: bias_2,
+        weights_3_name: weights_3,
+        bias_3_name: bias_3
+    }
+
+    # define operations
+    x = relay.op.nn.dense(x, w_1, out_dtype=bias_1.dtype)
+    x = relay.op.nn.bias_add(x, b_1, axis=-1)
+    x = relay.op.nn.relu(x)
+    x = relay.op.reshape(x, (1, out_features)+inp_shape)
+    x = relay.op.nn.conv2d(
+        x, w_2,
+        strides=strides,
+        padding=padding,
+        groups=groups,
+        kernel_size=fil_shape,
+    )
+    x = relay.op.nn.bias_add(x, b_2, axis=1)
+    x = relay.op.nn.relu(x)
+    x = relay.op.reshape(x, (1, inp_features*math.prod([int(inp_shape[idx]/strides[idx]) for idx in range(len(inp_shape))])))
+    x = relay.op.nn.dense(x, w_3, out_dtype=bias_3.dtype)
+    x = relay.op.nn.bias_add(x, b_3, axis=-1)
+    x = relay.op.nn.relu(x)
+    # create an IR module from the relay expression
+    mod = tvm.ir.IRModule()
+    mod = mod.from_expr(x)
+    return mod, params
+
 def create_fp_conv_vit(div_out_chs_by:int=1, out_ch:int=384, **kwargs):
     inp_shape = (224,224)
     inp_ch = 3

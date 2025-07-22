@@ -429,10 +429,10 @@ def allocate_tensor(
                     time=max_allocated_tensors_at
                 )
     if not allocated:
-        print(f"[MEMORY PLANNER] Couldnt allocate all the tensors, tensor {tensor.name} allocation was not successfull")
-        print(f"[MEMORY PLANNER] Node at {max_allocated_tensors_at} cannot fit SoC memory")
+        print(f"[MEM PLANNER] Couldnt allocate all the tensors, tensor {tensor.name} allocation was not successfull")
+        print(f"[MEM PLANNER] Node at {max_allocated_tensors_at} cannot fit SoC memory")
         # TODO: add list of nodes to run from external memory
-        raise Exception(f"[MEMORY PLANNER] Couldnt allocate all the tensors, tensor {tensor.name} with size {tens_size} allocation was not successfull")
+        raise Exception(f"[MEM PLANNER] Couldnt allocate all the tensors, tensor {tensor.name} with size {tens_size} allocation was not successfull")
 
     for time_ in tensor.mem_offset_at:
         free_size_at_time[time_] -= tensor.num_bytes

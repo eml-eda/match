@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 from typing import List
+import copy
 
 import mako
 from match.opt.generator import ScheduleGenerator
@@ -17,7 +18,7 @@ import tvm
 
 import traceback as tb
 
-HOST_MEM_SIZE = 8192
+HOST_MEM_SIZE = 8192 * 1024
 
 class PatternResult:
     """Class that stores all the information that may be relevant to cache a result of a node that we want to compile
@@ -120,11 +121,17 @@ class MatchTarget(ABC):
         self.timestamp_to_ms = "* CLOCKS_PER_SEC/1000"
         self.alloc_fn = "malloc"
         self.free_fn = "free"
+        self.print_fn = "printf"
+        self.offload_dma_fn = "offload_dma"
         self.clean_funcs=[]
         self.init_funcs=[]
         self.include_list=[]
         self.input_macros=""
         self.__cached_pattern_results__=[]
+        self.other_files_to_copy = []
+        self.timer_start_fn = ""
+        self.timer_stop_fn = ""
+        self.fix_io_tensors_in_ext_mem = True
         for exec_module in exec_modules:
             self.add_exec_module(exec_module)
             self.exec_modules_dict[exec_module.name]=exec_module
@@ -143,10 +150,14 @@ class MatchTarget(ABC):
 
     def gen_libs_and_main(self,models,default_model,out_path):
         abs_out_path = str(Path(out_path).absolute())
+        
         subprocess.getoutput(f"cp {self.tvm_runtime_include_path} {abs_out_path}/include/tvm_runtime.h")
         subprocess.getoutput(f"cp {self.tvm_runtime_src_path} {abs_out_path}/src/tvm_runtime.c")
         subprocess.getoutput(f"cp {self.crt_config_path} {abs_out_path}/include/crt_config.h")
         subprocess.getoutput(f"cp {self.makefile_path} {abs_out_path}/Makefile")
+        for other_file in self.other_files_to_copy:
+            subprocess.getoutput(f"cp {other_file} {abs_out_path}/{Path(other_file).name}")
+            
         models_ = models
         match_inputs, match_outputs = models_[default_model].get_match_inputs_and_outputs()
         templates_data = {
@@ -214,6 +225,15 @@ class MatchTarget(ABC):
             pt_res.set_latency(latency)
             pt_res.set_energy(energy)
             self.add_pt_res_to_cache(pt_res)
+        else:
+            schedule = copy.deepcopy(schedule)
+            # update constants to use the node ones and not the cached ones
+            for tensor_name in schedule.tensors:
+                if tensor_name in match_node.const_tensors:
+                    schedule.tensors[tensor_name] = match_node.const_tensors[tensor_name]
+                    if tensor_name in schedule.tensor_tiles:
+                        for tile_idx in range(len(schedule.tensor_tiles[tensor_name])):
+                            schedule.tensor_tiles[tensor_name][tile_idx].tensor=match_node.const_tensors[tensor_name]
         save_codegen_schedule(node,schedule,latency,energy)
         return schedule,match_node,match_pt.exec_module,latency,energy
 

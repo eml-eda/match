@@ -178,7 +178,54 @@ class MatchTVMParser:
 
     def get_io_from_layout(self, layout, data, dims):
         # conv2d and other 4 dims operators
-        if len(data)==4:
+        if len(data)==5:
+            if layout=="NDHWC":
+                # layout is ndhwc
+                n = (int(data[0]), dims[0])
+                c = (int(data[4]), dims[4])
+                d = (int(data[1]), dims[1])
+                h = (int(data[2]), dims[2])
+                w = (int(data[3]), dims[3])
+            elif layout=="NCDHW":
+                n = (int(data[0]), dims[0])
+                c = (int(data[1]), dims[1])
+                d = (int(data[2]), dims[2])
+                h = (int(data[3]), dims[3])
+                w = (int(data[4]), dims[4])
+            elif layout=="NHDWC":
+                n = (int(data[0]), dims[0])
+                c = (int(data[3]), dims[3])
+                d = (int(data[1]), dims[1])
+                h = (int(data[2]), dims[2])
+                w = (int(data[4]), dims[4])
+            elif layout=="ODHWI":
+                n = (int(data[0]), dims[0])
+                c = (int(data[1]), dims[1])
+                d = (int(data[2]), dims[2])
+                h = (int(data[3]), dims[3])
+                w = (int(data[4]), dims[4])
+            elif layout=="OCDHW":
+                n = (int(data[0]), dims[0])
+                c = (int(data[1]), dims[1])
+                d = (int(data[2]), dims[2])
+                h = (int(data[3]), dims[3])
+                w = (int(data[4]), dims[4])
+            elif layout=="DHWIO":
+                n = (int(data[4]), dims[4])
+                c = (int(data[3]), dims[3])
+                d = (int(data[0]), dims[0])
+                h = (int(data[1]), dims[1])
+                w = (int(data[2]), dims[2])
+            else:
+                print(f"[PARSER]: Warning, layout {layout} not recognized, interpreting as NCDHW")
+                # layout is ndhwc
+                n = (int(data[0]), dims[0])
+                c = (int(data[1]), dims[1])
+                d = (int(data[2]), dims[2])
+                h = (int(data[3]), dims[3])
+                w = (int(data[4]), dims[4])
+            return n, c, d, h, w
+        elif len(data)==4:
             if layout=="NHWC":
                 # layout is nhwc
                 n = (int(data[0]), dims[0])
@@ -219,6 +266,16 @@ class MatchTVMParser:
             c = (int(data[1]), dims[1])
             spat = (int(data[2]), dims[2])
             return n, c, spat
+
+    def get_dim_arr_from_layout_and_ncdhw_arr(self,layout,ncdhw_arr):
+        if layout=="NDHWC":
+            return [ncdhw_arr[0],ncdhw_arr[2],ncdhw_arr[3],ncdhw_arr[4],ncdhw_arr[1]]
+        elif layout=="NCDHW":
+            return ncdhw_arr
+        else:
+            print(f"[PARSER]: Warning, layout {layout} not recognized, interpreting as NCDHW")
+            #layout is nchw
+            return ncdhw_arr
 
     def get_dim_arr_from_layout_and_nchw_arr(self,layout,nchw_arr):
         if layout=="NHWC":

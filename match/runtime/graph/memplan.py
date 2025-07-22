@@ -16,7 +16,8 @@ class MatchMemoryPlanner:
         calls_idxs: List=[],
         nodes: List=[],
         out_path: str="output_path",
-        algorithm: str="match"
+        algorithm: str="match",
+        fix_io_tensors_in_ext_mem: bool=True
     ):
         self.mem_tensors = mem_tensors
         self.extra_dynamic_buffers = extra_dynamic_buffers
@@ -52,7 +53,8 @@ class MatchMemoryPlanner:
                 self.output_memory_usage += tensor.elems * tensor.dtype.itemsize
         self.total_memory_needed_bytes = self.input_memory_usage + self.output_memory_usage + self.constant_memory_usage + max(self.intermediate_memory_usage)
         self.total_memory_needed_bytes_w_consts = self.input_memory_usage + self.output_memory_usage + max(self.overall_intermediate_memory_usage)
-    
+        self.fix_io_tensors_in_ext_mem = fix_io_tensors_in_ext_mem
+        
     @property
     def external_memory_needed(self):
         return self.total_memory_needed_bytes > self.available_soc_bytes
@@ -94,7 +96,7 @@ class MatchMemoryPlanner:
         tensors_allocated_at_time = {key:[] for key in self.calls_idxs}
         free_size_at_time = {key:self.available_soc_bytes for key in self.calls_idxs}
 
-        print(f"[MEMORY PLANNER] Allocating tensors with {self.available_soc_bytes} bytes of on-chip memory")
+        print(f"[MEM PLANNER] Allocating tensors with {self.available_soc_bytes} bytes of on-chip memory")
         for tensor in sorted_mem_tensors:
             allocate_tensor(
                 calls_idxs=self.calls_idxs,
@@ -105,7 +107,7 @@ class MatchMemoryPlanner:
                 tensor=tensor
             )
         
-        print(f"[MEMORY PLANNER] All tensors allocated")
+        print(f"[MEM PLANNER] All tensors allocated")
         save_memory_allocation_graph(
             sorted_mem_tensors,
             graph_output_file=self.out_path+"/memory_plan_stage_1.png",
@@ -121,7 +123,7 @@ class MatchMemoryPlanner:
                     self.on_chip_constants.append(tensor)
                 else:
                     tensor_fixed_to_ext_mem.append(tensor.name)
-                    print(f"[MEMORY PLANNER] Constant tensor {tensor.name} will be stored in external memory")
+                    print(f"[MEM PLANNER] Constant tensor {tensor.name} will be stored in external memory")
             tensor.reset()
         sorted_mem_tensors = [m_t for m_t in sorted_mem_tensors if m_t.name not in real_constant_tensors]
         tensors_allocated_at_time = {key:[] for key in self.calls_idxs}
@@ -240,14 +242,14 @@ class MatchMemoryPlanner:
         try:
             if self.algorithm=="match":
                 return self.match_mem_planner_impl(
-                    # tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if\
-                                            #  tensor.is_output\
-                                                # or tensor.is_input\
+                    tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if\
+                                             tensor.is_output\
+                                                or tensor.is_input\
                                                     # or tensor.is_constant
-                    # ]
+                    ]
                 )
             else:
-                raise Exception(f"[MEMORY PLANNER] Algorithm {self.algorithm} not implemented")
+                raise Exception(f"[MEM PLANNER] Algorithm {self.algorithm} not implemented")
         except Exception as exc:
-            print(f"[MEMORY PLANNER] Error during memory planner {exc}")
-            raise Exception(f"[MEMORY PLANNER] Error during memory planner {exc}")
+            print(f"[MEM PLANNER] Error during memory planner {exc}")
+            raise Exception(f"[MEM PLANNER] Error during memory planner {exc}")

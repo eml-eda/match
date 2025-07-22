@@ -29,7 +29,7 @@ class MatchAddCastInMain:
     def __call__(self, mod):
         return self.transform_module(mod)
 
-NODE_WITH_OUT_DTYPE_ATTR = ("nn.dense", "nn.conv2d", "nn.conv1d")
+NODE_WITH_OUT_DTYPE_ATTR = ("nn.dense", "nn.conv3d", "nn.conv2d", "nn.conv1d")
 CAN_REMOVE_FAKE_CAST = False
 @tvm.relay.transform.function_pass(opt_level=0)
 class MatchRemoveFakeOutDtypeCasts(tvm.relay.expr_functor.ExprMutator):

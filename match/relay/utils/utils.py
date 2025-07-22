@@ -1,16 +1,21 @@
-import pathlib
+import os
 import shutil
 import ctypes
-import os
-from match.target.target import DefaultMatchTarget, MatchTarget
+import pathlib
+from typing import Tuple, Dict
+
 import tvm
 import tvm.relay as relay
-import numpy as np
 
-from typing import Tuple, Dict
+import numpy as np
 import numpy.typing as npt
+
 from mako.template import Template
 from mako import exceptions
+
+from match.target.target import DefaultMatchTarget, MatchTarget
+from match.utils.utils import format_c_code
+
 
 def numpy_to_array(np_arr: npt.NDArray, dtype: str):
     """ Convert a numpy array to a TVM array with datatype `dtype`.
@@ -229,16 +234,17 @@ def create_random_array(shape: Tuple[int, ...], dtype: str, min_val=None, max_va
     minimum to maximum depending on the data type:
     E.g. in8 --> [-128, 127]
     """
+    float_dtype = np.issubdtype(dtype, np.floating)
     def get_dtype_range():
         try:
             if min_val is not None and isinstance(min_val, (float,int)):
                 dtype_min = min_val
             else:
-                dtype_min = np.iinfo(dtype).min
+                dtype_min = np.finfo(dtype).min if float_dtype else np.iinfo(dtype).min
             if max_val is not None and isinstance(max_val, (float,int)):
                 dtype_max = max_val
             else:
-                dtype_max = np.iinfo(dtype).max
+                dtype_max = np.finfo(dtype).max if float_dtype else np.iinfo(dtype).max
         except ValueError:
             range_map = {
                 "int4": (-8, 7),
@@ -256,8 +262,7 @@ def create_random_array(shape: Tuple[int, ...], dtype: str, min_val=None, max_va
     if dtype in ['int4', 'int2']:
         np_dtype = 'int8'
     shape = [int(i) for i in shape]
-    np_array = np.random.randint(low=dtype_min, high=dtype_max+1,
-                                 size=shape, dtype=np_dtype)
+    np_array = np.random.rand(*shape).astype(np_dtype) if float_dtype else np.random.randint(low=dtype_min, high=dtype_max+1, size=shape, dtype=np_dtype)
     return numpy_to_array(np_array, dtype)
 
 def create_build_dir(build_path: str = "./build",
@@ -335,6 +340,8 @@ def create_build_dir(build_path: str = "./build",
                     try:
                         template = Template(filename = os.path.join(template_dir, filename))
                         rendered_content = template.render(**build_template_data)
+                        if ext in {"c", 'h'}:
+                            rendered_content = format_c_code(rendered_content)
                         output_path = os.path.join(build_path, base_dir, build_filename + "." + ext)
                         with open(output_path, "w") as output_file:
                             output_file.write(rendered_content)

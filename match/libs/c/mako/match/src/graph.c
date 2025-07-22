@@ -74,19 +74,20 @@ void match_${model_name}_graph_profile_summary(void){
 }
 #endif
 
+
 int match_${model_name}_run_graph(
-    % for rt_i in rt_inputs:
+% for rt_i in rt_inputs:
     ${rt_i.c_type}* ${rt_i.name}_${"ext_" if rt_i.stored_in_external_memory else ""}pt,
-    % endfor
-    % for rt_o_idx,rt_o in enumerate(rt_outputs):
+% endfor
+% for rt_o_idx,rt_o in enumerate(rt_outputs):
     ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_${"ext_" if rt_o.stored_in_external_memory else ""}pt
-    % endfor
+% endfor
 ){
-    #if __${model_name}_GRAPH_PROFILE__ || __${model_name}_FALLBACK_GRAPH_PROFILE__
+#if __${model_name}_GRAPH_PROFILE__ || __${model_name}_FALLBACK_GRAPH_PROFILE__
     ${target.timestamp_type} start,end;
     double time_elapsed_ms = 0.0f;
-    #endif
-    % if ext_mem_needed_bytes>0:
+#endif
+% if ext_mem_needed_bytes>0:
     void* match_ext_mem = ${target.allocate_ext_mem}(${ext_mem_needed_bytes});
     % else:
     void* match_ext_mem = NULL;
@@ -117,11 +118,11 @@ int match_${model_name}_run_graph(
     % endfor
     #if __${model_name}_GRAPH_DEBUG__
     % if node.fallback:
-    #if __${model_name}_FALLBACK_GRAPH_DEBUG__
+        #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
-    printf("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}\n");
+    ${target.print_fn}("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}\r\n");
     % if node.fallback:
-    #endif
+        #endif
     % endif
     #endif
     % for mem_tensor in mem_tensors:
@@ -153,6 +154,7 @@ int match_${model_name}_run_graph(
     #endif
     % endif
     % endfor
+
     ## NODES in TVM Graph Runtime are called with
     ## void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handle
     % if node.fallback:
@@ -167,7 +169,7 @@ int match_${model_name}_run_graph(
     tvm_fallback_args_[${len(node.inputs)+out_idx}].v_handle = (void*)(&tvm_fallback_dltensor_${len(node.inputs)+out_idx});
     % endfor
     #if __${model_name}_FALLBACK_GRAPH_PROFILE__
-    start = ${target.start_get_timestamp_api}();
+        start = ${target.start_get_timestamp_api}();
     #endif
     if( ${node.fn_name}(tvm_fallback_args_, tvm_fallback_arg_type_ids_, ${len(node.inputs)+len(node.outputs)},
                         tvm_fallback_out_ret_value_, tvm_fallback_out_ret_tcode_, tvm_fallback_resource_handle_)) return -1;
@@ -203,7 +205,7 @@ int match_${model_name}_run_graph(
     % endif
     #if __${model_name}_GRAPH_DEBUG__
     % if node.fallback:
-    #if __${model_name}_FALLBACK_GRAPH_DEBUG__
+        #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
     % if node.dtype_output_node=="float32":
     printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, relative error between output and checksum by %.4f\n", match_float_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
@@ -211,7 +213,7 @@ int match_${model_name}_run_graph(
     printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, output differs from checksum by %d\n", match_byte_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
     % endif
     % if node.fallback:
-    #endif
+        #endif
     % endif
     #endif
     % if len(node.free_buffers)>0:
@@ -238,9 +240,10 @@ int match_${model_name}_run_graph(
     // final cleanup
     % if mem_needed_bytes>0:
     ${target.free_fn}(match_mem);
-    % endif
-    % if ext_mem_needed_bytes>0:
+% endif
+% if ext_mem_needed_bytes>0:
     ${target.free_external_mem}(match_ext_mem, ${ext_mem_needed_bytes});
-    % endif
-    return 0;
+% endif
+
+return 0;
 }
