@@ -57,7 +57,7 @@ def get_results(name_exp, target, base_dir, directions, models, results_file):
                     if "Memory region" in line:
                         reading_memory = True
             run_metadata = {}
-            run_metadata["nodes"] = {}
+            run_metadata["nodes"] = []
             run_metadata["mem_transfers"] = {}
             run_metadata["max_on_chip_memory"] = 0
             with open(run_log, 'r') as f:
@@ -70,8 +70,7 @@ def get_results(name_exp, target, base_dir, directions, models, results_file):
                             reading_nodes = False
                             continue
                         name_node = splitted[0][1:-1]
-                        run_metadata["nodes"][name_node] = {}
-                        run_metadata["nodes"][name_node]["cycles"] = int(splitted[1])
+                        run_metadata["nodes"].append((name_node, int(splitted[1])))
                     if reading_mem_transfer:
                         splitted = line.strip().split()
                         if len(splitted) not in [6, 7]:
@@ -89,7 +88,7 @@ def get_results(name_exp, target, base_dir, directions, models, results_file):
                     if "Peak dynamic memory allocated" in line:
                         run_metadata["peak_dynamic_on_chip"] = int(line.strip().split()[-2])
                         break
-            run_metadata["node_cycles"] = sum(node["cycles"] for node in run_metadata["nodes"].values())
+            run_metadata["node_cycles"] = sum(node[1] for node in run_metadata["nodes"])
             run_metadata["mem_transfer_cycles"] = sum(transfer["cycles"] for transfer in run_metadata["mem_transfers"].values())
             # Store results in a dictionary for each model/direction/target
             result_entry = {
@@ -138,9 +137,9 @@ def get_results(name_exp, target, base_dir, directions, models, results_file):
             nodes_sheet = workbook.add_worksheet(nodes_sheet_name)
             for idx, header in enumerate(nodes_headers):
                 nodes_sheet.write(0, idx, header)
-            for idx, (node_name, node_data) in enumerate(run_metadata["nodes"].items()):
+            for idx, (node_name, node_cycles) in enumerate(run_metadata["nodes"]):
                 nodes_sheet.write(idx + 1, 0, node_name)
-                nodes_sheet.write(idx + 1, 1, node_data["cycles"])
+                nodes_sheet.write(idx + 1, 1, node_cycles)
             mem_transfer_sheet_name = f"{model}_{direction}_{target}_mem_transfers"
             mem_transfer_sheet = workbook.add_worksheet(mem_transfer_sheet_name)
             for idx, header in enumerate(mem_transfer_headers):
