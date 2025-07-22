@@ -45,7 +45,7 @@ execute_gap_test() {
 models=("kws" "vww" "imcls")
 targets=("GAP9")
 directions=("fw" "bw")
-NAME_BASE_DIR="baseline_graph_free_memplan_370mhz"
+NAME_BASE_DIR="baseline_graph_memplan_fix_io_fix_consts_370mhz_1186kB"
 # Map target names to directory names
 declare -A target_dirs
 target_dirs["pulp_open"]="popen"

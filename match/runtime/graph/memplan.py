@@ -245,7 +245,7 @@ class MatchMemoryPlanner:
                     tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if\
                                              tensor.is_output\
                                                 or tensor.is_input\
-                                                    # or tensor.is_constant
+                                                    or tensor.is_constant
                     ]
                 )
             else:

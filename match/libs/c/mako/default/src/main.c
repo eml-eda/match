@@ -134,7 +134,7 @@ int main(int argc, char** argv){
     );
     % endif
     
-    % for out_idx,out_name in enumerate(match_outputs.keys()):
+    % for out_idx,(out_name, out) in enumerate(match_outputs.items()):
         % if out["is_copy_of"]=="" and out["associated_input"]=="":
             #if !defined(__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__) || !__${default_model}_GRAPH_${default_model}_out_${out_idx}_FROM_EXTERNAL_MEM__
             % if golden_cpu_model and target.free_fn != "":

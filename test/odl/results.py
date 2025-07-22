@@ -20,7 +20,8 @@ def get_results(name_exp, target, base_dir, directions, models, results_file):
         "constants_on_chip", "io_on_chip",
         "dynamic_on_chip", "tvm_buffers_extra_dynamic",
         "total_off_chip", "dynamic_off_chip",
-        "io_off_chip", "constants_off_chip"
+        "io_off_chip", "inp_off_chip_files",
+        "constants_off_chip"
     ]
     nodes_headers = ["name_node", "cycles"]
     mem_transfer_headers = ["name_transfer", "transfer_type", "bytes", "cycles"]
@@ -78,7 +79,7 @@ def get_results(name_exp, target, base_dir, directions, models, results_file):
                             continue
                         name_transfer = "_".join(splitted[:3])[1:-1]
                         run_metadata["mem_transfers"][name_transfer] = {}
-                        run_metadata["mem_transfers"][name_transfer]["bytes"] = int(splitted[-3]) if len(splitted)==7 else int(splitted[-2].replace("Cycles:", ""))
+                        run_metadata["mem_transfers"][name_transfer]["bytes"] = int(splitted[-3]) if len(splitted)==7 or "file_constants_off_chip_loading" in name_transfer else int(splitted[-2].replace("Cycles:", ""))
                         run_metadata["mem_transfers"][name_transfer]["transfer_type"] = splitted[2][:-1]
                         run_metadata["mem_transfers"][name_transfer]["cycles"] = int(splitted[-1])
                     if "Node	Cycle" in line:
@@ -104,7 +105,7 @@ def get_results(name_exp, target, base_dir, directions, models, results_file):
             json.dump(result_entry, open(json_file, "w"), indent=4)
             on_chip_off_chip_metadata_path = model_dir / "models/test_bp_tvm/metadata/memory_plan_on_off_chip_summary.json"
             on_chip_off_chip_metadata = dict()
-            with open(on_chip_off_chip_metadata,"r") as mod_file:
+            with open(on_chip_off_chip_metadata_path,"r") as mod_file:
                 on_chip_off_chip_metadata = json.load(mod_file)
             # Flatten the result_entry for DataFrame
             flat_entry = {
