@@ -23,6 +23,8 @@ class MatchSchedule:
         instrs: List[MatchInstr] = [],
         buffers: List[MatchMemBuffer] = [],
         exec_module = None,
+        latency: float = 0.0,
+        energy: float = 0.0,
     ) -> None:
         self.blocks = blocks
         self.tensors = tensors
@@ -32,6 +34,8 @@ class MatchSchedule:
         self.buffers = buffers
         self.num_units = 1
         self.exec_module = exec_module
+        self.latency = 0
+        self.energy = 0
 
     def set_default_tensor_tiles(self):
         for tensor in self.tensors.values():
@@ -71,4 +75,4 @@ class MatchSchedule:
                     deep_check_expr(init_instr, node_name)
 
     def __str__(self):
-        return pprint(self)
+        return pprint.pformat(self)
