@@ -211,7 +211,7 @@ void carfield_init_uart() {
 
 
 void carfield_timer_start() {
-    writed(1, CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_RESET_LO_OFFSET)
+    writed(1, CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_RESET_LO_OFFSET);
     *(volatile uint32_t*)(CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_CFG_LO_OFFSET) |= (1 << TIMER_CFG_LO_CCFG_BIT);
     writed(1, CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_START_LO_OFFSET);
 }
