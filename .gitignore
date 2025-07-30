@@ -11,3 +11,4 @@ dist
 gap9_results
 net_output
 venv
+output_*
