@@ -86,8 +86,8 @@ int match_${model_name}match_model_run_graph_async(
 extern const int match_${model_name}_num_nodes;
 
 // Keep track of the number of remaining parents to be executed for each node
-extern int match_${model_name}_num_remaining_parents[${len(nodes)}];
 extern const int match_${model_name}_num_parents[${len(nodes)}];
+extern int match_${model_name}_num_remaining_parents[${len(nodes)}];
 
 // Keep track of device busy status - TODO for multi-model support this should not-be per-model
 extern int match_${model_name}_device_is_busy[${target.num_devices}];

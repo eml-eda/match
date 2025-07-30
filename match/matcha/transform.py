@@ -3,17 +3,49 @@ from functools import partial
 
 import tvm
 from tvm import relay
-from tvm.relay.dataflow_pattern import DFPatternCallback, rewrite
 
-from match.target import MatchTarget, MatchTargetPattern
+from match.target import MatchTarget
 
-from .graph import Graph, PatternAnnotator
+from .graph import Graph
 from .globals import set_optimization_result
 from .optimize import optimize
 from .viz import plot_optimization_result
 
 
-    
+
+class NodeAnnotator(relay.ExprMutator):
+    # Just yet another workaround to uniquely identify nodes across transformations in TVM :)
+    def __init__(self):
+        super().__init__()
+        self.node_id = 0
+        self.var_map = {}
+
+    def _make_span(self):
+        span = tvm.ir.Span(tvm.ir.SourceName("GID"), self.node_id, 0, 0, 0)
+        self.node_id += 1
+        return span
+
+    def visit_var(self, var):
+        if var not in self.var_map:
+            new_var = relay.Var(var.name_hint, var.type_annotation, span=self._make_span())
+            self.var_map[var] = new_var
+        return self.var_map[var]
+
+    def visit_constant(self, const):
+        return relay.Constant(const.data, span=self._make_span())
+
+    def visit_call(self, call):
+        new_op = self.visit(call.op)
+        new_args = [self.visit(arg) for arg in call.args]
+        return relay.Call(new_op, new_args, call.attrs, call.type_args, span=self._make_span())
+
+    def visit_function(self, fn):
+        new_params = [self.visit_var(p) for p in fn.params]
+        new_body = self.visit(fn.body)
+        return relay.Function(new_params, new_body, fn.ret_type, fn.type_params, span=self._make_span())
+
+
+
 @tvm.ir.transform.module_pass(opt_level=0)
 class MatchOptimizer:
     def __init__(self, target : MatchTarget):
@@ -24,9 +56,14 @@ class MatchOptimizer:
         
         patterns = [m_pt for m_pt in self.target.match_patterns if m_pt.exec_module.name not in self.target.disabled_exec_modules]
         
+        func = mod['main']
         
+        node_annotator = NodeAnnotator()
+        mod['main'] = node_annotator.visit(func)
+        
+        mod = relay.transform.InferType()(mod)
+            
         graph = Graph(mod, patterns)
-        
         
         devices = list(range(len(self.target.exec_modules) + 1))
         l2_size = self.target.soc_memory_bytes # 256_000
@@ -42,7 +79,8 @@ class MatchOptimizer:
             bandwidth, 
             dtype_size, 
             scale_time=True, 
-            scale_addr=False
+            scale_addr=False,
+            tiling=False
         )
         
         with open("matcha.result.json", "w") as f:
@@ -64,18 +102,18 @@ class MatchOptimizer:
         print(graph.nid_to_sid)
         
         plot_optimization_result(solution)
-        
         set_optimization_result(solution)
-    
         
-        for pattern in patterns:
-            annotator = PatternAnnotator(pattern)
-            mod['main'] = rewrite(annotator, mod['main'])
-            print(f"Pattern matched {annotator.num_matches} times.")
+        # Merge chosen pattern matchings
+        
+        print("Matched Patterns Nodes: ", matched_patterns)
         
         def merge_check(node, p):
-            if isinstance(node, relay.Call):
-                return node.span.line in matched_patterns[p]
+            if p not in matched_patterns:
+                return False
+            if hasattr(node, "span") and node.span.source_name.name == "GID":
+                gid = node.span.line
+                return gid in matched_patterns[p]
             return False
         
         merging_rules = [

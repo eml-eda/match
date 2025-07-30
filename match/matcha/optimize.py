@@ -573,10 +573,11 @@ def optimize(graph, devices, l2_size, l3_size, bandwidth, dtype_size, scale_time
         'l3_peak_usage': solver.value(peak_l3_usage),
     }
     
-    # This list should contain the last node for pattern for each matching
-    matched_patterns = [[] for _ in range(len(graph.patterns))]
+    
+    matched_patterns = {}
     for n, node in enumerate(super_nodes, start=len(nodes)):
-        matched_patterns[node.pattern_id].append(node.match_id)
+        if solver.boolean_value(node_active_vars[n]):
+            matched_patterns.setdefault(node.pattern_id, []).extend([graph.nid_to_gid[n] for n in node.sub_nids])
     
     return model, solver, solution, matched_patterns
 

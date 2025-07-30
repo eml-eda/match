@@ -100,8 +100,6 @@ static int ${model_name}_node_device_id[] = {${", ".join(str(node.device_id) for
         node_start_time[${node_id}] = ${target.start_get_timestamp_api}();
         #endif
 
-        ${target.print_fn}("Start time is %d.\r\n", node_start_time[${node_id}]);
-
         ${node.fn_name}(
             ${node.name}_args_, 
             ${node.name}_arg_type_ids_, 
@@ -190,8 +188,8 @@ static int match_${model_name}_node_match2seq_id(int node_match_id) {
 
 const int match_${model_name}_num_nodes = ${len(nodes)};
 
-int match_${model_name}_num_parents[] = {${", ".join(str(node.num_parents) for node in nodes)}};
-const int match_${model_name}_num_remaining_parents[${len(nodes)}];
+const int match_${model_name}_num_parents[] = {${", ".join(str(node.num_parents) for node in nodes)}};
+int match_${model_name}_num_remaining_parents[${len(nodes)}];
 
 int match_${model_name}_device_is_busy[${target.num_devices}] = {0};
 

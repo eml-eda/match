@@ -42,26 +42,6 @@ class PatternCollector(DFPatternCallback):
         recursive_collect(self.pattern)
         self.matches.append(match)
         return post
-    
-
-class PatternAnnotator(DFPatternCallback):
-    def __init__(self, match_pattern : MatchTargetPattern):
-        super().__init__(require_type=False)
-       
-        self.pattern = match_pattern.pattern()
-        self.check = match_pattern.additional_checks
-        self.num_matches = 0
-
-    def callback(self, pre, post, node_map):
-        if not self.check(pre):
-            return post
-        
-        if isinstance(post, relay.Call):
-            span = tvm.ir.Span(tvm.ir.SourceName("match"), self.num_matches, 0, 0, 0)
-            post = relay.Call(post.op, post.args, post.attrs, post.type_args, span=span)
-        
-        self.num_matches += 1
-        return post    
 
 
 class Graph():
@@ -96,15 +76,29 @@ class Graph():
         self.relay_to_gid = {}
         self.gid_to_relay = {}
         
+        nodes_not_annotated = []
+        
         def _visit_relay_node(node):
-            if node in self.relay_to_gid:
+            if node in self.relay_to_gid or node in nodes_not_annotated:
                 return
             if isinstance(node, tvm.ir.Op):
                 return 
-            self.gid_to_relay[len(self.relay_to_gid)] = node
-            self.relay_to_gid[node] = len(self.relay_to_gid)
+            if hasattr(node, 'span') and node.span.source_name.name == "GID":
+                gid = node.span.line
+                self.gid_to_relay[gid] = node
+                self.relay_to_gid[node] = gid
+            else:
+                nodes_not_annotated.append(node)
         
         relay.analysis.post_order_visit(mod['main'], _visit_relay_node)
+        
+        print(f"  Found {len(self.relay_to_gid)} relay nodes with GID annotation.")
+        print(f"  Found {len(nodes_not_annotated)} relay nodes without GID annotation. These will be assigned a new GID.")
+        
+        for node in nodes_not_annotated:
+            self.gid_to_relay[len(self.relay_to_gid)] = node
+            self.relay_to_gid[node] = len(self.relay_to_gid)
+            
         
     def _build_graph(self):
         self.graph = nx.DiGraph()
@@ -122,7 +116,8 @@ class Graph():
             elif isinstance(node, relay.Function):
                 self.graph.nodes[self.relay_to_gid[node.body]]['type'] = "output"
             else:
-                raise RuntimeError(f'Unknown node type. node_idx: {node_idx}, node: {type(node)}')
+                pass
+                #raise RuntimeError(f'Unknown node type. node_idx: {node_idx}, node: {type(node)}')
             
     def _extract_tensors(self):
         tensors, gid_to_tid = [], {}
@@ -225,7 +220,7 @@ class Graph():
                     children_nids = children_nids,
                     duration = duration,
                     device_id = pattern.exec_module.id + 1,
-                    chunks = 1, # self.tensors[out_tids[0]].shape[2] if len(self.tensors[out_tids[0]].shape) > 2 else self.tensors[out_tids[0]].shape[1],
+                     chunks = self.tensors[out_tids[0]].chunks,
                     pattern_id = pat_id,
                     match_id = mat_id,
                     sub_nids = list(nid for nid in matched_nids),
