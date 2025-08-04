@@ -1,6 +1,7 @@
 from match.cost_model.zigzag import ZigZagMatchCostModel
 from math import prod,ceil,floor
 
+FORCE_TILING = False
  
 def depthwise_generic_latency(
     input_tile_dim, 
@@ -90,6 +91,10 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
     def adjust_temporal_mapping(self, temporal_mapping_dict, operand_list, layer):
         temporal_mapping_dict,valid = super().adjust_temporal_mapping(temporal_mapping_dict, operand_list, layer)
         if valid and "I" in operand_list:
+            if FORCE_TILING and len(temporal_mapping_dict["O"][1])==0:
+                min_innermost_loops = len(temporal_mapping_dict["O"][0]) - 1
+                temporal_mapping_dict["O"][1]=temporal_mapping_dict["O"][0][min_innermost_loops:]+temporal_mapping_dict["O"][1]
+                temporal_mapping_dict["O"][0]=temporal_mapping_dict["O"][0][:min_innermost_loops]
             min_innermost_loops=min([len(temporal_mapping_dict[operand][0]) for operand in operand_list])
             new_innermost_loops=min_innermost_loops
             max_tile_found=False
@@ -192,11 +197,11 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
                 
                 TRANS_CYCLES = 0
                 if operand in self.input_operands and operand!="W":
-                    IN_HEIGHT_L1 = self.size_per_mem_level[operand]["OY"][0]
-                    IN_HEIGHT_L2 = self.size_per_mem_level[operand]["OY"][1]
+                    IN_HEIGHT_L1 = self.size_per_mem_level[operand]["IY"][0]
+                    IN_HEIGHT_L2 = self.size_per_mem_level[operand]["IY"][1]
 
-                    IN_WIDTH_L1 = self.size_per_mem_level[operand]["OX"][0]
-                    IN_WIDTH_L2 = self.size_per_mem_level[operand]["OX"][1]
+                    IN_WIDTH_L1 = self.size_per_mem_level[operand]["IX"][0]
+                    IN_WIDTH_L2 = self.size_per_mem_level[operand]["IX"][1]
 
                     IN_CHANNELS_L1 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
                     IN_CHANNELS_L2 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][1]

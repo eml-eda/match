@@ -26,12 +26,7 @@
 
 void pulp_instnorm_fp16_fw_cl( void * InstNorm_args_fp16 )
 {
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_instnorm_parallelized_fp16_fw_cl, InstNorm_args_fp16);
+    pi_cl_team_fork(NUM_CORES, pulp_instnorm_parallelized_fp16_fw_cl, InstNorm_args_fp16);
 }
 
 // Real forward function that parallelize on multicore 
@@ -115,12 +110,7 @@ void pulp_instnorm_parallelized_fp16_fw_cl( void * InstNorm_args_fp16 )
 
 void pulp_instnorm_fp16_bw_input_grads_cl( void * InstNorm_args_fp16 )
 {
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_instnorm_parallelized_fp16_bw_input_grads_cl, InstNorm_args_fp16);
+    pi_cl_team_fork(NUM_CORES, pulp_instnorm_parallelized_fp16_bw_input_grads_cl, InstNorm_args_fp16);
 }
 
 void pulp_instnorm_parallelized_fp16_bw_input_grads_cl( void * InstNorm_args_fp16 )
@@ -188,12 +178,7 @@ void pulp_instnorm_parallelized_fp16_bw_input_grads_cl( void * InstNorm_args_fp1
 
 void pulp_instnorm_fp16_bw_param_grads_cl( void * InstNorm_args_fp16 )
 {
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_instnorm_parallelized_fp16_bw_param_grads_cl, InstNorm_args_fp16);
+    pi_cl_team_fork(NUM_CORES, pulp_instnorm_parallelized_fp16_bw_param_grads_cl, InstNorm_args_fp16);
 }
 
 void pulp_instnorm_parallelized_fp16_bw_param_grads_cl( void * InstNorm_args_fp16 )
@@ -261,21 +246,11 @@ void pulp_instnorm_fp16_bw_cl( void * InstNorm_args_fp16 )
 
     if (skip_wg_grad == 0)
     {
-        #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_instnorm_parallelized_fp16_bw_param_grads_cl, InstNorm_args_fp16);
+        pi_cl_team_fork(NUM_CORES, pulp_instnorm_parallelized_fp16_bw_param_grads_cl, InstNorm_args_fp16);
     }
 
     if(skip_in_grad == 0)
     {
-        #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_instnorm_parallelized_fp16_bw_input_grads_cl, InstNorm_args_fp16);
+        pi_cl_team_fork(NUM_CORES, pulp_instnorm_parallelized_fp16_bw_input_grads_cl, InstNorm_args_fp16);
     }
 }

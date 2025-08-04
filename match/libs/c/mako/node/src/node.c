@@ -23,9 +23,6 @@
 
     // include params file
     #include "nodes/${model_name}/${name}_params.h"
-    #ifdef __MATCH_TEST_NODE_WITH_HELPER__
-    #include <${target.name}/node_helper_nn.h>
-    #endif
 
     % for block_idx,block in enumerate(schedule.blocks):
         % if block.backend == "MATCH":
@@ -61,9 +58,6 @@
     ## Node exec_module code
 
     #include <nodes/${model_name}/${name}_params.h>
-    #ifdef __MATCH_TEST_NODE_WITH_HELPER__
-    #include <${target.name}/node_helper_nn.h>
-    #endif
 
     % for block_idx,block in enumerate(schedule.blocks):
         % if block.backend == "MATCH":

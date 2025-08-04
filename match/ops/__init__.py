@@ -11,3 +11,4 @@ from .clip import MatchOpClip
 from .right_shift import MatchOpRightShift
 from .multiply import MatchOpMultiply
 from .add import MatchOpAdd
+from .conv2d_transpose import MatchOpConv2DTranspose

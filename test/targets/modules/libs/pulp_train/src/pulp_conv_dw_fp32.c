@@ -38,12 +38,7 @@ void pulp_conv_dw_fp32_fw_cl ( void * DepthWise_Conv_args )
 	ker_args.Rpad = DW_args->Rpad;
 	ker_args.Upad = DW_args->Upad;
 	ker_args.Dpad = DW_args->Dpad;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             dw_kernel_forward, &ker_args);
+  pi_cl_team_fork(NUM_CORES, dw_kernel_forward, &ker_args);
 
   return;
 }
@@ -78,12 +73,7 @@ void pulp_conv_dw_fp32_bw_param_grads_cl( void * DepthWise_Conv_args )
   ker_args.weights = DW_args->coeff;
   ker_args.output = DW_args->output;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             dw_kernel_weight_grad, &ker_args);
+  pi_cl_team_fork(NUM_CORES, dw_kernel_weight_grad, &ker_args);
 
 }
 
@@ -98,11 +88,6 @@ void pulp_conv_dw_fp32_bw_input_grads_cl( void * DepthWise_Conv_args )
   ker_args.weights = DW_args->coeff;
   ker_args.output = DW_args->output;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             dw_kernel_input_grad, &ker_args);
+  pi_cl_team_fork(NUM_CORES, dw_kernel_input_grad, &ker_args);
 
 }

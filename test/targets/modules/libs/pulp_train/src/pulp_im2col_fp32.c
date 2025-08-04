@@ -203,8 +203,8 @@ void pulp_im2row_fp32(void * im2col_args){
               uint32_t kernel_idx = co*Hk*Wk;
               uint32_t segment_idx = wi*Hk*Wk*Co + hi*Hk*Wk*Co*Win;
               // Output grad tensor coordinates
-              int ho_rf = hi - (Hk-1);
-              int wo_rf = wi - (Wk-1);
+              int ho_rf = hi - Upad;
+              int wo_rf = wi - Lpad;
               int receptive_field_idx = wo_rf + ho_rf*Wox + co*Hox*Wox;
 
               for (uint32_t hk=0; hk<Hk; hk++) {
@@ -359,8 +359,8 @@ void pulp_im2row_fp32(void * im2col_args){
               uint32_t kernel_idx = co*Hk*Wk;
               uint32_t segment_idx = wi*Hk*Wk*Co + hi*Hk*Wk*Co*Win;
               // Output grad tensor coordinates
-              int ho_rf = hi - (Hk-1);
-              int wo_rf = wi - (Wk-1);
+              int ho_rf = hi - Upad;
+              int wo_rf = wi - Lpad;
               int receptive_field_idx = wo_rf + ho_rf*Wox + co*Hox*Wox;
               // Padding conditions
               int pad_l = -wo_rf;  int pad_r = wo_rf + (Wk-1);

@@ -26,23 +26,13 @@
 void pulp_sigmoid_fp16_fw_cl( void * act_args )
 {
   struct act_args_fp16 * args = (struct act_args_fp16 *) act_args;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             sigmoid_core_fw_fp16, act_args);
+  pi_cl_team_fork(NUM_CORES, sigmoid_core_fw_fp16, act_args);
 }
 
 void pulp_sigmoid_fp16_bw_cl( void * act_args )
 {
   struct act_args_fp16 * args = (struct act_args_fp16 *) act_args;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             sigmoid_core_bw_fp16, act_args);
+  pi_cl_team_fork(NUM_CORES, sigmoid_core_bw_fp16, act_args);
 }
 
 void sigmoid_core_fw_fp16( void * act_args )
@@ -93,23 +83,13 @@ void sigmoid_core_bw_fp16( void * act_args )
 void pulp_relu_fp16_fw_cl( void * act_args_fp16 )
 {
   struct act_args_fp16 * args = (struct act_args_fp16 *) act_args_fp16;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             relu_core_fw_fp16, act_args_fp16);
+  pi_cl_team_fork(NUM_CORES, relu_core_fw_fp16, act_args_fp16);
 }
 
 void pulp_relu_fp16_bw_cl( void * act_args_fp16 )
 {
   struct act_args_fp16 * args = (struct act_args_fp16 *) act_args_fp16;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             relu_core_bw_fp16, act_args_fp16);
+  pi_cl_team_fork(NUM_CORES, relu_core_bw_fp16, act_args_fp16);
 }
 
 void relu_core_fw_fp16( void * act_args_fp16 )
@@ -203,12 +183,7 @@ void pulp_softmax_fp16_fw_cl( void * act_args_fp16 )
   m_args.maxes = maxes;
   m_args.dim = dim;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_row_max_fp16_cl, &m_args);
+  pi_cl_team_fork(NUM_CORES, pulp_row_max_fp16_cl, &m_args);
   
   struct exp_sum_args_fp16 e_s_args;
   e_s_args.input = inData;
@@ -217,24 +192,14 @@ void pulp_softmax_fp16_fw_cl( void * act_args_fp16 )
   e_s_args.dim = dim;
   e_s_args.maxes = maxes;
   
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_exp_sum_fp16_cl, &e_s_args);
+  pi_cl_team_fork(NUM_CORES, pulp_exp_sum_fp16_cl, &e_s_args);
 
   struct row_div_args_fp16 d_args;
   d_args.input = outData;
   d_args.sums = sums;
   d_args.dim = dim;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_row_div_fp16_cl, &d_args);
+  pi_cl_team_fork(NUM_CORES, pulp_row_div_fp16_cl, &d_args);
 }
 
 void pulp_softmax_fp16_bw_cl( void * act_args_fp16 )

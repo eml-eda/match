@@ -77,6 +77,7 @@ MatchTensor ${name}_tensors_[${len(schedule.tensors)}] = {
         .bits = ${tensor.bits},
         .base_pt = 0x0,
         .pt = 0x0,
+        .tensor_type = ${tensor.tensor_type_up},
         .pts = ${name}_${tensor.name}_pts,
         .tiles = ${name}_${tensor.name}_tiles_
     }

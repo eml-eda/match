@@ -252,6 +252,11 @@ class MatchTVMParser:
                 c = (int(data[3]), dims[3])
                 h = (int(data[1]), dims[1])
                 w = (int(data[2]), dims[2])
+            elif layout=="IOHW":
+                n = (int(data[1]), dims[1])
+                c = (int(data[0]), dims[0])
+                h = (int(data[2]), dims[2])
+                w = (int(data[3]), dims[3])
             else:
                 print(f"[PARSER]: Warning, layout {layout} not recognized, interpreting as NCHW")
                 #layout is nchw

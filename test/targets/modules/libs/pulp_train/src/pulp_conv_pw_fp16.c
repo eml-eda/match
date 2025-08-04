@@ -57,24 +57,14 @@ void pulp_conv_pw_fp16_fw_cl( void * PointWise_Conv_args_fp16 )
     matMul_args.trans_B = 0;
 
     #ifndef OPTIMIZE
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_fp16, &matMul_args);
+    pi_cl_team_fork(NUM_CORES, mm_fp16, &matMul_args);
     #else
     struct mm_manager_args_fp16 man_args;
     man_args.mm_args = &matMul_args;
     man_args.layer_type = LAYER_PW_CONV;
     man_args.step_type = STEP_FW;
     man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_manager_fp16, &man_args);
+    pi_cl_team_fork(NUM_CORES, mm_manager_fp16, &man_args);
     #endif
   }
   // HWC format for both input and output
@@ -89,24 +79,14 @@ void pulp_conv_pw_fp16_fw_cl( void * PointWise_Conv_args_fp16 )
     matMul_args.trans_B = 1;
 
     #ifndef OPTIMIZE
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_fp16, &matMul_args);
+    pi_cl_team_fork(NUM_CORES, mm_fp16, &matMul_args);
     #else
     struct mm_manager_args_fp16 man_args;
     man_args.mm_args = &matMul_args;
     man_args.layer_type = LAYER_PW_CONV;
     man_args.step_type = STEP_FW;
     man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_manager_fp16, &man_args);
+    pi_cl_team_fork(NUM_CORES, mm_manager_fp16, &man_args);
     #endif
   }
   else
@@ -198,24 +178,14 @@ void pulp_conv_pw_fp16_bw_param_grads_cl( void * PointWise_Conv_args_fp16 )
     matMul_args.trans_B = 1;
 
     #ifndef OPTIMIZE
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_fp16, &matMul_args);
+    pi_cl_team_fork(NUM_CORES, mm_fp16, &matMul_args);
     #else
     struct mm_manager_args_fp16 man_args;
     man_args.mm_args = &matMul_args;
     man_args.layer_type = LAYER_PW_CONV;
     man_args.step_type = STEP_WGT_GRAD;
     man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_manager_fp16, &man_args);
+    pi_cl_team_fork(NUM_CORES, mm_manager_fp16, &man_args);
     #endif
   }
   // HWC format for both input and output
@@ -227,22 +197,12 @@ void pulp_conv_pw_fp16_bw_param_grads_cl( void * PointWise_Conv_args_fp16 )
     tr_args.transp_matrix = transp_buffer;
     tr_args.N = H_out*W_out;
     tr_args.M = C_out;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose_fp16, &tr_args);
+    pi_cl_team_fork(NUM_CORES, transpose_fp16, &tr_args);
     tr_args.matrix = inData;
     tr_args.transp_matrix = (transp_buffer + H_out*W_out*C_out);
     tr_args.N = H_in*W_in;
     tr_args.M = C_in;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose_fp16, &tr_args);
+    pi_cl_team_fork(NUM_CORES, transpose_fp16, &tr_args);
     matMul_args.A = transp_buffer; //outDiff;
     matMul_args.B = (transp_buffer + H_out*W_out*C_out); //inData;
     matMul_args.C = coeffDiff;
@@ -252,24 +212,14 @@ void pulp_conv_pw_fp16_bw_param_grads_cl( void * PointWise_Conv_args_fp16 )
     matMul_args.trans_B = 1;
 
     #ifndef OPTIMIZE
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_fp16, &matMul_args);
+    pi_cl_team_fork(NUM_CORES, mm_fp16, &matMul_args);
     #else
     struct mm_manager_args_fp16 man_args;
     man_args.mm_args = &matMul_args;
     man_args.layer_type = LAYER_PW_CONV;
     man_args.step_type = STEP_WGT_GRAD;
     man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_manager_fp16, &man_args);
+    pi_cl_team_fork(NUM_CORES, mm_manager_fp16, &man_args);
     #endif
   }
   else
@@ -338,12 +288,7 @@ void pulp_conv_pw_fp16_bw_input_grads_cl( void * PointWise_Conv_args_fp16 )
     tr_args.transp_matrix = transp_buffer;
     tr_args.N = C_out;
     tr_args.M = C_in;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose_fp16, &tr_args);
+    pi_cl_team_fork(NUM_CORES, transpose_fp16, &tr_args);
     matMul_args.A = transp_buffer; // coeffData; // transp 
     matMul_args.B = outDiff;
     matMul_args.C = inDiff;
@@ -353,24 +298,14 @@ void pulp_conv_pw_fp16_bw_input_grads_cl( void * PointWise_Conv_args_fp16 )
     matMul_args.trans_B = 0;
     
     #ifndef OPTIMIZE
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_fp16, &matMul_args);
+    pi_cl_team_fork(NUM_CORES, mm_fp16, &matMul_args);
     #else
     struct mm_manager_args_fp16 man_args;
     man_args.mm_args = &matMul_args;
     man_args.layer_type = LAYER_PW_CONV;
     man_args.step_type = STEP_IN_GRAD;
     man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_manager_fp16, &man_args);
+    pi_cl_team_fork(NUM_CORES, mm_manager_fp16, &man_args);
     #endif
   }
   // HWC format for both input and output
@@ -383,12 +318,7 @@ void pulp_conv_pw_fp16_bw_input_grads_cl( void * PointWise_Conv_args_fp16 )
     tr_args.transp_matrix = transp_buffer;
     tr_args.N = C_out;
     tr_args.M = C_in;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose_fp16, &tr_args);
+    pi_cl_team_fork(NUM_CORES, transpose_fp16, &tr_args);
     matMul_args.A = outDiff;
     matMul_args.B = transp_buffer; // coeffData;
     matMul_args.C = inDiff;
@@ -398,24 +328,14 @@ void pulp_conv_pw_fp16_bw_input_grads_cl( void * PointWise_Conv_args_fp16 )
     matMul_args.trans_B = 1;
     
     #ifndef OPTIMIZE
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_fp16, &matMul_args);
+    pi_cl_team_fork(NUM_CORES, mm_fp16, &matMul_args);
     #else
     struct mm_manager_args_fp16 man_args;
     man_args.mm_args = &matMul_args;
     man_args.layer_type = LAYER_PW_CONV;
     man_args.step_type = STEP_IN_GRAD;
     man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_manager_fp16, &man_args);
+    pi_cl_team_fork(NUM_CORES, mm_manager_fp16, &man_args);
     #endif
   }
   else

@@ -80,7 +80,7 @@ class MatchTVMGraphRuntime:
                     self.fallback_kernel_extra_dynamic_mem[func_name]["buffers"].append((buffer_name, buffer_size))
                     self.fallback_kernel_extra_dynamic_mem[func_name]["total"] += buffer_size
         self.max_extra_dynamic_mem = max(
-            [self.fallback_kernel_extra_dynamic_mem[func_name]["total"] for func_name in self.fallback_kernel_extra_dynamic_mem]
+            [self.fallback_kernel_extra_dynamic_mem[func_name]["total"] for func_name in self.fallback_kernel_extra_dynamic_mem]+[0]
         )
         print(f"[MEM PLANNER] Found {len(self.fallback_kernel_extra_dynamic_mem)} functions with extra dynamic memory allocations")
         print(f"[MEM PLANNER] Maximum extra dynamic memory needed: {self.max_extra_dynamic_mem} bytes")

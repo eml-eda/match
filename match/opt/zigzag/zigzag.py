@@ -162,7 +162,7 @@ class ZigZagEngine(ScheduleEngine):
             zigzag_parser=self.zigzag_parser,
             cme=cme,
             zigzag_operands=self.zigzag_operands,
-            zigzag_temporal_mapping=cme.temporal_mapping.mapping_dic_stationary,
+            zigzag_temporal_mapping=cme.temporal_mapping.mapping_dic_origin,
             spatial_mapping=cme.layer.user_spatial_mapping if cme.layer is not None else self.spatial_mapping[self.pattern_name]["spatial_mapping"],
             zigzag_operands_to_tensors=self.zigzag_operands_to_tensors,
             platform_memories=self.platform_memories,
