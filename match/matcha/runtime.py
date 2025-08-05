@@ -16,8 +16,6 @@ from .tensor import RuntimeTensor, TensorType
 from .optimize import optimize
 from .viz import plot_optimization_result
 
-from match.runtime.graph_async.memplan import MatchMemoryPlanner
-from match.relay.compiled_module import CompiledModule
 
 class RuntimeGraph:
     def __init__(
@@ -349,7 +347,7 @@ class Runtime:
         # Optimize again
         print("[OPTIMIZER] Optimizing scheduling and memory planning.")
 
-        model, solver, solution, matched_patterns = optimize(
+        model, solver, solution = optimize(
             runtime_graph,
             devices=list(range(len(self.target.exec_modules) + 1)),
             l2_size=self.target.soc_memory_bytes,
@@ -455,6 +453,15 @@ class Runtime:
             activation_name: np.frombuffer(activation.flatten().tobytes(), dtype="uint8").sum()
             for activation_name, activation in runtime_graph.activations.items()
         }
+        
+        with open("matcha.activations.json", "w") as f:
+            import json
+            json.dump(
+                {k: v.tolist() for k, v in runtime_graph.activations.items()},
+                f,
+                indent=4,
+                sort_keys=True,
+            )
 
         # Prepare template data for codegen
         template_data = {

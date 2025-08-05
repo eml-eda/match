@@ -116,7 +116,7 @@ class Graph():
             elif isinstance(node, relay.Function):
                 self.graph.nodes[self.relay_to_gid[node.body]]['type'] = "output"
             else:
-                pass
+                print("Unknown node type:", type(node))
                 #raise RuntimeError(f'Unknown node type. node_idx: {node_idx}, node: {type(node)}')
             
     def _extract_tensors(self):

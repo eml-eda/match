@@ -556,6 +556,15 @@ def optimize(graph, devices, l2_size, l3_size, bandwidth, dtype_size, scale_time
             for t in range(len(tensors))
         ]
     }
+    
+    matched_patterns_gids = {}
+    matched_patterns_chunks = {}
+    for n, node in enumerate(super_nodes, start=len(nodes)):
+        if solver.boolean_value(node_active_vars[n]):
+            matched_patterns_gids.setdefault(node.pattern_id, []).extend([graph.nid_to_gid[n] for n in node.sub_nids])
+            for n_ in node.sub_nids:
+                matched_patterns_chunks.setdefault(node.pattern_id, {})[graph.nid_to_gid[n_]] = solver.value(node_vars[n][5])
+                
      
     print("  Solution extracted successfully")
     solution = {
@@ -571,15 +580,14 @@ def optimize(graph, devices, l2_size, l3_size, bandwidth, dtype_size, scale_time
         'graph': graph_data,
         'l2_peak_usage': solver.value(peak_l2_usage),
         'l3_peak_usage': solver.value(peak_l3_usage),
+        'matched_patterns_gids': matched_patterns_gids,
+        'matched_patterns_chunks': matched_patterns_chunks
     }
     
     
-    matched_patterns = {}
-    for n, node in enumerate(super_nodes, start=len(nodes)):
-        if solver.boolean_value(node_active_vars[n]):
-            matched_patterns.setdefault(node.pattern_id, []).extend([graph.nid_to_gid[n] for n in node.sub_nids])
     
-    return model, solver, solution, matched_patterns
+    
+    return model, solver, solution
 
 
 def gen_opt_interval(model, mn, mx, name, size=None, active=None):

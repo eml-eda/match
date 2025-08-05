@@ -3,12 +3,14 @@ from functools import partial
 
 import tvm
 from tvm import relay
+from tvm.relay.dataflow_pattern import rewrite
 
 from match.target import MatchTarget
 
 from .graph import Graph
-from .globals import set_optimization_result
+from .globals import set_optimization_result, set_starting_graph
 from .optimize import optimize
+from .splitter import NodeSplitter
 from .viz import plot_optimization_result
 
 
@@ -46,6 +48,7 @@ class NodeAnnotator(relay.ExprMutator):
 
 
 
+
 @tvm.ir.transform.module_pass(opt_level=0)
 class MatchOptimizer:
     def __init__(self, target : MatchTarget):
@@ -64,6 +67,7 @@ class MatchOptimizer:
         mod = relay.transform.InferType()(mod)
             
         graph = Graph(mod, patterns)
+        set_starting_graph(graph)
         
         devices = list(range(len(self.target.exec_modules) + 1))
         l2_size = self.target.soc_memory_bytes # 256_000
@@ -71,7 +75,7 @@ class MatchOptimizer:
         bandwidth = 4
         dtype_size = 2
         
-        model, solver, solution, matched_patterns = optimize(
+        model, solver, solution = optimize(
             graph, 
             devices, 
             l2_size, 
@@ -80,7 +84,7 @@ class MatchOptimizer:
             dtype_size, 
             scale_time=True, 
             scale_addr=False,
-            tiling=False
+            tiling=False #True
         )
         
         with open("matcha.result.json", "w") as f:
@@ -104,23 +108,48 @@ class MatchOptimizer:
         plot_optimization_result(solution)
         set_optimization_result(solution)
         
-        # Merge chosen pattern matchings
+        mod = relay.transform.InferType()(mod)
         
+        # Split matched nodes if needed
+        
+        # TODO
+
+        print("\nORIGINAL")
+        print(mod)
+        matched_patterns_chunks = solution['matched_patterns_chunks']
+        for p, pattern in enumerate(patterns):
+            if p in matched_patterns_chunks:
+                print(f"Splitting pattern {p} ({pattern.name})")
+                splitter = NodeSplitter(pattern, p, matched_patterns_chunks[p])
+                mod['main'] = rewrite(splitter, mod['main'])
+
+        print("\nSPLITTED")
+        print(mod)
+        
+        print("\nSHAPE INFERENCE")
+        #mod = relay.transform.AnnotateSpans()(mod)
+        mod = relay.transform.InferType()(mod)
+        print(mod)
+        
+        
+        # Merge chosen pattern matchings
+        matched_patterns = solution['matched_patterns_gids']
         print("Matched Patterns Nodes: ", matched_patterns)
         
-        def merge_check(node, p):
+        def merge_check(node, p, device_id):
             if p not in matched_patterns:
                 return False
-            if hasattr(node, "span") and node.span.source_name.name == "GID":
+            if hasattr(node, "span") and node.span and node.span.source_name.name == "GID":
                 gid = node.span.line
-                return gid in matched_patterns[p]
+                return gid in matched_patterns[p] and node.span.column == device_id
             return False
         
         merging_rules = [
-            (f"match.{pattern.name}", pattern.pattern(), partial(merge_check, p=p)) for p, pattern in enumerate(patterns)
+            (f"match.{pattern.name}", pattern.pattern(), partial(merge_check, p=p, device_id=pattern.exec_module.id+1)) for p, pattern in enumerate(patterns)
         ]
         
         mod = relay.transform.MergeComposite(merging_rules)(mod)
+        mod = relay.transform.FoldConstant()(mod)
 
         return mod
 

@@ -112,8 +112,10 @@
             % endif
         % endfor
 
+#if false
         // Set start signal - TODO send interrupt
         ${target.print_fn}("[HOST] Writing node_id (${node_idx} + 1) in %p. Now waiting...\r\n", args);
+#endif
 
         % if target.timer_start_fn != "":
             ${target.timer_start_fn}();
@@ -135,6 +137,7 @@
             ${name}_stats.store_bytes = args[9 + 4];
         % endif
 
+#if false
         ${target.print_fn}("[HOST] Offload device finished.\r\n");
 
         ${target.print_fn}("[HOST] Stats:\r\n");
@@ -144,7 +147,7 @@
         ${target.print_fn}("       Store Cycles: %d\r\n", ${name}_stats.store_cycles);
         ${target.print_fn}("       Load Bytes: %d\r\n", ${name}_stats.load_bytes);
         ${target.print_fn}("       Store Bytes: %d\r\n", ${name}_stats.store_bytes);
-
+#endif
         return 0;
     }
 

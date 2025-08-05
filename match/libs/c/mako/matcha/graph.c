@@ -109,8 +109,8 @@ static int ${model_name}_node_device_id[] = {${", ".join(str(node.device_id) for
             ${node.name}_resource_handle_
         );
 
-        #if __${model_name}_FALLBACK_GRAPH_PROFILE__
         node_end_time[${node_id}] = ${target.end_get_timestamp_api}();
+        #if __${model_name}_FALLBACK_GRAPH_PROFILE__ && __${model_name}_FALLBACK_GRAPH_DEBUG__
         ${target.print_fn}("[${model_name} GRAPH] TVM node ${node.name} done, start: %d, end: %d, diff: %d, time: %fms\r\n",
             node_start_time[${node_id}], node_end_time[${node_id}], (node_end_time[${node_id}] - node_start_time[${node_id}]),
             ((double)(int)(node_end_time[${node_id}] - node_start_time[${node_id}])) ${target.timestamp_to_ms});
@@ -149,8 +149,8 @@ static int ${model_name}_node_device_id[] = {${", ".join(str(node.device_id) for
         static void match_${model_name}_finish_node_${node_id}() {
             ${node.fn_name}_finish();
 
-            #if __${model_name}_FALLBACK_GRAPH_PROFILE__
             node_end_time[${node_id}] = ${target.end_get_timestamp_api}();
+            #if __${model_name}_GRAPH_PROFILE__ && __${model_name}_GRAPH_DEBUG__
             ${target.print_fn}("[${model_name} GRAPH] MATCH node ${node.name} done, start: %d, end: %d, diff: %d, time: %fms\r\n",
                 node_start_time[${node_id}], node_end_time[${node_id}], (node_end_time[${node_id}] - node_start_time[${node_id}]),
                 ((double)(int)(node_end_time[${node_id}] - node_start_time[${node_id}])) ${target.timestamp_to_ms});
@@ -222,7 +222,9 @@ void match_${model_name}_runtime_eoc_callback(int node_match_id) {
     // Perform final activities after node execution
     match_${model_name}_finish_node_fn[node_id]();
 
+#if __${model_name}_GRAPH_DEBUG__
     ${target.print_fn}("[${model_name} ASYNC] Device EOC callback for node %d (%d)\r\n", node_id, node_match_id);
+#endif
 
     // Decrease the number of remaining parents for the node children
     for(int i = 0; i < ${model_name}_num_node_children[node_id]; i++) {
@@ -243,7 +245,9 @@ void match_${model_name}_runtime_eoc_callback(int node_match_id) {
     match_${model_name}_schedule_next_node();
 }
 void match_${model_name}_runtime_eoc_host_callback(int node_id) {
+    #if __${model_name}_GRAPH_DEBUG__
     ${target.print_fn}("[${model_name} ASYNC] Host EOC callback for node %d\r\n", node_id);
+    #endif
 
     // Decrease the number of remaining parents for the node children
     for(int i = 0; i < ${model_name}_num_node_children[node_id]; i++) {
@@ -364,7 +368,9 @@ while (!match_${model_name}_graph_execution_finished)
     % endfor
         case -1:
             // No TVM node to execute, wait MATCH nodes
+            #if __${model_name}_GRAPH_DEBUG__
             ${target.print_fn}("[${model_name} GRAPH] Host idle waiting for device EOC...\r\n");
+            #endif
             ${target.wait_eoc}();
             break;
         default:
@@ -393,9 +399,9 @@ while (!match_${model_name}_graph_execution_finished)
 
 // Print stats
 #if __${model_name}_GRAPH_PROFILE__
-    ${target.print_fn}("[${model_name} GRAPH] Graph execution finished\r\n");
+    ${target.print_fn}("[${model_name} GRAPH] Graph execution finished. Node stats:\r\n");
     % for node_id, node in enumerate(nodes):
-        ${target.print_fn}("[${model_name} GRAPH] Node %d (${node.name}) start: %d - end: %d - interval: %f - device: %d\r\n", ${node_id},
+        ${target.print_fn}("   [%d] (${node.name}) - Start: %d - End: %d - Interval: %f - Dev: %d\r\n", ${node_id},
             node_start_time[${node_id}],
             node_end_time[${node_id}],
             ((double)(int)(node_end_time[${node_id}] - node_start_time[${node_id}])) ${target.timestamp_to_ms},
