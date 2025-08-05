@@ -14,8 +14,10 @@ from match.tensor.tensor import MatchTensor
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
 from match.partition.partitioning_pattern import PartitioningPattern
 
-TRAIN_FW_USE_ONLY_FC = True  # Set to True to use only fully connected layers in training patterns
-TRAIN_BW_USE_ONLY_FC = False  # Set to True to use only fully connected layers in training patterns
+USE_ONLY_FC = False  # Set to True to use only fully connected layers in training patterns
+IS_FW_TRAIN = False  # Set to True to use training patterns
+TRAIN_FW_USE_CLUSTER = not USE_ONLY_FC and IS_FW_TRAIN  # Set to True to use only fully connected layers in training patterns
+TRAIN_BW_USE_CLUSTER = not USE_ONLY_FC and not IS_FW_TRAIN  # Set to True to use only fully connected layers in training patterns
 
 class PulpCluster(ExecModule):
     def __init__(self, num_cores: int=8, l1_kb_size: int=64, l2_kb_size: int=512,
@@ -48,6 +50,7 @@ class PulpCluster(ExecModule):
     def zigzag_optimal_spatial_mapping_def(self, match_node: MatchNode=None, pattern_name = "conv2d"):
         if pattern_name == "conv2d_train_bw":
             return [
+                # ("OY",2),("OX",2),("K",8)
                 ("K",self.FULL_DIM), ("B",self.FULL_DIM)
             ]
         elif pattern_name == "conv2d_transpose":
@@ -85,14 +88,14 @@ class PulpCluster(ExecModule):
         return PulpClusterCostModel
 
     def update_constants(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
+        if pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_train_bw", "conv2d_transpose"]:
+            return
         for w_tensor in match_node.const_tensors.values():
             if "dense" in w_tensor.name and pattern_name=="flatten_dense_out":
                 if w_tensor.layout!="CN":
                     w_tensor.data = w_tensor.data.transpose(1,0)
                     w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]
                 w_tensor.layout = "CN"
-            elif pattern_name == "conv2d_train" or pattern_name == "conv2ddw_train":
-                pass
             elif "conv3d" in w_tensor.name:
                 if w_tensor.layout=="DHWIO":
                     w_tensor.data = w_tensor.data.transpose(4,0,1,2,3)
@@ -135,6 +138,9 @@ class PulpCluster(ExecModule):
                 tile_inp_c = schedule.tensor_tiles[inp_tensor.name][1].tiled_dims[1].size
                 tile_inp_h = schedule.tensor_tiles[inp_tensor.name][1].tiled_dims[2].size
                 tile_inp_w = schedule.tensor_tiles[inp_tensor.name][1].tiled_dims[3].size
+                # (Hin-Hk+Upad+Dpad+Hstr) % Hstr > 0
+                # if (tile_inp_h - filter_shape[0] + padding[0] + padding[2] + conv.strides[0]) % conv.strides[0] > 0:
+                #     im2col_size_l1 = 0
                 if  filter_shape[0] == 1 and filter_shape[1] == 1 and \
                     padding[0] == 0 and padding[1] == 0 and padding[2] == 0 and padding[3] == 0 and \
                     stride[0] == 1 and stride[1] == 1:
@@ -353,7 +359,7 @@ class PulpCluster(ExecModule):
 
         # checks for training
         def std_convs_fp32(node):
-            if TRAIN_FW_USE_ONLY_FC:
+            if not TRAIN_FW_USE_CLUSTER:
                 return False
             conv = add_checks_get_first_op(node, "nn.conv2d")
             if conv.checked_type.dtype != 'float32':
@@ -366,7 +372,7 @@ class PulpCluster(ExecModule):
             return True
         
         def dw_convs_fp32_pulp(node):
-            if TRAIN_FW_USE_ONLY_FC:
+            if not TRAIN_FW_USE_CLUSTER:
                 return False
             conv = add_checks_get_first_op(node, "nn.conv2d")
             out_chs = conv.args[1].checked_type.shape[0]
@@ -394,8 +400,35 @@ class PulpCluster(ExecModule):
             )
             return conv2d_transpose
 
+        def bw_instance_norm_pt():
+            """
+            %344 = add(%343, 1e-05f /* ty=float32 */) /* ty=Tensor[(8, 1), float32] */;
+            %345 = sqrt(%344) /* ty=Tensor[(8, 1), float32] */;
+            %346 = divide(1f /* ty=float32 */, %345) /* ty=Tensor[(8, 1), float32] */;
+            %347 = repeat(%346, repeats=1, axis=0) /* ty=Tensor[(8, 1), float32] */;
+            %348 = reshape(%338, newshape=[8, 1000]) /* ty=Tensor[(8, 1000), float32] */;
+            %349 = reshape(%347, newshape=[8, 1]) /* ty=Tensor[(8, 1), float32] */;
+            %350 = multiply(%348, %341) /* ty=Tensor[(8, 1000), float32] */;
+            %351 = sum(%350, axis=[1], keepdims=True) /* ty=Tensor[(8, 1), float32] */;
+            %352 = multiply(%349, %349) /* ty=Tensor[(8, 1), float32] */;
+            %353 = multiply(-0.5f /* ty=float32 */, %351) /* ty=Tensor[(8, 1), float32] */;
+            %354 = multiply(%352, %349) /* ty=Tensor[(8, 1), float32] */;
+            %355 = multiply(%353, %354) /* ty=Tensor[(8, 1), float32] */;
+            %356 = multiply(%355, 0.001f /* ty=float32 */) /* ty=Tensor[(8, 1), float32] */;
+            %357 = multiply(%341, %356) /* ty=Tensor[(8, 1000), float32] */;
+            %358 = multiply(%348, %349) /* ty=Tensor[(8, 1000), float32] */;
+            %359 = multiply(%357, 2f /* ty=float32 */) /* ty=Tensor[(8, 1000), float32] */;
+            """
+            add = is_op("add")(wildcard(), is_constant())
+            sqrt = is_op("sqrt")(add)
+            divide = is_op("divide")(is_constant(), sqrt)
+            repeat = is_op("repeat")(divide)
+            reshape = is_op("reshape")(repeat)
+            multiply = is_op("multiply")(reshape, wildcard())
+            return multiply
+        
         def conv2d_transpose_ptrain_check(node):
-            if TRAIN_BW_USE_ONLY_FC:
+            if not TRAIN_BW_USE_CLUSTER:
                 return False
             conv2d_transpose = add_checks_get_first_op(node, "nn.conv2d_transpose")
             if conv2d_transpose.checked_type.dtype != 'float32':
@@ -406,7 +439,7 @@ class PulpCluster(ExecModule):
             return True
         
         def conv2d_bw_check(node):
-            if TRAIN_BW_USE_ONLY_FC:
+            if not TRAIN_BW_USE_CLUSTER:
                 return False
             conv2d = add_checks_get_first_op(node, "nn.conv2d")
             out_chs = conv2d.args[1].checked_type.shape[0]
@@ -432,4 +465,5 @@ class PulpCluster(ExecModule):
             PartitioningPattern(name="conv2ddw_train", pattern=conv2d_fw, additional_checks=dw_convs_fp32_pulp),
             PartitioningPattern(name="conv2d_transpose", pattern=conv2d_transpose_ptrain_pt, additional_checks=conv2d_transpose_ptrain_check),
             PartitioningPattern(name="conv2d_train_bw", pattern=conv2d_bw, additional_checks=conv2d_bw_check),
+            # PartitioningPattern(name="bw_instance_norm", pattern=bw_instance_norm_pt),
         ]

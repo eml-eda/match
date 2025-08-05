@@ -76,6 +76,18 @@ class MatchTVMParser:
             self.args_list = new_args
             self.node=self.node["main"].body.op.body
 
+    def infer_layout_if_empty(self, tensor):
+        """Helper method to infer layout based on tensor dimensions if layout is empty"""
+        if tensor.layout == "":
+            if len(tensor.dims) == 4:
+                tensor.layout = "NCHW"
+            elif len(tensor.dims) == 3:
+                tensor.layout = "NCH"
+            elif len(tensor.dims) == 2:
+                tensor.layout = "NC"
+            elif len(tensor.dims) == 1:
+                tensor.layout = "N"
+
     def get_name_and_tensor_of_arg(self,call,arg,arg_idx:int=0):
         if isinstance(arg, tvm.relay.Var):
             if self.tensor_name_mapping[arg.name_hint] in self.node_vars:

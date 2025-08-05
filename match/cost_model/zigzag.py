@@ -25,7 +25,8 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.COMPUTE_CONSTANTS_ALLOCATION = compute_constants_allocation
         self.HAS_ANY_ADDITIONAL_BUFFER = has_any_additional_buffer
         self.allocated_buffers = []
-        temporal_mapping_dict=temporal_mapping.mapping_dic_stationary
+        self.max_num_buffers = 0
+        temporal_mapping_dict=temporal_mapping.mapping_dic_origin
         operands_=temporal_mapping.operand_list
         constrained_temporal_mapping_dict,valid=self.adjust_temporal_mapping(temporal_mapping_dict,operands_,layer)
         self.layer = layer
@@ -46,12 +47,12 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.is_tm_valid = tm_valid
         self.run_match_cost_model()
         # check that constants and buffers can actually fit in memory
-        if self.COMPUTE_CONSTANTS_ALLOCATION and tm_valid and not self.is_tm_valid:
+        if self.COMPUTE_CONSTANTS_ALLOCATION and tm_valid and len(self.allocated_buffers)<self.max_num_buffers:
             self.add_constraints_on_temp_mapping_to_fit_buffers(constrained_temporal_mapping_dict)
         
         super(ZigZagMatchCostModel,self).__init__(
             accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
-            temporal_mapping=constrained_temporal_mapping,
+            temporal_mapping=self.temporal_mapping,
             access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
         
         if self.COMPUTE_CONSTANTS_ALLOCATION:
@@ -78,7 +79,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         return temporal_mapping_dict,self.is_temporal_mapping_valid(temporal_mapping_dict,layer.layer_attrs["unordered_loops"])
 
     def set_match_params(self):
-        self.temp_mapping = self.temporal_mapping.mapping_dic_stationary
+        self.temp_mapping = self.temporal_mapping.mapping_dic_origin
         self.loop_sizes = self.layer.loop_dim_size
         self.partial_relevant_loop_sizes = self.layer.pr_loop_dim_size
         self.operands = self.temporal_mapping.operand_list
@@ -116,6 +117,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
 
     def add_constraints_on_temp_mapping_to_fit_buffers(self, constrained_temporal_mapping_dict):
         valid = False
+        # print(f"Trying to fit buffers in temporal mapping {constrained_temporal_mapping_dict}")
         for op in ["O"] + sorted([op_ for op_ in self.operands], reverse=True):
             lps_in_inner_level = constrained_temporal_mapping_dict[op][0]
             len_lps_in_inner_level = len(lps_in_inner_level)
@@ -124,17 +126,20 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                 lp = constrained_temporal_mapping_dict[op][0].pop()
                 constrained_temporal_mapping_dict[op][1] = [lp] + constrained_temporal_mapping_dict[op][1]
                 constrained_temporal_mapping_dict_, tm_valid = self.adjust_temporal_mapping(constrained_temporal_mapping_dict, self.operands, self.layer)
+                # print(f"Adjusted temporal mapping to: {constrained_temporal_mapping_dict_}")
                 if tm_valid:
-                    self.temp_mapping = TemporalMapping(
+                    self.temporal_mapping = TemporalMapping(
                         temporal_mapping_dict=constrained_temporal_mapping_dict_,
                         layer_node=self.layer
                     )
                     self.run_match_cost_model()
-                    if self.is_tm_valid:
+                    if self.is_tm_valid and len(self.allocated_buffers) == self.max_num_buffers:
+                        # print(f"Found valid temporal mapping that fits all the extra-buffers: {constrained_temporal_mapping_dict_}")
                         valid = True
                         break
             if valid:
                 break
+    
     def calc_sizes_per_mem_level(self):
         self.size_per_mem_level = dict()
         for operand in self.operands:
@@ -173,6 +178,14 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.output_transfer_costs=0 if not hasattr(self,"data_offloading_cc_pair_combined") else self.data_offloading_cc_pair_combined
         self.transfer_costs=self.def_transfer_cost()
 
+    def overall_latency_single_buffer_match_no_comp(self):
+        input_overall_transfers = max([self.transfer_costs[operand] * self.outermost_loop_iters[operand] for operand in self.operands if operand!='O']+[0])
+        output_overall_transfers = self.transfer_costs["O"] * self.computational_iters
+
+        self.match_overall_latency=self.computational_iters * (self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY + self.MATCH_ITERATION_LATENCY)
+        self.match_overall_latency+=input_overall_transfers + output_overall_transfers
+        # self.match_overall_latency+=self.computational_cost
+    
     def overall_latency_sync(self):
         input_overall_transfers = sum([self.transfer_costs[operand] * self.outermost_loop_iters[operand] for operand in self.operands if operand!='O'])
         output_overall_transfers = self.transfer_costs["O"] * self.computational_iters
@@ -240,6 +253,8 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                 engine="ZigZag"
             )
             new_buffers = []
+            if self.max_num_buffers<0:
+                self.max_num_buffers = len(schedule.buffers)
             for buff_tensor in sorted(schedule.buffers, key=lambda buff: (-buff.required, -buff.num_bytes)):
                 var_mem_bytes-=buff_tensor.num_bytes
                 if var_mem_bytes>=0:
@@ -274,11 +289,14 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         # call user defined latency function
         self.calc_match_overall_latency(compute_estimation=compute_estimation)
         # set overall latency
-        if compute_estimation:self.latency_total2=self.match_overall_latency
+        if compute_estimation:
+            self.latency_total2 = self.match_overall_latency
         # check that constants and buffers can actually fit in memory
         if self.COMPUTE_CONSTANTS_ALLOCATION:
             self.is_tm_valid = self.is_tm_valid and self.check_constants_and_buffer_alloc()
-
+            # add latency penalty if the scheduler could not allocate all the buffers
+            if compute_estimation and self.is_tm_valid:
+                self.latency_total2 += (self.max_num_buffers - len(self.allocated_buffers)) * 100000000
     def calc_overall_latency(self):
         # use default ZigZag implementation (just to compute some necessary parameters)
         super().calc_overall_latency()

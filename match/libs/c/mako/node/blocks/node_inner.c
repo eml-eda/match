@@ -170,6 +170,7 @@
                 % for mem_transfer in lp.mem_transfers:
                     // compute the offset from the top level memory to obtain the correct tile for the transfer
                     % for t_dim_idx, t_dim in enumerate(mem_transfer.tensor.dims):
+                        ## TODO: add additional check for dependent dims to update only if one of its dependencies has changed
                         % if t_dim in match_node.dependent_dims:
                         ## and len(set([schedule.tensor_tiles[mem_transfer.tensor.name][idx].tiled_dims[t_dim_idx].size for idx in range(len(schedule.tensor_tiles[mem_transfer.tensor.name]))]))!=1:
                             ${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].size = ${name}_${t_dim.name}->curr_size; // this dim is not independent
