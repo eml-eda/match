@@ -5,11 +5,19 @@ class DimDependency:
     def __init__(self, idx_dependencies: Dict={}, size_dependencies: Dict={}) -> None:
         self.idx_dependencies = idx_dependencies
         self.size_dependencies = size_dependencies
+
+    @property
+    def is_idx_floating(self):
+        return any((mult-int(mult))!=0 for (ind_dim, mult) in self.idx_dependencies)
     
     @property
+    def dependent_on_dims(self):
+        return [dim[0] for dim in self.idx_dependencies + self.size_dependencies if isinstance(dim[0], MatchDim)]
+
+    @property
     def dependencies(self):
-        return {**self.idx_dependencies, **self.size_dependencies}
-    
+        return self.idx_dependencies + self.size_dependencies
+
     def __eq__(self, other):
         return other is not None and self.idx_dependencies == other.idx_dependencies and self.size_dependencies == other.size_dependencies
 
@@ -27,9 +35,9 @@ class MatchDim:
             return 0
         else:
             start_idx = 0
-            for ind_dim,mult in self.dim_dependency.idx_dependencies.items():
+            for (ind_dim,mult) in self.dim_dependency.idx_dependencies:
                 start_idx += (mult*(ind_dim if not hasattr(ind_dim,"name") else 0))
-            return int(start_idx)
+            return int(start_idx) if start_idx-int(start_idx) == 0 else int(start_idx-1)
 
     @property
     def max_size(self):
@@ -37,7 +45,7 @@ class MatchDim:
             return self.size
         else:
             max_size = 0
-            for ind_dim,mult in self.dim_dependency.size_dependencies.items():
+            for (ind_dim,mult) in self.dim_dependency.size_dependencies:
                 max_size += (mult*(ind_dim if not hasattr(ind_dim,"name") else ind_dim.size))
             return int(max_size)
         

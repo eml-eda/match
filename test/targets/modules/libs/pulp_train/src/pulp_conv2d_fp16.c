@@ -83,7 +83,7 @@ void pulp_conv2d_fp16_fw_cl( void * Conv2D_args_fp16 )
       im2col_args.USE_DMA = USE_DMA;
       im2col_args.HWC = HWC_layout;
 
-      pi_cl_team_fork(NUM_CORES,pulp_im2row_fp16, &im2col_args);
+      pi_cl_team_fork(NUM_CORES, pulp_im2row_fp16, &im2col_args);
 
       // Perform matmul
       matMul_args.A = coeffData;
@@ -110,7 +110,7 @@ void pulp_conv2d_fp16_fw_cl( void * Conv2D_args_fp16 )
       man_args.step_type = STEP_FW;
       man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
 
-      pi_cl_team_fork(NUM_CORES,im2col_conv2d_fw_kernel_fp16, &man_args);
+      pi_cl_team_fork(NUM_CORES, im2col_conv2d_fw_kernel_fp16, &man_args);
     }
 
     /**
@@ -132,7 +132,7 @@ void pulp_conv2d_fp16_fw_cl( void * Conv2D_args_fp16 )
       im2col_args.USE_DMA = USE_DMA;
       im2col_args.HWC = HWC_layout;
 
-      pi_cl_team_fork(NUM_CORES,pulp_im2row_fp16, &im2col_args);
+      pi_cl_team_fork(NUM_CORES, pulp_im2row_fp16, &im2col_args);
 
       matMul_args.A = i2c_buffer;
       matMul_args.B = coeffData;
@@ -158,7 +158,7 @@ void pulp_conv2d_fp16_fw_cl( void * Conv2D_args_fp16 )
       man_args.step_type = STEP_FW;
       man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
 
-      pi_cl_team_fork(NUM_CORES,im2col_conv2d_fw_kernel_fp16, &man_args); 
+      pi_cl_team_fork(NUM_CORES, im2col_conv2d_fw_kernel_fp16, &man_args); 
     }
     else {
       printf("[pulp_conv2d_fp16_fw_cl:] Invalid data layout format (HWC or CHW)!\n");
@@ -197,12 +197,12 @@ void pulp_conv2d_fp16_fw_cl( void * Conv2D_args_fp16 )
       int padding = Lpad + Rpad + Upad + Dpad;
       int stride = stride_h + stride_w;
       if (pH == 3 && pW == 3 && padding == 4 && stride == 4)
-      pi_cl_team_fork(NUM_CORES,naive_conv2d_fw_kernel_CHW_k3x3_s2_p1_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, naive_conv2d_fw_kernel_CHW_k3x3_s2_p1_fp16, &matMul_args);
       else if (pH == 5 && pW == 5 && padding == 4 && stride == 4)
-      pi_cl_team_fork(NUM_CORES,naive_conv2d_fw_kernel_CHW_k5x5_s2_p1_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, naive_conv2d_fw_kernel_CHW_k5x5_s2_p1_fp16, &matMul_args);
       else
       #endif
-      pi_cl_team_fork(NUM_CORES,naive_conv2d_fw_kernel_CHW_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, naive_conv2d_fw_kernel_CHW_fp16, &matMul_args);
     }
     
     /**
@@ -312,7 +312,7 @@ void pulp_conv2d_fp16_bw_param_grads_cl( void * Conv2D_args_fp16 )
       im2col_args.USE_DMA = USE_DMA;
       im2col_args.HWC = HWC_layout;
 
-      pi_cl_team_fork(NUM_CORES,pulp_im2row_fp16, &im2col_args);
+      pi_cl_team_fork(NUM_CORES, pulp_im2row_fp16, &im2col_args);
 
       matMul_args.A = outDiff;
       matMul_args.B = i2c_buffer;
@@ -337,7 +337,7 @@ void pulp_conv2d_fp16_bw_param_grads_cl( void * Conv2D_args_fp16 )
       man_args.step_type = STEP_WGT_GRAD;
       man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
 
-      pi_cl_team_fork(NUM_CORES,im2col_conv2d_param_grad_kernel_fp16, &man_args);
+      pi_cl_team_fork(NUM_CORES, im2col_conv2d_param_grad_kernel_fp16, &man_args);
     }
 
     /**
@@ -358,14 +358,14 @@ void pulp_conv2d_fp16_bw_param_grads_cl( void * Conv2D_args_fp16 )
       im2col_args.USE_DMA = USE_DMA;
       im2col_args.HWC = HWC_layout;
 
-      pi_cl_team_fork(NUM_CORES,pulp_im2col_fp16, &im2col_args);
+      pi_cl_team_fork(NUM_CORES, pulp_im2col_fp16, &im2col_args);
 
       struct transp_args_fp16 tr_args;
       tr_args.matrix = outDiff;
       tr_args.transp_matrix = tr_buffer;
       tr_args.M = C_out;
       tr_args.N = H_out*W_out;
-      pi_cl_team_fork(NUM_CORES,transpose_fp16, &tr_args);
+      pi_cl_team_fork(NUM_CORES, transpose_fp16, &tr_args);
 
       matMul_args.A = tr_buffer; // outDiff;
       matMul_args.B = i2c_buffer;
@@ -390,7 +390,7 @@ void pulp_conv2d_fp16_bw_param_grads_cl( void * Conv2D_args_fp16 )
       man_args.step_type = STEP_WGT_GRAD;
       man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
 
-      pi_cl_team_fork(NUM_CORES,im2col_conv2d_param_grad_kernel_fp16, &man_args);
+      pi_cl_team_fork(NUM_CORES, im2col_conv2d_param_grad_kernel_fp16, &man_args);
     }
     else {
       printf("[pulp_conv2d_fp16_bw_param_grads_cl:] Invalid data layout format (HWC or CHW)!\n");
@@ -432,12 +432,12 @@ void pulp_conv2d_fp16_bw_param_grads_cl( void * Conv2D_args_fp16 )
       int padding = Lpad + Rpad + Upad + Dpad;
       int stride = stride_h + stride_w;
       if (pH == 3 && pW == 3 && padding == 4 && stride == 4)
-      pi_cl_team_fork(NUM_CORES,naive_conv2d_param_grad_kernel_CHW_k3x3_s2_p1_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, naive_conv2d_param_grad_kernel_CHW_k3x3_s2_p1_fp16, &matMul_args);
       else if (pH == 5 && pW == 5 && padding == 4 && stride == 4)
-      pi_cl_team_fork(NUM_CORES,naive_conv2d_param_grad_kernel_CHW_k5x5_s2_p1_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, naive_conv2d_param_grad_kernel_CHW_k5x5_s2_p1_fp16, &matMul_args);
       else
       #endif
-      pi_cl_team_fork(NUM_CORES,naive_conv2d_param_grad_kernel_CHW_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, naive_conv2d_param_grad_kernel_CHW_fp16, &matMul_args);
     }
 
     /**
@@ -524,7 +524,7 @@ void pulp_conv2d_fp16_bw_input_grads_cl( void * Conv2D_args_fp16 )
       im2col_args.USE_DMA = USE_DMA; 
       im2col_args.HWC = HWC_layout;
 
-      pi_cl_team_fork(NUM_CORES,pulp_im2row_fp16, &im2col_args);
+      pi_cl_team_fork(NUM_CORES, pulp_im2row_fp16, &im2col_args);
 
       // Blocktranspose weights
       struct blocktransp_args_fp16 bt_args;
@@ -544,17 +544,17 @@ void pulp_conv2d_fp16_bw_input_grads_cl( void * Conv2D_args_fp16 )
       matMul_args.M = W_in*H_in;
       matMul_args.trans_B = 1;
 
-      pi_cl_team_fork(NUM_CORES,pulp_blocktransp_fp16, &bt_args);
+      pi_cl_team_fork(NUM_CORES, pulp_blocktransp_fp16, &bt_args);
 
       #ifndef OPTIMIZE
-      pi_cl_team_fork(NUM_CORES,mm_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, mm_fp16, &matMul_args);
       #else
       struct mm_manager_args_fp16 man_args;
       man_args.mm_args = &matMul_args;
       man_args.layer_type = LAYER_CONV2D;
       man_args.step_type = STEP_IN_GRAD;
       man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-      pi_cl_team_fork(NUM_CORES,mm_manager_fp16, &man_args);
+      pi_cl_team_fork(NUM_CORES, mm_manager_fp16, &man_args);
       #endif
     }
 
@@ -577,7 +577,7 @@ void pulp_conv2d_fp16_bw_input_grads_cl( void * Conv2D_args_fp16 )
       im2col_args.USE_DMA = USE_DMA; 
       im2col_args.HWC = HWC_layout;
 
-      pi_cl_team_fork(NUM_CORES,pulp_im2row_fp16, &im2col_args);
+      pi_cl_team_fork(NUM_CORES, pulp_im2row_fp16, &im2col_args);
 
       // Blocktranspose weights
       struct blocktransp_args_fp16 bt_args;
@@ -597,17 +597,17 @@ void pulp_conv2d_fp16_bw_input_grads_cl( void * Conv2D_args_fp16 )
       matMul_args.M = C_in;
       matMul_args.trans_B = 1;
 
-      pi_cl_team_fork(NUM_CORES,pulp_blocktransp_fp16, &bt_args);
+      pi_cl_team_fork(NUM_CORES, pulp_blocktransp_fp16, &bt_args);
 
       #ifndef OPTIMIZE
-      pi_cl_team_fork(NUM_CORES,mm_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, mm_fp16, &matMul_args);
       #else
       struct mm_manager_args_fp16 man_args;
       man_args.mm_args = &matMul_args;
       man_args.layer_type = LAYER_CONV2D;
       man_args.step_type = STEP_IN_GRAD;
       man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-      pi_cl_team_fork(NUM_CORES,mm_manager_fp16, &man_args);
+      pi_cl_team_fork(NUM_CORES, mm_manager_fp16, &man_args);
       #endif 
     }
     else {
@@ -649,12 +649,12 @@ void pulp_conv2d_fp16_bw_input_grads_cl( void * Conv2D_args_fp16 )
       int padding = Lpad + Rpad + Upad + Dpad;
       int stride = stride_h + stride_w;
       if (pH == 3 && pW == 3 && padding == 4 && stride == 4)
-      pi_cl_team_fork(NUM_CORES,naive_conv2d_in_grad_kernel_CHW_k3x3_s2_p1_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, naive_conv2d_in_grad_kernel_CHW_k3x3_s2_p1_fp16, &matMul_args);
       else if (pH == 5 && pW == 5 && padding == 4 && stride == 4)
-      pi_cl_team_fork(NUM_CORES,naive_conv2d_in_grad_kernel_CHW_k5x5_s2_p1_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, naive_conv2d_in_grad_kernel_CHW_k5x5_s2_p1_fp16, &matMul_args);
       else
       #endif
-      pi_cl_team_fork(NUM_CORES,naive_conv2d_in_grad_kernel_CHW_fp16, &matMul_args);
+      pi_cl_team_fork(NUM_CORES, naive_conv2d_in_grad_kernel_CHW_fp16, &matMul_args);
     }
 
     /**

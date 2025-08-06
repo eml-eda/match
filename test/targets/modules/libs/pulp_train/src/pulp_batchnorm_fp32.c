@@ -26,7 +26,7 @@
 
 void pulp_batchnorm_fp32_fw_cl( void * BatchNorm_args )
 {
-    pi_cl_team_fork(NUM_CORES,pulp_batchnorm_parallelized_fp32_fw_cl, BatchNorm_args);
+    pi_cl_team_fork(NUM_CORES, pulp_batchnorm_parallelized_fp32_fw_cl, BatchNorm_args);
 }
 
 // Real forward function that parallelize on multicore 
@@ -131,7 +131,7 @@ void pulp_batchnorm_parallelized_fp32_fw_cl( void * BatchNorm_args )
 
 void pulp_batchnorm_fp32_bw_input_grads_cl( void * BatchNorm_args )
 {
-    pi_cl_team_fork(NUM_CORES,pulp_batchnorm_parallelized_fp32_bw_input_grads_cl, BatchNorm_args);
+    pi_cl_team_fork(NUM_CORES, pulp_batchnorm_parallelized_fp32_bw_input_grads_cl, BatchNorm_args);
 }
 
 void pulp_batchnorm_parallelized_fp32_bw_input_grads_cl( void * BatchNorm_args )
@@ -198,7 +198,7 @@ void pulp_batchnorm_parallelized_fp32_bw_input_grads_cl( void * BatchNorm_args )
 
 void pulp_batchnorm_fp32_bw_param_grads_cl( void * BatchNorm_args )
 {
-    pi_cl_team_fork(NUM_CORES,pulp_batchnorm_parallelized_fp32_bw_param_grads_cl, BatchNorm_args);
+    pi_cl_team_fork(NUM_CORES, pulp_batchnorm_parallelized_fp32_bw_param_grads_cl, BatchNorm_args);
 }
 
 void pulp_batchnorm_parallelized_fp32_bw_param_grads_cl( void * BatchNorm_args )
@@ -273,11 +273,11 @@ void pulp_batchnorm_fp32_bw_cl( void * BatchNorm_args )
 
     if (skip_wg_grad == 0)
     {
-        pi_cl_team_fork(NUM_CORES,pulp_batchnorm_parallelized_fp32_bw_param_grads_cl, BatchNorm_args);
+        pi_cl_team_fork(NUM_CORES, pulp_batchnorm_parallelized_fp32_bw_param_grads_cl, BatchNorm_args);
     }
 
     if(skip_in_grad == 0)
     {
-        pi_cl_team_fork(NUM_CORES,pulp_batchnorm_parallelized_fp32_bw_input_grads_cl, BatchNorm_args);
+        pi_cl_team_fork(NUM_CORES, pulp_batchnorm_parallelized_fp32_bw_input_grads_cl, BatchNorm_args);
     }
 }

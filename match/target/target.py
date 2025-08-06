@@ -128,6 +128,7 @@ class MatchTarget(ABC):
         self.include_list=[]
         self.input_macros=""
         self.__cached_pattern_results__=[]
+        self.__cached_failed_pattern_results__=[]
         self.other_files_to_copy = []
         self.timer_start_fn = ""
         self.timer_stop_fn = ""
@@ -240,11 +241,25 @@ class MatchTarget(ABC):
     def add_pt_res_to_cache(self,pt_res):
         self.__cached_pattern_results__.append(pt_res)
 
+    def add_failed_pt_res_to_cache(self,pt_res):
+        """Add a failed pattern result to the cache, this is useful to avoid re-evaluating the same pattern for the same node
+
+        Args:
+            pt_res (PatternResult): PatternResult that failed
+        """
+        self.__cached_failed_pattern_results__.append(pt_res)
+
     def find_in_cached_list(self,pattern_result):
         for cached_pt_res in self.__cached_pattern_results__:
             if cached_pt_res==pattern_result:
                 return cached_pt_res.schedule,cached_pt_res.latency,cached_pt_res.energy
         return None,None,None
+
+    def is_pt_res_in_failed_cached_list(self,pattern_result):
+        for cached_pt_res in self.__cached_failed_pattern_results__:
+            if cached_pt_res==pattern_result:
+                return True
+        return False
 
     def add_exec_modules(self,exec_modules):
         for exec_module in exec_modules:
@@ -269,6 +284,8 @@ class MatchTarget(ABC):
         schedule_gen.parse()
         match_node=schedule_gen.get_match_node()
         pt_res=PatternResult(match_pt,match_node)
+        if self.is_pt_res_in_failed_cached_list(pt_res):
+            raise Exception(f"[TARGET]: No valid loop ordering found for {match_pt.name} with node {node}")
         schedule,latency,energy=self.find_in_cached_list(pt_res)
         if schedule is not None:
             return latency,energy
@@ -276,6 +293,7 @@ class MatchTarget(ABC):
             try:
                 schedule_gen.generate()
             except Exception as exc:
+                self.add_failed_pt_res_to_cache(pt_res)
                 raise Exception(f"[TARGET]: No valid loop ordering found, {exc}")
             schedule_gen.apply_constraints()
             schedule=schedule_gen.schedule

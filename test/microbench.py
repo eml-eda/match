@@ -8,11 +8,13 @@ from networks import RESNET_18_MAPPER, RESNET_18_NODES, VIT_MAPPER, VIT_NODES
 
 from quants import create_conv_ex, create_dense_ex, create_simple_sum_ex, create_sumnet_ex
 from mini import create_dense_conv_dense_ex, create_easy_dense_int32_ex, create_dense_conv_dense_fp16_ex
-
+from floats import create_fp_conv_ex, create_fp_conv_transpose_ex
 
 MICROBENCH_MAPPER = {
     "conv":create_conv_ex,
     "dense":create_dense_ex,
+    "fp_conv":create_fp_conv_ex,
+    "fp_conv_transpose":create_fp_conv_transpose_ex,
     "simple_sum":create_simple_sum_ex,
     "dense_conv_dense":create_dense_conv_dense_ex,
     "dense_conv_dense_fp16":create_dense_conv_dense_fp16_ex,

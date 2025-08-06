@@ -5,12 +5,16 @@ import tvm
 from tvm import relay
 
 
-def create_fp_conv_ex(inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
-                       padding:Tuple=(0,0,0,0),strides:Tuple=(1,1),
-                       groups:int=1,out_ch:int=1,inp_ch:int=3,**kwargs):
-    x = relay.var("input_0", relay.TensorType((1,inp_ch)+inp_shape))
+def create_fp_conv_ex(
+    inp_shape:Tuple=(32,32), fil_shape:Tuple=(1,1),
+    padding:Tuple=(0,0,0,0), strides:Tuple=(1,1),
+    dilation:Tuple=(1,1), constant_params:bool=False,
+    batch_size:int=1, groups:int=1, out_ch:int=1,
+    inp_ch:int=3, **kwargs
+):
+    x = relay.var("input_0", relay.TensorType((batch_size,inp_ch)+inp_shape))
     # Get or generate weight_values
-    weights = numpy_to_array(np_arr=get_random_np_array(dtype="float32",shape=(out_ch,inp_ch)+fil_shape),dtype="float32")
+    weights = numpy_to_array(np_arr=get_random_np_array(dtype="float32",shape=(out_ch,inp_ch if groups==1 else inp_ch//groups)+fil_shape),dtype="float32")
     # Get or generate bias values
     bias = numpy_to_array(np_arr=get_random_np_array(dtype="float32",shape=(out_ch,)),dtype="float32")
     # Generate the conv2d call
@@ -22,18 +26,52 @@ def create_fp_conv_ex(inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
     w = relay.var(weights_name, relay.TensorType(weights.shape, weights.dtype))
 
     # define weights and bias values in params
-    params = {weights_name: weights, bias_name: bias}
+    params = {weights_name: weights, bias_name: bias} if constant_params else {}
 
     # define operations
-    x = relay.op.nn.conv2d(x, w,
-                           strides=strides,
-                           padding=padding,
-                           groups=groups,
-                           kernel_size=fil_shape,
-                           )
+    x = relay.op.nn.conv2d(
+        x, w,
+        strides=strides,
+        padding=padding,
+        groups=groups,
+        kernel_size=fil_shape,
+        dilation=dilation,
+        channels=out_ch,
+    )
     b = relay.var(bias_name, relay.TensorType(bias.shape, bias.dtype))
     x = relay.op.nn.bias_add(x, b, axis=1)
     x = relay.op.nn.relu(x)
+    # create an IR module from the relay expression
+    mod = tvm.ir.IRModule()
+    mod = mod.from_expr(x)
+    return mod, params
+
+def create_fp_conv_transpose_ex(
+    inp_shape:Tuple=(32,32),fil_shape:Tuple=(1,1),
+    padding:Tuple=(0,0,0,0),output_padding:Tuple=(0,0),
+    strides:Tuple=(1,1),dilation:Tuple=(1,1),
+    groups:int=1,out_ch:int=1,inp_ch:int=3,**kwargs
+):
+    x = relay.var("input_0", relay.TensorType((1,inp_ch)+inp_shape))
+    # Get or generate weight_values
+    weights = numpy_to_array(np_arr=get_random_np_array(dtype="float32",shape=(inp_ch, out_ch//groups)+fil_shape),dtype="float32")
+    # Generate the conv2d_transpose call
+    # define weights and bias variables
+    weights_name = "conv_transpose_weights"
+    # define relay input vars
+    w = relay.var(weights_name, relay.TensorType(weights.shape, weights.dtype))
+    # define weights values in params
+    params = {weights_name: weights}
+    # define operations
+    x = relay.op.nn.conv2d_transpose(x, w,
+        strides=strides,
+        padding=padding,
+        channels=out_ch,
+        output_padding=output_padding,
+        dilation=dilation,
+        groups=groups,
+        kernel_size=fil_shape,
+    )
     # create an IR module from the relay expression
     mod = tvm.ir.IRModule()
     mod = mod.from_expr(x)

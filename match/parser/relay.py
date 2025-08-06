@@ -11,6 +11,7 @@ class MatchRelayParser(MatchTVMParser):
         self.visit_router = {
             "nn.conv1d": self.visit_conv_1d,
             "nn.conv2d": self.visit_conv_2d,
+            "nn.conv2d_transpose": self.visit_conv_2d_transpose,
             "nn.conv3d": self.visit_conv_3d,
             "cast": self.visit_cast,
             "right_shift": self.visit_right_shift,
@@ -272,13 +273,29 @@ class MatchRelayParser(MatchTVMParser):
             self.node_all_dims[o_d_dim.name] = o_d_dim
             if i_d_dim.name==i_d_dim.original_name:
                 i_d_dim.dim_dependency = DimDependency(
-                    idx_dependencies={o_d_dim:strides[0],w_ksd_dim:dilations[0],padding[0]:-1},
-                    size_dependencies={o_d_dim:strides[0],w_ksd_dim:dilations[0],strides[0]:-1}    
+                    idx_dependencies=[
+                        (o_d_dim,strides[0]),
+                        (w_ksd_dim,dilations[0]),
+                        (padding[0],-1)
+                    ],
+                    size_dependencies=[
+                        (o_d_dim,strides[0]),
+                        (w_ksd_dim,dilations[0]),
+                        (strides[0],-1)
+                    ]
                 )
             else:
                 self.node_all_dims[i_d_dim.name].dependencies = DimDependency(
-                    idx_dependencies={w_cout_dim:strides[0],w_ksd_dim:dilations[0],padding[0]:-1},
-                    size_dependencies={w_cout_dim:strides[0],w_ksd_dim:dilations[0],strides[0]:-1}
+                    idx_dependencies=[
+                        (w_cout_dim,strides[0]),
+                        (w_ksd_dim,dilations[0]),
+                        (padding[0],-1)
+                    ],
+                    size_dependencies=[
+                        (w_cout_dim,strides[0]),
+                        (w_ksd_dim,dilations[0]),
+                        (strides[0],-1)
+                    ]
                 )
         else:
             o_d_dim = i_d_dim
@@ -287,13 +304,29 @@ class MatchRelayParser(MatchTVMParser):
             self.node_all_dims[o_h_dim.name] = o_h_dim
             if i_h_dim.name==i_h_dim.original_name:
                 i_h_dim.dim_dependency = DimDependency(
-                    idx_dependencies={o_h_dim:strides[1],w_ksh_dim:dilations[1],padding[1]:-1},
-                    size_dependencies={o_h_dim:strides[1],w_ksh_dim:dilations[1],strides[1]:-1}    
+                    idx_dependencies=[
+                        (o_h_dim,strides[1]),
+                        (w_ksh_dim,dilations[1]),
+                        (padding[1],-1)
+                    ],
+                    size_dependencies=[
+                        (o_h_dim,strides[1]),
+                        (w_ksh_dim,dilations[1]),
+                        (strides[1],-1)
+                    ]
                 )
             else:
                 self.node_all_dims[i_h_dim.name].dependencies = DimDependency(
-                    idx_dependencies={w_cout_dim:strides[1],w_ksh_dim:dilations[1],padding[1]:-1},
-                    size_dependencies={w_cout_dim:strides[1],w_ksh_dim:dilations[1],strides[1]:-1}
+                    idx_dependencies=[
+                        (w_cout_dim,strides[1]),
+                        (w_ksh_dim,dilations[1]),
+                        (padding[1],-1)
+                    ],
+                    size_dependencies=[
+                        (w_cout_dim,strides[1]),
+                        (w_ksh_dim,dilations[1]),
+                        (strides[1],-1)
+                    ]
                 )
         else:
             o_h_dim = i_h_dim
@@ -302,13 +335,29 @@ class MatchRelayParser(MatchTVMParser):
             self.node_all_dims[o_w_dim.name] = o_w_dim
             if i_w_dim.name==i_w_dim.original_name:
                 i_w_dim.dim_dependency = DimDependency(
-                    idx_dependencies={o_w_dim:strides[2],w_ksw_dim:dilations[2],padding[2]:-1},
-                    size_dependencies={o_w_dim:strides[2],w_ksw_dim:dilations[2],strides[2]:-1}
+                    idx_dependencies=[
+                        (o_w_dim,strides[2]),
+                        (w_ksw_dim,dilations[2]),
+                        (padding[2],-1)
+                    ],
+                    size_dependencies=[
+                        (o_w_dim,strides[2]),
+                        (w_ksw_dim,dilations[2]),
+                        (strides[2],-1)
+                    ]
                 )
             else:
                 self.node_all_dims[i_w_dim.name].dependencies = DimDependency(
-                    idx_dependencies={w_cout_dim:strides[2],w_ksw_dim:dilations[2],padding[2]:-1},
-                    size_dependencies={w_cout_dim:strides[2],w_ksw_dim:dilations[2],strides[2]:-1}    
+                    idx_dependencies=[
+                        (w_cout_dim,strides[2]),
+                        (w_ksw_dim,dilations[2]),
+                        (padding[2],-1)
+                    ],
+                    size_dependencies=[
+                        (w_cout_dim,strides[2]),
+                        (w_ksw_dim,dilations[2]),
+                        (strides[2],-1)
+                    ]
                 )
         else:
             o_w_dim = i_w_dim
@@ -338,6 +387,157 @@ class MatchRelayParser(MatchTVMParser):
             dilation= dilations,
             groups= groups,
             kernel_size=(w_ksd,w_ksh,w_ksw),
+            depthwise= depthwise,
+            data_layout= attrs.data_layout,
+            kernel_layout= attrs.kernel_layout,
+            out_dtype= np.dtype(attrs.out_dtype) if attrs.out_dtype!="" else np.dtype(odtype),
+        )
+        self.update_match_node(op=op,call=call,name=name)
+
+    def visit_conv_2d_transpose(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
+        self.update_if_intermediate_tensor(tensor=w_tensor, name=w_name)
+        inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type = self.rearrange_if_const_first(
+            inp_name=inp_name, inp_tensor=inp_tensor, inp_type=inp_type,
+            w_name=w_name, w_tensor=w_tensor, weights_type=weights_type
+        )
+        # shapes etc.
+        ishape = [int(v) for v in call.args[0].checked_type.shape]
+        wshape = [int(v) for v in call.args[1].checked_type.shape]
+        oshape = [int(v) for v in call.checked_type.shape]
+        odtype = call.checked_type.dtype
+        inp_tensor.layout = attrs.data_layout if attrs.data_layout!="" else "NCHW"
+        (i_n,i_n_dim), (i_c,i_c_dim), (i_h,i_h_dim), (i_w,i_w_dim) = self.get_io_from_layout(attrs.data_layout, ishape, inp_tensor.dims)
+        w_tensor.layout = attrs.kernel_layout if attrs.kernel_layout!="" else "OIHW"
+        (w_cout,w_cout_dim), (w_cin,w_cin_dim), (w_ksh,w_ksh_dim), (w_ksw,w_ksw_dim) = self.get_io_from_layout(attrs.kernel_layout, wshape, w_tensor.dims)
+        padding = [int(a_p) for a_p in attrs.padding]
+        output_padding = [int(a_p) for a_p in attrs.output_padding] if hasattr(attrs,"output_padding") else [0,0]
+        strides = [int(v) for v in attrs.strides]
+        dilations = [int(a_d) for a_d in attrs.dilation]
+        groups = int(attrs.groups)
+        depthwise = groups != 1 and groups==i_c
+        (o_n,o_n_dim), (o_c,o_c_dim), (o_h,o_h_dim), (o_w,o_w_dim) = self.get_io_from_layout(
+            attrs.out_layout if attrs.out_layout != "" else attrs.data_layout, oshape, [None,None,None,None]
+        )
+        CONV2D_TRANSPOSE_INPUT_IS_DEPENDENT = True
+        # manage dimensions dependencies
+        if strides[0]!=1 or dilations[0]!=1 or w_ksh!=1 or padding[0]!=0 or output_padding[0]!=0:
+            o_h_dim = MatchDim(name=name+"_out_h",size=o_h)
+            self.node_all_dims[o_h_dim.name] = o_h_dim
+            if CONV2D_TRANSPOSE_INPUT_IS_DEPENDENT:
+                i_h_dim.dim_dependency = DimDependency(
+                    idx_dependencies=[
+                        # h_in = (h_out × 1/S_h) + (P_top × 1/S_h) + (-D_h × (K_h - 1) × 1/S_h) + (-OP_h × 1/S_h)
+                        (o_h_dim, 1/strides[0]),  # + h_out * (1 / S_h)
+                        (padding[0], -1/strides[0]),  # + P_top * (1 / S_h)
+                        (w_ksh_dim, dilations[0]/strides[0]),  # + (-D_h * K_h * (1 / S_h))
+                        # (dilations[0], 1/strides[0]),  # + (-D_h * - 1 * (1 / S_h))
+                        # (output_padding[0], -1/strides[0]),  # + (-OP_h * (1 / S_h))
+                    ],
+                    size_dependencies=[
+                        # H_in = (H_out * (1 / S_h)) + (-1 * (1 / S_h)) + (-D_h * (K_h - 1) * (1 / S_h)) + (-OP_h * (1 / S_h)) + (P_top * (1 / S_h)) + (P_bottom * (1 / S_h)) + 1
+                        (1, 1),  # + 1
+                        (o_h_dim, 1/strides[0]),  # + H_out * (1 / S_h)
+                        (1, -1/strides[0]),  # + (-1 * (1 / S_h))
+                        (w_ksh_dim, dilations[0]/strides[0]),  # + (-D_h * K_h * (1 / S_h))
+                        (dilations[0], -1/strides[0]),  # + (-D_h * - 1 * (1 / S_h))
+                        # (padding[0], 1/strides[0]),  # + (P_top * (1 / S_h))
+                        # (padding[2], 1/strides[0]),  # + (P_bottom * (1 / S_h))
+                        (output_padding[0], 1/strides[0]),  # + (-OP_h * (1 / S_h))
+                    ]
+                )
+            else:
+                o_h_dim.dim_dependency = DimDependency(
+                    idx_dependencies=[
+                        # h_out = h_in * S_h - P_top
+                        (i_h_dim, strides[0]),  # + H_in * S_h
+                        (padding[0], -1),  # - P_top
+                    ],
+                    size_dependencies=[
+                        # H_out = (H_in - 1) * S_h - P_top - P_bottom + D_h * (K_h - 1) + 1 + OP_h
+                        (i_h_dim, strides[0]),  # + H_in * S_h
+                        (1, -strides[0]),  # + (-1 * S_h)
+                        (padding[0], -1),  # - P_top
+                        (padding[2], -1),  # - P_bottom
+                        (w_ksh_dim, dilations[0]),  # + D_h * K_h
+                        (dilations[0], -1),  # + D_h * - 1
+                        (output_padding[0], 1),  # + OP_h
+                    ]
+                )
+
+        else:
+            o_h_dim = i_h_dim
+        if strides[1]!=1 or dilations[1]!=1 or w_ksw!=1 or padding[1]!=0 or output_padding[1]!=0:
+            o_w_dim = MatchDim(name=name+"_out_w",size=o_w)
+            self.node_all_dims[o_w_dim.name] = o_w_dim
+            if CONV2D_TRANSPOSE_INPUT_IS_DEPENDENT:
+                i_w_dim.dim_dependency = DimDependency(
+                    idx_dependencies=[
+                        # w_in = (w_out × 1/S_w) + (P_left × 1/S_w) + (-D_w × (K_w - 1) × 1/S_w) + (-OP_w × 1/S_w)
+                        (o_w_dim, 1/strides[1]),  # + w_out * (1 / S_w)
+                        (padding[1], -1/strides[1]),  # + P_left * (1 / S_w)
+                        (w_ksw_dim, dilations[1]/strides[1]),  # + (-D_w * K_w * (1 / S_w))
+                        # (dilations[1], 1/strides[1]),  # + (-D_w * - 1 * (1 / S_w))
+                        # (output_padding[1], -1/strides[1]),  # + (-OP_w * (1 / S_w))
+                    ],
+                    size_dependencies=[
+                        # W_in = (W_out * (1 / S_w)) + (-1 * (1 / S_w)) + (-D_w * (K_w - 1) * (1 / S_w)) + (-OP_w * (1 / S_w)) + (P_left * (1 / S_w)) + (P_right * (1 / S_w)) + 1
+                        (1, 1),  # + 1
+                        (o_w_dim, 1/strides[1]),  # + W_out * (1 / S_w)
+                        (1, -1/strides[1]),  # + (-1 * (1 / S_w))
+                        (w_ksw_dim, dilations[1]/strides[1]),  # + (-D_w * K_w * (1 / S_w))
+                        (dilations[1], -1/strides[1]),  # + (-D_w * - 1 * (1 / S_w))
+                        # (padding[1], 1/strides[1]),  # + (P_left * (1 / S_w))
+                        # (padding[3], 1/strides[1]),  # + (P_right * (1 / S_w))
+                        (output_padding[1], 1/strides[1]),  # + (-OP_w * (1 / S_w))
+                    ]
+                )
+            else:
+                o_w_dim.dim_dependency = DimDependency(
+                    idx_dependencies=[
+                        # w_out = w_in * S_w - P_left
+                        (i_w_dim, strides[1]),  # + W_in * S_w
+                        (padding[1], -1),  # - P_left
+                    ],
+                    size_dependencies=[
+                        # W_out = (W_in - 1) * S_w - P_left - P_right + D_w * (K_w - 1) + 1 + OP_w
+                        (i_w_dim, strides[1]),  # + W_in * S_w
+                        (1, -strides[1]),  # + (-1 * S_w)
+                        (padding[1], -1),  # - P_left
+                        (padding[3], -1),  # - P_right
+                        (w_ksw_dim, dilations[1]),  # + D_w * K_w
+                        (dilations[1], -1),  # + D_w * - 1
+                        (output_padding[1], 1),  # + OP_w
+                    ]
+                )
+        else:
+            o_w_dim = i_w_dim
+        self.update_all_dim_names_occurrences_with(old_dim_name=w_cin_dim.name,new_dim_name=i_c_dim.name)
+        o_tensor = MatchTensor(name=name,dims=self.get_dim_arr_from_layout_and_nchw_arr(
+            layout=attrs.out_layout if attrs.out_layout != "" else attrs.data_layout,
+            nchw_arr=[i_n_dim,w_cout_dim if not depthwise else i_c_dim,o_h_dim,o_w_dim]
+        ),dtype=np.dtype(odtype),tensor_type="output", layout=attrs.out_layout if attrs.out_layout != "" else attrs.data_layout if attrs.data_layout!="" else inp_tensor.layout)
+        self.calls_tensors[name]=o_tensor
+        if i_n != o_n:
+            raise NotImplementedError(
+                f"[RELAY PARSER] Input batch size is {i_n}, while output batch size is {o_n}"
+            )
+        if not depthwise and groups>1:
+            raise NotImplementedError(
+                f"[PARSER] Grouped convolutions which are not completely depthwise aren't supported yet, groups set to {groups}"
+            )
+        op = ops.MatchOpConv2DTranspose(
+            out_arr=[o_tensor],
+            var_arr=[inp_tensor],
+            const_arr=[w_tensor],
+            padding= padding,
+            output_padding=output_padding,
+            strides= strides,
+            dilation= dilations,
+            groups= groups,
+            kernel_size=(w_ksh,w_ksw),
             depthwise= depthwise,
             data_layout= attrs.data_layout,
             kernel_layout= attrs.kernel_layout,
@@ -377,13 +577,29 @@ class MatchRelayParser(MatchTVMParser):
             self.node_all_dims[o_h_dim.name] = o_h_dim
             if i_h_dim.name==i_h_dim.original_name:
                 i_h_dim.dim_dependency = DimDependency(
-                    idx_dependencies={o_h_dim:strides[0],w_ksh_dim:dilations[0],padding[0]:-1},
-                    size_dependencies={o_h_dim:strides[0],w_ksh_dim:dilations[0],strides[0]:-1}    
+                    idx_dependencies=[
+                        (o_h_dim,strides[0]),
+                        (w_ksh_dim,dilations[0]),
+                        (padding[0],-1)
+                    ],
+                    size_dependencies=[
+                        (o_h_dim,strides[0]),
+                        (w_ksh_dim,dilations[0]),
+                        (strides[0],-1)
+                    ]  
                 )
             else:
                 self.node_all_dims[i_h_dim.name].dependencies = DimDependency(
-                    idx_dependencies={w_cout_dim:strides[0],w_ksh_dim:dilations[0],padding[0]:-1},
-                    size_dependencies={w_cout_dim:strides[0],w_ksh_dim:dilations[0],strides[0]:-1}
+                    idx_dependencies=[
+                        (w_cout_dim,strides[0]),
+                        (w_ksh_dim,dilations[0]),
+                        (padding[0],-1)
+                    ],
+                    size_dependencies=[
+                        (w_cout_dim,strides[0]),
+                        (w_ksh_dim,dilations[0]),
+                        (strides[0],-1)
+                    ]
                 )
         else:
             o_h_dim = i_h_dim
@@ -392,13 +608,29 @@ class MatchRelayParser(MatchTVMParser):
             self.node_all_dims[o_w_dim.name] = o_w_dim
             if i_w_dim.name==i_w_dim.original_name:
                 i_w_dim.dim_dependency = DimDependency(
-                    idx_dependencies={o_w_dim:strides[1],w_ksw_dim:dilations[1],padding[1]:-1},
-                    size_dependencies={o_w_dim:strides[1],w_ksw_dim:dilations[1],strides[1]:-1}
+                    idx_dependencies=[
+                        (o_w_dim,strides[1]),
+                        (w_ksw_dim,dilations[1]),
+                        (padding[1],-1)
+                    ],
+                    size_dependencies=[
+                        (o_w_dim,strides[1]),
+                        (w_ksw_dim,dilations[1]),
+                        (strides[1],-1)
+                    ]
                 )
             else:
                 self.node_all_dims[i_w_dim.name].dependencies = DimDependency(
-                    idx_dependencies={w_cout_dim:strides[1],w_ksw_dim:dilations[1],padding[1]:-1},
-                    size_dependencies={w_cout_dim:strides[1],w_ksw_dim:dilations[1],strides[1]:-1}    
+                    idx_dependencies=[
+                        (w_cout_dim,strides[1]),
+                        (w_ksw_dim,dilations[1]),
+                        (padding[1],-1)
+                    ],
+                    size_dependencies=[
+                        (w_cout_dim,strides[1]),
+                        (w_ksw_dim,dilations[1]),
+                        (strides[1],-1)
+                    ]
                 )
         else:
             o_w_dim = i_w_dim
@@ -467,13 +699,29 @@ class MatchRelayParser(MatchTVMParser):
             self.node_all_dims[o_spatial_dim.name] = o_spatial_dim
             if i_spatial_dim.name==i_spatial_dim.original_name:
                 i_spatial_dim.dim_dependency = DimDependency(
-                    idx_dependencies={o_spatial_dim:strides[0],w_kernel_dim:dilations[0],padding[0]:-1},
-                    size_dependencies={o_spatial_dim:strides[0],w_kernel_dim:dilations[0],strides[0]:-1}    
+                    idx_dependencies=[
+                        (o_spatial_dim,strides[0]),
+                        (w_kernel_dim,dilations[0]),
+                        (padding[0],-1)
+                    ],
+                    size_dependencies=[
+                        (o_spatial_dim,strides[0]),
+                        (w_kernel_dim,dilations[0]),
+                        (strides[0],-1)
+                    ]
                 )
             else:
                 self.node_all_dims[i_spatial_dim.name].dependencies = DimDependency(
-                    idx_dependencies={w_cout_dim:strides[0],w_kernel_dim:dilations[0],padding[0]:-1},
-                    size_dependencies={w_cout_dim:strides[0],w_kernel_dim:dilations[0],strides[0]:-1}    
+                    idx_dependencies=[
+                        (w_cout_dim,strides[0]),
+                        (w_kernel_dim,dilations[0]),
+                        (padding[0],-1)
+                    ],
+                    size_dependencies=[
+                        (w_cout_dim,strides[0]),
+                        (w_kernel_dim,dilations[0]),
+                        (strides[0],-1)
+                    ]
                 )
         else:
             o_spatial_dim = i_spatial_dim

@@ -33,8 +33,16 @@ OPT_LEVEL = 3
 # Use -DPULP for preprocessor in malloc wrapper
 # Need to link in libm for math.h inclusion in softmax operator
 APP_CFLAGS += -DNUM_CORES=$(CORE) -g $(INC_PATHS) -DNDEBUG -O$(OPT_LEVEL) -DPULP 
+
+# flags for PULP-TrainLib (to improve)
+APP_CFLAGS += -DOPTIMIZE 
+
 # GAP9 fixes, the first because abort() is not in stdlib. The second to avoid a crt_backend_api.c error
 APP_CFLAGS += -Dabort\(\)=exit\(\-\1\)  -Wno-error=format -w -fno-indirect-inlining -w #-flto
+
+# FP32 precision flags, keep on if precision is good otherwise put off
+APP_CFLAGS += -ffp-contract=on
+
 APP_LDFLAGS += -lm -Wl,--print-memory-usage #-flto
 
 GAP9_DEFAULT_FLASH_TYPE = DEFAULT_FLASH

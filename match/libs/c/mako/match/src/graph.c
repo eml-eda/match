@@ -1,12 +1,12 @@
 #include <${model_name}_graph.h>
 
 // DLTensor declarations
-% for tens_idx in range(max([len(node.inputs)+len(node.outputs) for node in nodes if node.fallback])):
+% for tens_idx in range(max([len(node.inputs)+len(node.outputs) for node in nodes if node.fallback]+[0])):
 DLTensor tvm_fallback_dltensor_${tens_idx};
 % endfor
 // params of nodes
 // void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handl
-TVMValue tvm_fallback_args_[${max([len(node.inputs)+len(node.outputs) for node in nodes if node.fallback])}];
+TVMValue tvm_fallback_args_[${max([len(node.inputs)+len(node.outputs) for node in nodes if node.fallback]+[0])}];
 int* tvm_fallback_arg_type_ids_;
 void* tvm_fallback_out_ret_value_;
 int* tvm_fallback_out_ret_tcode_;
@@ -255,7 +255,7 @@ int match_${model_name}_run_graph(
         #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
     % if node.dtype_output_node=="float32":
-    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, relative error between output and checksum by %.4f\n", match_float_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, relative error between output and checksum by %f\n", match_float_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
     % else:
     printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, output differs from checksum by %d\n", match_byte_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
     % endif

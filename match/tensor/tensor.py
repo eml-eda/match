@@ -30,6 +30,10 @@ class MatchTensor:
         self.stored_in_ext_mem = False
 
     @property
+    def tensor_type_up(self):
+        return "MATCH_" + ("OUT" if self.tensor_type == "output" else self.tensor_type.upper()) + "_TENSOR"
+
+    @property
     def unsupported_layout(self):
         return self.layout not in SUPPORTED_TENSOR_LAYOUTS and self.layout not in SUPPORTED_DIVIDED_TENSOR_LAYOUTS
 
@@ -78,7 +82,7 @@ class MatchTensor:
                     dim_size = dim.size//dims_with_subtiles[(dim.name, idx)]
                 elif (dim.name, idx) in dims_subtiles:
                     dim_size = dims_subtiles[(dim.name, idx)]
-                if dim_size>1 and ((dim in lps_dims) or (dim.dim_dependency is not None and any([dim_ in dim.dim_dependency.dependencies for dim_ in lps_dims]))):
+                if dim_size>1 and ((dim in lps_dims) or (dim.dim_dependency is not None and any([dim_ in dim.dim_dependency.dependent_on_dims for dim_ in lps_dims]))):
                     global_idx_str = f"{node_name}_{dim.name}->global_idx"
                     start_idx_str = f"{node_name}_{self.name}_tiles_[{mem}*{self.num_dims}+{idx}].start_idx"
                     global_idx = f"({global_idx_str} - {start_idx_str})"
@@ -105,7 +109,7 @@ class MatchTensor:
         else:
             lps_dims = [lp.dim for lp in schedule.blocks[block_idx].loops[:loop_idx]]
             for idx,dim in enumerate(self.dims):
-                if dim.size>1 and ((dim in lps_dims) or (dim.dim_dependency is not None and any([dim_ in dim.dim_dependency.dependencies for dim_ in lps_dims]))):
+                if dim.size>1 and ((dim in lps_dims) or (dim.dim_dependency is not None and any([dim_ in dim.dim_dependency.dependent_on_dims for dim_ in lps_dims]))):
                     global_idx_str = f"{node_name}_{dim.name}->global_idx"
                     start_idx_str = f"{node_name}_{self.name}_tiles_[{mem}*{self.num_dims}+{idx}].start_idx"
                     global_idx = f"({global_idx_str} - {start_idx_str})"

@@ -41,15 +41,36 @@ execute_gap_test() {
     cd ../../../../..
     cd odl
 }
+
+execute_pulp_open_test() {
+    local model=$1
+    local target=$2
+    local direction=$3
+    local target_dir=$4
+    local base_dir=$5
+
+    echo "Executing GAP test for model: $model, target: $target, direction: $direction"
+    cd ../builds/$base_dir/$model/$direction/$target_dir
+    echo -e "\033[34mCompiling...\033[0m"
+    make all >> compilation.log 2>&1
+    echo -e "\033[33mRunning...\033[0m"
+    make run >> run.log 2>&1
+    make clean
+    rm BUILD -r
+    cd ../../../../..
+    cd odl
+}
 # Define test parameters
 models=("kws" "vww" "imcls")
 targets=("GAP9")
-directions=("fw" "bw")
-NAME_BASE_DIR="baseline_graph_memplan_fix_io_fix_consts_370mhz_1186kB"
+directions=("bw")
+NAME_BASE_DIR="acceltrans_fix_io_fix_consts_test"
 # Map target names to directory names
 declare -A target_dirs
 target_dirs["pulp_open"]="popen"
 target_dirs["GAP9"]="gap"
+execute_func["pulp_open"]="execute_pulp_open_test"
+execute_func["GAP9"]="execute_gap_test"
 
 # Run tests for all combinations
 for model in "${models[@]}"; do
@@ -58,7 +79,7 @@ for model in "${models[@]}"; do
         echo "# ${target^^}"
         for direction in "${directions[@]}"; do
             run_odl_test "$model" "$target" "$direction" "${target_dirs[$target]}" "$NAME_BASE_DIR"
-            execute_gap_test "$model" "$target" "$direction" "${target_dirs[$target]}" "$NAME_BASE_DIR"
+            ${execute_func[$target]} "$model" "$target" "$direction" "${target_dirs[$target]}" "$NAME_BASE_DIR"
         done
     done
 done
