@@ -34,12 +34,7 @@ void pulp_conv_dw_fp16_fw_cl ( void * DepthWise_Conv_args_fp16 )
   ker_args.weights = DW_args->coeff;
   ker_args.output = DW_args->output;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             dw_kernel_forward_fp16, &ker_args);
+  pi_cl_team_fork(NUM_CORES,dw_kernel_forward_fp16, &ker_args);
 
   return;
 }
@@ -73,12 +68,7 @@ void pulp_conv_dw_fp16_bw_param_grads_cl( void * DepthWise_Conv_args_fp16 )
   ker_args.weights = DW_args->coeff;
   ker_args.output = DW_args->output;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             dw_kernel_weight_grad_fp16, &ker_args);
+  pi_cl_team_fork(NUM_CORES,dw_kernel_weight_grad_fp16, &ker_args);
 
 }
 
@@ -93,11 +83,6 @@ void pulp_conv_dw_fp16_bw_input_grads_cl( void * DepthWise_Conv_args_fp16 )
   ker_args.weights = DW_args->coeff;
   ker_args.output = DW_args->output;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             dw_kernel_input_grad_fp16, &ker_args);
+  pi_cl_team_fork(NUM_CORES,dw_kernel_input_grad_fp16, &ker_args);
 
 }

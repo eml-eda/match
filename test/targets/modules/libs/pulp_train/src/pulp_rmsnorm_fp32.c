@@ -9,12 +9,7 @@ void rmsnorm_parallelized_fp32(float* o, float* x, float* weight, float* buffer_
     ss_args.out = buffer_n_cores;
     ss_args.size = size;
     
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             sum_of_squares_fp32_cl, &ss_args);
+    pi_cl_team_fork(NUM_CORES,sum_of_squares_fp32_cl, &ss_args);
 
     float ss = 0;
     for(int i=0; i<NUM_CORES; i++)
@@ -36,12 +31,7 @@ void rmsnorm_parallelized_fp32(float* o, float* x, float* weight, float* buffer_
     ws_args.size = size;
     ws_args.scaling_factor = ss;
 
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             weighted_scaling_fp32_cl, &ws_args);
+    pi_cl_team_fork(NUM_CORES,weighted_scaling_fp32_cl, &ws_args);
 }
 
 void weighted_scaling_fp32_cl(void* weighted_scaling_args) {

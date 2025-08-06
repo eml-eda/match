@@ -54,12 +54,7 @@ void pulp_rnn_fp32_fw_cl(void* Rnn_args)
     printf("\n");
     #endif
 
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-              mm, &matMul_args1);
+    pi_cl_team_fork(NUM_CORES, mm, &matMul_args1);
 
 
     #ifdef DEBUG
@@ -99,12 +94,7 @@ void pulp_rnn_fp32_fw_cl(void* Rnn_args)
     #endif
 
 
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_add, &matMul_args2);
+    pi_cl_team_fork(NUM_CORES,mm_add, &matMul_args2);
 
 
     #ifdef DEBUG
@@ -120,12 +110,7 @@ void pulp_rnn_fp32_fw_cl(void* Rnn_args)
     tanh_arg.dim = N*M;
     tanh_arg.output = matMul_args2.C;
 
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             tanh_prll, &tanh_arg);
+    pi_cl_team_fork(NUM_CORES,tanh_prll, &tanh_arg);
 
 
     #ifdef DEBUG
@@ -212,12 +197,7 @@ void pulp_rnn_fp32_bw_cl(void * Rnn_args)
     transp_args1.N = N;
     transp_args1.M = K;
 
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose, &transp_args1);
+    pi_cl_team_fork(NUM_CORES,transpose, &transp_args1);
 
 
     // matmul setup 1
@@ -248,12 +228,7 @@ void pulp_rnn_fp32_bw_cl(void * Rnn_args)
     #endif
 
   
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_unroll_4x1, &matMul_args1);
+    pi_cl_team_fork(NUM_CORES,mm_unroll_4x1, &matMul_args1);
 
 
     #ifdef DEBUG
@@ -274,12 +249,7 @@ void pulp_rnn_fp32_bw_cl(void * Rnn_args)
     transp_args2.N = N;
     transp_args2.M = M;
 
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose, &transp_args2); 
+    pi_cl_team_fork(NUM_CORES,transpose, &transp_args2); 
 
 
     // matmul setup 2
@@ -292,12 +262,7 @@ void pulp_rnn_fp32_bw_cl(void * Rnn_args)
     matMul_args2.M = M;
     matMul_args2.trans_B = 0;
   
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_unroll_4x1, &matMul_args2);
+    pi_cl_team_fork(NUM_CORES,mm_unroll_4x1, &matMul_args2);
 
 
 
@@ -337,12 +302,7 @@ void pulp_rnn_fp32_bw_cl(void * Rnn_args)
     transp_args3.N = K;
     transp_args3.M = M;
 
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose, &transp_args3); 
+    pi_cl_team_fork(NUM_CORES,transpose, &transp_args3); 
 
 
     // matmul setup 3
@@ -356,12 +316,7 @@ void pulp_rnn_fp32_bw_cl(void * Rnn_args)
     matMul_args3.trans_B = 0;
 
 
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_M_unroll_4x1, &matMul_args3);
+    pi_cl_team_fork(NUM_CORES,mm_M_unroll_4x1, &matMul_args3);
 
  
     #ifdef DEBUG

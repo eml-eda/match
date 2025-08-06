@@ -52,12 +52,7 @@ void pulp_linear_fp32_fw_cl( void * Linear_args )
   man_args.layer_type = LAYER_LINEAR;
   man_args.step_type = STEP_FW;
   man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_linear_fp32_fw_cl_kernel, &man_args);
+  pi_cl_team_fork(NUM_CORES,pulp_linear_fp32_fw_cl_kernel, &man_args);
 
   #ifdef DEBUG 
     printf("\nLinear OutData: %d\n", matMul_args.N);
@@ -119,12 +114,7 @@ void pulp_linear_fp32_bw_param_grads_cl( void * Linear_args )
   man_args.layer_type = LAYER_LINEAR;
   man_args.step_type = STEP_FW;
   man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_linear_fp32_bw_param_grads_cl_kernel, &man_args);
+  pi_cl_team_fork(NUM_CORES,pulp_linear_fp32_bw_param_grads_cl_kernel, &man_args);
 
   #ifdef DEBUG
   printf("\nLinear outDiff\n");
@@ -179,24 +169,14 @@ void pulp_linear_fp32_bw_input_grads_cl( void * Linear_args )
   matMul_args.trans_B = 0;
 
   #ifndef OPTIMIZE
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_M, &matMul_args);
+  pi_cl_team_fork(NUM_CORES,mm_M, &matMul_args);
   #else
   struct mm_manager_args man_args;
   man_args.mm_args = &matMul_args;
   man_args.layer_type = LAYER_LINEAR;
   man_args.step_type = STEP_IN_GRAD;
   man_args.matmul_type = opt_matmul_type; //MATMUL_TYPE;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             mm_manager, &man_args);
+  pi_cl_team_fork(NUM_CORES,mm_manager, &man_args);
   #endif
 
   #ifdef DEBUG 

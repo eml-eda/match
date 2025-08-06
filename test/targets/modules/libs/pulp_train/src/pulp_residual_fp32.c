@@ -43,12 +43,7 @@ void pulp_residualconn_fp32_fw( void * SkipConn_args )
     args_sum.dest = out->data;
     args_sum.size = out->dim;
 
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             vect_sum, &args_sum);
+    pi_cl_team_fork(NUM_CORES,vect_sum, &args_sum);
 
 }
 
@@ -81,12 +76,7 @@ void pulp_sumnode_fp32_bw( void * SkipConn_args )
     args_sum.dest = skip->diff;
     args_sum.size = skip->dim;
 
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             vect_sum, &args_sum);
+    pi_cl_team_fork(NUM_CORES,vect_sum, &args_sum);
    }
 }
 
@@ -112,10 +102,5 @@ void pulp_residualconn_fp32_bw( void * SkipConn_args )
     cpy_args.size = out->dim;
     //there was a call to pi cl team fork copy, &cpy_args);
     cpy_args.to = lout->diff;
-    #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             copy, &cpy_args);
+    pi_cl_team_fork(NUM_CORES,copy, &cpy_args);
 }

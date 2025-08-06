@@ -185,21 +185,11 @@ void HWC_to_CHW_fp16 (void * layout_args)
         tr_args.transp_matrix = buff;
         tr_args.N = H*W;
         tr_args.M = C;
-        #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose_fp16, &tr_args);
+        pi_cl_team_fork(NUM_CORES,transpose_fp16, &tr_args);
         cpy_args.from = buff;
         cpy_args.to = data;
         cpy_args.size = C*H*W;
-        #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             copy_fp16, &cpy_args);
+        pi_cl_team_fork(NUM_CORES,copy_fp16, &cpy_args);
     }
 
     if (transpose_grad == 1) {
@@ -208,21 +198,11 @@ void HWC_to_CHW_fp16 (void * layout_args)
         tr_args.transp_matrix = buff;
         tr_args.N = H*W;
         tr_args.M = C;
-        #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose_fp16, &tr_args);
+        pi_cl_team_fork(NUM_CORES,transpose_fp16, &tr_args);
         cpy_args.from = buff;
         cpy_args.to = grad;
         cpy_args.size = C*H*W;
-        #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             copy_fp16, &cpy_args);    
+        pi_cl_team_fork(NUM_CORES,copy_fp16, &cpy_args);    
     }
 }
 
@@ -250,21 +230,11 @@ void CHW_to_HWC_fp16 (void * layout_args)
         tr_args.transp_matrix = buff;
         tr_args.N = C;
         tr_args.M = H*W;
-        #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose_fp16, &tr_args);
+        pi_cl_team_fork(NUM_CORES,transpose_fp16, &tr_args);
         cpy_args.from = buff;
         cpy_args.to = data;
         cpy_args.size = C*H*W;
-        #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             copy_fp16, &cpy_args);
+        pi_cl_team_fork(NUM_CORES,copy_fp16, &cpy_args);
     }
 
     if (transpose_grad == 1) {
@@ -273,21 +243,11 @@ void CHW_to_HWC_fp16 (void * layout_args)
         tr_args.transp_matrix = buff;
         tr_args.N = C;
         tr_args.M = H*W;
-        #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             transpose_fp16, &tr_args);
+        pi_cl_team_fork(NUM_CORES,transpose_fp16, &tr_args);
         cpy_args.from = buff;
         cpy_args.to = grad;
         cpy_args.size = C*H*W;
-        #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             copy_fp16, &cpy_args);    
+        pi_cl_team_fork(NUM_CORES,copy_fp16, &cpy_args);    
     }
 }
 

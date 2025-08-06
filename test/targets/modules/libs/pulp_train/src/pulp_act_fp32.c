@@ -26,23 +26,13 @@
 void pulp_sigmoid_fp32_fw_cl( void * act_args )
 {
   struct act_args * args = (struct act_args *) act_args;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             sigmoid_core_fw_fp32, act_args);
+  pi_cl_team_fork(NUM_CORES,sigmoid_core_fw_fp32, act_args);
 }
 
 void pulp_sigmoid_fp32_bw_cl( void * act_args )
 {
   struct act_args * args = (struct act_args *) act_args;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             sigmoid_core_bw_fp32, act_args);
+  pi_cl_team_fork(NUM_CORES,sigmoid_core_bw_fp32, act_args);
 }
 
 void sigmoid_core_fw_fp32( void * act_args )
@@ -94,23 +84,13 @@ void sigmoid_core_bw_fp32( void * act_args )
 void pulp_relu_fp32_fw_cl( void * act_args )
 {
   struct act_args * args = (struct act_args *) act_args;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             relu_core_fw_fp32, act_args);
+  pi_cl_team_fork(NUM_CORES,relu_core_fw_fp32, act_args);
 }
 
 void pulp_relu_fp32_bw_cl( void * act_args )
 {
   struct act_args * args = (struct act_args *) act_args;
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             relu_core_bw_fp32, act_args);
+  pi_cl_team_fork(NUM_CORES,relu_core_bw_fp32, act_args);
 }
 
 void relu_core_fw_fp32( void * act_args )
@@ -166,12 +146,7 @@ void pulp_softmax_fp32_fw_cl( void * act_args )
   m_args.maxes = maxes;
   m_args.dim = dim;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_row_max_fp32_cl, &m_args);
+  pi_cl_team_fork(NUM_CORES,pulp_row_max_fp32_cl, &m_args);
   
   struct exp_sum_args e_s_args;
   e_s_args.input = inData;
@@ -180,12 +155,7 @@ void pulp_softmax_fp32_fw_cl( void * act_args )
   e_s_args.dim = dim;
   e_s_args.maxes = maxes;
   
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_exp_sum_fp32_cl, &e_s_args);
+  pi_cl_team_fork(NUM_CORES,pulp_exp_sum_fp32_cl, &e_s_args);
 
 
   struct row_div_args r_d_args;
@@ -193,12 +163,7 @@ void pulp_softmax_fp32_fw_cl( void * act_args )
   r_d_args.sums = sums;
   r_d_args.dim = dim;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_row_div_fp32_cl, &r_d_args);
+  pi_cl_team_fork(NUM_CORES,pulp_row_div_fp32_cl, &r_d_args);
 
   #ifdef DEBUG
     if(pi_core_id()==0){
@@ -285,12 +250,7 @@ void pulp_partial_softmax_simple_fp32_fw_cl( void * act_args )
   m_args.dim = dim;
   m_args.dim2 = dim2;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_row_max_fp32_cl, &m_args);
+  pi_cl_team_fork(NUM_CORES,pulp_row_max_fp32_cl, &m_args);
 
   struct shift_sum_args ss_args;
   ss_args.input = inData;
@@ -300,12 +260,7 @@ void pulp_partial_softmax_simple_fp32_fw_cl( void * act_args )
   ss_args.dim2 = dim2;
   ss_args.maxes = maxes;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_shift_sum_fp32_cl, &ss_args);
+  pi_cl_team_fork(NUM_CORES,pulp_shift_sum_fp32_cl, &ss_args);
 
 
   struct row_div_args r_d_args;
@@ -314,12 +269,7 @@ void pulp_partial_softmax_simple_fp32_fw_cl( void * act_args )
   r_d_args.dim = dim;
   r_d_args.dim2 = dim2;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_row_div_fp32_cl, &r_d_args);
+  pi_cl_team_fork(NUM_CORES,pulp_row_div_fp32_cl, &r_d_args);
 }
 
 void pulp_softmax_fp32_bw_cl( void * act_args )
@@ -565,12 +515,7 @@ void pulp_vector_softmax_fp32(float* out, float* in, float* buffer_n_cores, unsi
   ma.maxes = buffer_n_cores;
   ma.dim = size;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_max_fp32_cl, &ma);
+  pi_cl_team_fork(NUM_CORES,pulp_max_fp32_cl, &ma);
 
   float max = ma.maxes[0];
 
@@ -585,12 +530,7 @@ void pulp_vector_softmax_fp32(float* out, float* in, float* buffer_n_cores, unsi
   vesa.sums = buffer_n_cores;
   vesa.dim = size;
   
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             vector_exp_sum_fp32_cl, &vesa);
+  pi_cl_team_fork(NUM_CORES,vector_exp_sum_fp32_cl, &vesa);
 
   float sum = 0;
 
@@ -602,12 +542,7 @@ void pulp_vector_softmax_fp32(float* out, float* in, float* buffer_n_cores, unsi
   da.n = sum;
   da.dim = size;
 
-  #ifdef GAP_SDK
-            pi_team_offload_preset(
-            #else
-            pi_cl_team_fork(NUM_CORES,
-            #endif
-             pulp_div_fp32_cl, &da); 
+  pi_cl_team_fork(NUM_CORES,pulp_div_fp32_cl, &da); 
 }
 
 
