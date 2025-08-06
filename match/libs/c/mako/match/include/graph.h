@@ -28,6 +28,8 @@
 // debugging flags
 #define __${model_name}_GRAPH_DEBUG__ ${int(debug)}
 #define __${model_name}_FALLBACK_GRAPH_DEBUG__ ${int(debug_fallback)}
+//gap measuriments flags
+//#define USE_GPIO
 #if __${model_name}_GRAPH_DEBUG__
 % for activation_name, activation_checksum in checksums.items():
     % if map_names[activation_name][2] in nodes_map:

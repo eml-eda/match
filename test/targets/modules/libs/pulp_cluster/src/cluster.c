@@ -31,9 +31,9 @@ void cluster_lib_init_dma_transfers(){
 }
 
 void cluster_lib_init(MatchCtx* ctx){
-    #ifdef GAP_SDK
-    pi_team_config_offload(NUM_CORES);
-    #endif
+//    #ifdef GAP_SDK
+//    pi_team_config_offload(NUM_CORES);
+//    #endif
     cluster_lib_init_dma_transfers();
 }
 
@@ -360,9 +360,9 @@ void wait_l1_dma_transfers(MatchCtx* ctx){
 }
 
 void wait_pulp_nn_computation(MatchCtx* ctx){
-    #ifdef GAP_SDK
-    pi_team_offload_wait();
-    #endif
+//    #ifdef GAP_SDK
+//    pi_team_offload_wait();
+//    #endif
 }
 /*
     PULP-NN Wrapper

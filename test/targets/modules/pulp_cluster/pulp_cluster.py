@@ -13,7 +13,8 @@ from match.tensor.tensor import MatchTensor
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
 from match.partition.partitioning_pattern import PartitioningPattern
 
-TRAIN_USE_ONLY_FC = True  # Set to True to use only fully connected layers in training patterns
+TRAIN_USE_ONLY_FC = False  # Set to True to use only fully connected layers in training patterns
+TRAIN_OFFLOAD_TO_PULP = True  # Set to True to offload training patterns to PULP cluster
 
 class PulpCluster(ExecModule):
     def __init__(self, num_cores: int=8, l1_kb_size: int=64, l2_kb_size: int=512,
@@ -295,7 +296,7 @@ class PulpCluster(ExecModule):
 
         # checks for training
         def std_convs_fp32(node):
-            if TRAIN_USE_ONLY_FC:
+            if TRAIN_USE_ONLY_FC or (not TRAIN_OFFLOAD_TO_PULP):
                 return False
             conv = add_checks_get_first_op(node, "nn.conv2d")
             if conv.checked_type.dtype != 'float32':
@@ -308,7 +309,7 @@ class PulpCluster(ExecModule):
             return True
         
         def dw_convs_fp32_pulp(node):
-            if TRAIN_USE_ONLY_FC:
+            if TRAIN_USE_ONLY_FC or (not TRAIN_OFFLOAD_TO_PULP):
                 return False
             conv = add_checks_get_first_op(node, "nn.conv2d")
             out_chs = conv.args[1].checked_type.shape[0]

@@ -3,6 +3,7 @@ from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
 from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM
 from match.transform.requant import MatchRequantRewriter
+from match.transform.conv_pw_strided import MatchConv2dPWStrided
 from .modules.ne16_accelerator.accelerator import NE16Accelerator
 from .modules.pulp_cluster.pulp_cluster import PulpCluster
 from tvm import relay
@@ -54,7 +55,7 @@ class PulpOpen(MatchTarget):
         self.timestamp_to_ms = ""
         self.timestamp_type = "int"
         # initialization and cleaning
-        self.init_funcs = ["pulp_cluster_init"]
+        self.init_funcs = ["pulp_open_init", "pulp_cluster_init"]
         self.clean_funcs = ["pulp_cluster_close"]
         # memory management ones
         self.alloc_fn = "malloc_wrapper"
@@ -70,6 +71,7 @@ class PulpOpen(MatchTarget):
         return [
             ("requant", MatchRequantRewriter()),
             #("layout", MatchLayoutNCHWtoNHWCTVM),
+            ("remove_conv2dpw_with_stride", MatchConv2dPWStrided()),
         ]
     
     def host_memories(self):

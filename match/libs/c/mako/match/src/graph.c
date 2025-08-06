@@ -35,6 +35,15 @@ int ${mem_tensor.name}_cp_from_ext_mem_cyc;
 int ${mem_tensor.name}_cp_to_ext_mem_cyc;
 % endfor
 #endif
+// GPIO variables
+#ifdef USE_GPIO 
+    pi_gpio_e gpio_test_0, gpio_test_1, gpio_test_2;
+    #define TEST_GPIO_0 PI_GPIO_A89
+    #define TEST_GPIO_1 PI_GPIO_A68
+    #define TEST_GPIO_2 PI_GPIO_A52
+    #define WRITE_GPIO(gpio_pin_x, x) {hal_compiler_barrier(); pi_gpio_pin_write(gpio_pin_x, x); hal_compiler_barrier();}
+    #define SWITCH_GPIO(gpio_pin_x) {hal_compiler_barrier(); pi_gpio_pin_toggle(gpio_pin_x); hal_compiler_barrier();}
+#endif
 
 void match_${model_name}_graph_load_files(void* match_mem, void* match_ext_mem){
     <% ext_mem_offset = 0 %>
@@ -87,6 +96,23 @@ int match_${model_name}_run_graph(
     ${target.timestamp_type} start,end;
     double time_elapsed_ms = 0.0f;
 #endif
+#ifdef USE_GPIO
+    //struct pi_gpio_conf gpio_conf = {0};
+    gpio_test_0 = TEST_GPIO_0;
+    pi_pad_function_set(PI_PAD_089, 1);
+    pi_gpio_pin_configure(gpio_test_0, PI_GPIO_OUTPUT);
+    WRITE_GPIO(gpio_test_0, 1);
+
+    gpio_test_1 = TEST_GPIO_1;
+    pi_pad_function_set(PI_PAD_068, 1);
+    pi_gpio_pin_configure(gpio_test_1, PI_GPIO_OUTPUT);
+    WRITE_GPIO(gpio_test_1, 1);
+
+    gpio_test_2 = TEST_GPIO_2;
+    pi_pad_function_set(PI_PAD_052, 1);
+    pi_gpio_pin_configure(gpio_test_2, PI_GPIO_OUTPUT);
+    WRITE_GPIO(gpio_test_2, 1);
+#endif
 % if ext_mem_needed_bytes>0:
     void* match_ext_mem = ${target.allocate_ext_mem}(${ext_mem_needed_bytes});
     % else:
@@ -111,6 +137,9 @@ int match_${model_name}_run_graph(
     end = ${target.end_get_timestamp_api}();
     constants_loading_cycles = (int)(end - start);
     #endif
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_0, 0);
+    #endif
     % for node in nodes:
     % for (free_buffer_off, free_buffer_size, free_buffer_name) in node.free_buffers:
     // alloc buffer ${free_buffer_name} of size ${free_buffer_size} at offset ${free_buffer_off}
@@ -130,7 +159,13 @@ int match_${model_name}_run_graph(
     #if __${model_name}_GRAPH_PROFILE__
     start = ${target.start_get_timestamp_api}();
     #endif
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_2, 0);
+    #endif
     ${target.load_to_ext_mem_fn}(${mem_tensor.get_pt}, ${mem_tensor.get_ext_pt},${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_2, 1);
+    #endif
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
     ${mem_tensor.name}_cp_to_ext_mem_cyc = (int)(end - start);
@@ -146,7 +181,13 @@ int match_${model_name}_run_graph(
     #if __${model_name}_GRAPH_PROFILE__
     start = ${target.start_get_timestamp_api}();
     #endif
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_2, 0);
+    #endif
     ${target.load_from_ext_mem_fn}(${mem_tensor.get_pt}, ${mem_tensor.get_ext_pt},${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_2, 1);
+    #endif
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
     ${mem_tensor.name}_cp_from_ext_mem_cyc = (int)(end - start);
@@ -173,6 +214,9 @@ int match_${model_name}_run_graph(
     #endif
     if( ${node.fn_name}(tvm_fallback_args_, tvm_fallback_arg_type_ids_, ${len(node.inputs)+len(node.outputs)},
                         tvm_fallback_out_ret_value_, tvm_fallback_out_ret_tcode_, tvm_fallback_resource_handle_)) return -1;
+    #ifdef USE_GPIO
+    SWITCH_GPIO(gpio_test_1);
+    #endif
     #if __${model_name}_FALLBACK_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
     time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
@@ -195,6 +239,9 @@ int match_${model_name}_run_graph(
             % endfor
         )
     ) return -1;
+    #ifdef USE_GPIO
+    SWITCH_GPIO(gpio_test_1);
+    #endif
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
     time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
@@ -226,13 +273,22 @@ int match_${model_name}_run_graph(
     #if __${model_name}_GRAPH_PROFILE__
     start = ${target.start_get_timestamp_api}();
     #endif
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_2, 0);
+    #endif
     ${target.load_to_ext_mem_fn}(${mem_tensor.get_pt}, ${mem_tensor.get_ext_pt}, ${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_2, 1);
+    #endif
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
     ${mem_tensor.name}_cp_to_ext_mem_cyc = (int)(end - start);
     // sum_mem_transfer_cyc += ${mem_tensor.name}_cp_to_ext_mem_cyc;
     #endif
     % endfor
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_0, 1);
+    #endif
 
     #if __${model_name}_FALLBACK_GRAPH_PROFILE__
     match_${model_name}_graph_profile_summary();
