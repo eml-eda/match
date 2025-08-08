@@ -217,16 +217,42 @@ void pulp_nn_wrapper(MatchCtx* ctx){
             break;
 
         case conv2d_transpose:
-            pi_cl_team_fork(NUM_CORES, odl_naive_parallel_conv2d_transpose_fp32, ctx);
+            // Intelligent kernel selection based on kernel size and stride
+            {
+                MatchConv2DTransposeAttrs* conv_attrs = (MatchConv2DTransposeAttrs*)ctx->ops->ops[0].attrs;
+                int kernel_h = conv_attrs->kernel_size[0];
+                int kernel_w = conv_attrs->kernel_size[1];
+                int* strides = conv_attrs->strides;
+                int* padding = conv_attrs->padding;
+                int is_dw = conv_attrs->depthwise;
+                void* im2col_pt = get_im2col_pt();
+                if (kernel_h == 1 && kernel_w == 1 && strides[0] == 1 && strides[1] == 1 && !is_dw
+                    && padding[0] == 0 && padding[1] == 0 && padding[2] == 0 && padding[3] == 0)
+                    pi_cl_team_fork(NUM_CORES, odl_naive_parallel_conv2d_transpose_pw_stride_1_fp32, ctx);
+                else if (strides[0] == 2 && strides[1] == 2)
+                    pi_cl_team_fork(NUM_CORES, odl_naive_parallel_conv2d_transpose_stride_2_fp32, ctx);
+                else
+                    pi_cl_team_fork(NUM_CORES, odl_naive_parallel_conv2d_transpose_fp32, ctx);
+            }
             break;
         
-        case conv2d_train_bw:
-            if(get_im2col_pt())
-                pi_cl_team_fork(NUM_CORES, odl_optimized_conv2d_bw_fp32_im2col, ctx);
-            else
-                pi_cl_team_fork(NUM_CORES, odl_naive_parallel_conv2d_bw_fp32, ctx);
+        case conv2d_grad_params:
+            {
+                MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
+                int is_dw = conv_attrs->depthwise;
+                int is_pw = conv_attrs->kernel_size[0] == 1 && conv_attrs->kernel_size[1] == 1;
+                void* im2col_pt = get_im2col_pt();
+                if(is_dw)
+                    pi_cl_team_fork(NUM_CORES, odl_optimized_parallel_conv2d_bw_dw_fp32, ctx);
+                else if(!is_pw && im2col_pt)
+                    pi_cl_team_fork(NUM_CORES, odl_fast_conv2d_bw_fp32_im2col, ctx);
+                else if(is_pw || im2col_pt)
+                    pulp_train_conv2d_bw_fp32_wrapper(ctx);
+                else
+                    pi_cl_team_fork(NUM_CORES, odl_fast_parallel_conv2d_bw_fp32, ctx);
+            }
             break;
-        
+
         default:
             break;
     }

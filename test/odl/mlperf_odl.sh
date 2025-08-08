@@ -64,7 +64,7 @@ execute_pulp_open_test() {
 models=("kws" "vww" "imcls")
 targets=("GAP9")
 directions=("bw")
-NAME_BASE_DIR="acceltrans_fix_io_fix_consts_test"
+NAME_BASE_DIR="convbw_test"
 # Map target names to directory names
 declare -A target_dirs
 target_dirs["pulp_open"]="popen"

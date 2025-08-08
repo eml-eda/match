@@ -55,6 +55,24 @@
             "justMyCode": false
         },
         {
+            "name": "GAP9 TRAIN IMCLS FW",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_odl.py",
+            "args": [
+                "--executor"
+                , "graph"
+                , "--target"
+                , "GAP9"
+                , "--relay_model"
+                , "${workspaceFolder}/test/models/odl/imcls/model_graph_fw.relay"
+                , "--relay_params_filename"
+                , "${workspaceFolder}/test/models/odl/imcls/model_params.txt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
             "name": "GAP9 TRAIN IMCLS BW",
             "type": "debugpy",
             "request": "launch",
@@ -107,6 +125,25 @@
             ],
             "console": "integratedTerminal",
             "justMyCode": false
+        },
+        {
+            "name": "DEFAULT IMCLS FW",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_odl.py",
+            "args": [
+                "--executor"
+                , "graph"
+                , "--target"
+                , "default"
+                , "--relay_model"
+                , "${workspaceFolder}/test/models/odl/vww/model_graph_fw.relay"
+                , "--relay_params_filename"
+                , "${workspaceFolder}/test/models/odl/vww/model_params.txt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
         }
+        
     ]
 }
