@@ -1,6 +1,6 @@
 from math import ceil, prod
 from typing import Callable
-
+from copy import deepcopy
 from zigzag.classes.cost_model.cost_model import CostModelEvaluation
 from zigzag.classes.mapping.temporal.temporal_mapping import TemporalMapping
 from zigzag.classes.opt.temporal.loma.engine import NoValidLoopOrderingFoundException
@@ -26,6 +26,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         self.HAS_ANY_ADDITIONAL_BUFFER = has_any_additional_buffer
         self.allocated_buffers = []
         self.max_num_buffers = 0
+        self.set_max_num_buffers = False
         temporal_mapping_dict=temporal_mapping.mapping_dic_origin
         operands_=temporal_mapping.operand_list
         constrained_temporal_mapping_dict,valid=self.adjust_temporal_mapping(temporal_mapping_dict,operands_,layer)
@@ -117,6 +118,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
 
     def add_constraints_on_temp_mapping_to_fit_buffers(self, constrained_temporal_mapping_dict):
         valid = False
+        original_temporal_mapping_dict = deepcopy(constrained_temporal_mapping_dict)
         # print(f"Trying to fit buffers in temporal mapping {constrained_temporal_mapping_dict}")
         for op in ["O"] + sorted([op_ for op_ in self.operands], reverse=True):
             lps_in_inner_level = constrained_temporal_mapping_dict[op][0]
@@ -139,6 +141,13 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                         break
             if valid:
                 break
+        if not valid:
+            original_temporal_mapping_dict_, tm_valid = self.adjust_temporal_mapping(original_temporal_mapping_dict, self.operands, self.layer)
+            if tm_valid:
+                self.temporal_mapping = TemporalMapping(
+                    temporal_mapping_dict=original_temporal_mapping_dict_,
+                    layer_node=self.layer
+                )
     
     def calc_sizes_per_mem_level(self):
         self.size_per_mem_level = dict()
@@ -253,8 +262,9 @@ class ZigZagMatchCostModel(CostModelEvaluation):
                 engine="ZigZag"
             )
             new_buffers = []
-            if self.max_num_buffers<0:
+            if not self.set_max_num_buffers:
                 self.max_num_buffers = len(schedule.buffers)
+                self.set_max_num_buffers = True
             for buff_tensor in sorted(schedule.buffers, key=lambda buff: (-buff.required, -buff.num_bytes)):
                 var_mem_bytes-=buff_tensor.num_bytes
                 if var_mem_bytes>=0:

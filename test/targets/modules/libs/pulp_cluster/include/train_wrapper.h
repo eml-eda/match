@@ -10,4 +10,6 @@
 void pulp_train_conv2d_fp32_wrapper(void* args);
 void pulp_train_conv2ddw_fp32_wrapper(void* args);
 
+void pulp_train_conv2d_bw_fp32_wrapper(void* args);
+
 #endif // __PULP_CLUSTER_TRAIN_WRAPPER_H__

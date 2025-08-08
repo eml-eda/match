@@ -12,6 +12,7 @@ from match.cost_model.examples.pulp_cluster import PulpClusterCostModel
 from match.target.memory_inst import MemoryInst
 from match.tensor.tensor import MatchTensor
 from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
+from tvm.relay import Constant
 from match.partition.partitioning_pattern import PartitioningPattern
 
 USE_ONLY_FC = False  # Set to True to use only fully connected layers in training patterns
@@ -48,7 +49,7 @@ class PulpCluster(ExecModule):
         ]
 
     def zigzag_optimal_spatial_mapping_def(self, match_node: MatchNode=None, pattern_name = "conv2d"):
-        if pattern_name == "conv2d_train_bw":
+        if pattern_name == "conv2d_grad_params":
             return [
                 # ("OY",2),("OX",2),("K",8)
                 ("K",self.FULL_DIM), ("B",self.FULL_DIM)
@@ -88,7 +89,7 @@ class PulpCluster(ExecModule):
         return PulpClusterCostModel
 
     def update_constants(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
-        if pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_train_bw", "conv2d_transpose"]:
+        if pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_grad_params", "conv2d_transpose"]:
             return
         for w_tensor in match_node.const_tensors.values():
             if "dense" in w_tensor.name and pattern_name=="flatten_dense_out":
@@ -113,7 +114,7 @@ class PulpCluster(ExecModule):
     def set_buffers_for_schedule(self, match_node: MatchNode=None, schedule: MatchSchedule=None,
                                  pattern_name: str="conv2d", engine: str="ZigZag"):
         if engine=="ZigZag" and "conv2d" in pattern_name and pattern_name not in "pointwise_conv2d":
-            is_pulp_train_conv = pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_transpose"]
+            is_pulp_train_conv = pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_transpose", "conv2d_grad_params"]
             inp_tensor: MatchTensor = match_node.var_tensors[match_node.var_names[0]]
             out_tensor: MatchTensor = match_node.output_tensors[match_node.output_names[0]]
             if pattern_name == "conv2d_transpose":
@@ -153,22 +154,8 @@ class PulpCluster(ExecModule):
                         ((tile_inp_w - filter_shape[1] + padding[1] + padding[3] + stride[1]) // stride[1])
                     ) * 4
                 # print(f"IM2COL SIZE L1: {im2col_size_l1/1024} KB")
-            elif pattern_name=="conv2ddw_train":
-                pass
-            elif pattern_name=="conv2d_transpose":
-                prefer_pulp_train_wrt_odl_lib = False
-                if prefer_pulp_train_wrt_odl_lib:
-                    # buffer_size_bytes = pW * pH * C_out * W_in * H_in * sizeof(float)
-                    tile_inp_c = schedule.tensor_tiles[inp_tensor.name][1].tiled_dims[1].size
-                    tile_out_chs = schedule.tensor_tiles[out_tensor.name][1].tiled_dims[1].size
-                    tile_inp_h = schedule.tensor_tiles[inp_tensor.name][1].tiled_dims[2].size
-                    tile_inp_w = schedule.tensor_tiles[inp_tensor.name][1].tiled_dims[3].size
-                    im2col_size_l1 = (
-                        filter_shape[0] * filter_shape[1] * tile_out_chs *
-                        tile_inp_h * tile_inp_w
-                    ) * 4 if filter_shape[0] > 1 or filter_shape[1] > 1 else 0
-                    bt_buffer_size_l1 = (tile_inp_c * tile_out_chs * filter_shape[0] * filter_shape[1]) * 4
-            elif pattern_name=="conv2d_train_bw" and not conv.depthwise:
+
+            elif pattern_name=="conv2d_grad_params" and not conv.depthwise and filter_shape!= (1,1):
                 # int im2col_rows = kernel_h * kernel_w * inp_ch;
                 # int im2col_cols = out_height * out_width;
                 tile_out_h = schedule.tensor_tiles[out_tensor.name][1].tiled_dims[2].size
@@ -223,7 +210,7 @@ class PulpCluster(ExecModule):
     def sync_apis_def(self, sync_apis: SyncApis=None, pattern_name: str="conv2d"):
         sync_apis.wait_load = "wait_l1_dma_transfers"
         sync_apis.wait_store = "wait_l1_dma_transfers"
-        if pattern_name not in ["conv2d_train", "conv2ddw_train", "conv2d_transpose", "conv2d_train_bw"]:
+        if pattern_name not in ["conv2d_train", "conv2ddw_train", "conv2d_transpose", "conv2d_grad_params"]:
             sync_apis.wait_tile_computation = "wait_pulp_nn_computation"
         else:
             sync_apis.wait_tile_computation = ""
@@ -443,6 +430,8 @@ class PulpCluster(ExecModule):
                 return False
             conv2d = add_checks_get_first_op(node, "nn.conv2d")
             out_chs = conv2d.args[1].checked_type.shape[0]
+            if isinstance(conv2d.args[1], Constant):
+                return False
             if conv2d.attrs.data_layout != "NCHW":
                 return False
             if conv2d.checked_type.dtype != 'float32':
@@ -464,6 +453,6 @@ class PulpCluster(ExecModule):
             PartitioningPattern(name="conv2d_train", pattern=conv2d_fw, additional_checks=std_convs_fp32),
             PartitioningPattern(name="conv2ddw_train", pattern=conv2d_fw, additional_checks=dw_convs_fp32_pulp),
             PartitioningPattern(name="conv2d_transpose", pattern=conv2d_transpose_ptrain_pt, additional_checks=conv2d_transpose_ptrain_check),
-            PartitioningPattern(name="conv2d_train_bw", pattern=conv2d_bw, additional_checks=conv2d_bw_check),
+            PartitioningPattern(name="conv2d_grad_params", pattern=conv2d_bw, additional_checks=conv2d_bw_check),
             # PartitioningPattern(name="bw_instance_norm", pattern=bw_instance_norm_pt),
         ]
