@@ -81,12 +81,12 @@ class GAP9(MatchTarget):
 
     def network_transformations(self, opts):
         return [
-            ("test", GAPopCount()),
+#            ("test", GAPopCount()),
             ("requant", MatchRequantRewriter()),
             # ("layout", MatchLayoutNCHWtoNHWCTVM),
             ("remove_conv2dpw_with_stride", MatchConv2dPWStrided()),
         ]
-    
+
     def host_memories(self):
         return [
             MemoryInst(name="L2_SHARED_MEM",k_bytes=L2_SHARED_MEM_KB_SIZE),
