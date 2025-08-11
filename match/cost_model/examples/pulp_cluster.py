@@ -120,7 +120,7 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
             return temporal_mapping_dict,valid
 
     def def_transfer_cost(self):
-        if self.pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_train_bw", "conv2d_transpose"]:
+        if self.pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_grad_params", "conv2d_transpose"]:
             return super().def_transfer_cost()
         USE_SIMPLER_MODEL = False
         if USE_SIMPLER_MODEL:
@@ -325,7 +325,9 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         return latency
     
     def def_overall_execution(self):
-        if self.pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_train_bw", "conv2d_transpose"]:
-            self.overall_latency_single_buffer_match_no_comp()
-        else:
-            self.overall_latency_async()
+        self.overall_latency_single_buffer_match_no_comp()
+        # training patterns
+        # if self.pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_grad_params", "conv2d_transpose"]:
+        #     self.overall_latency_single_buffer_match_no_comp()
+        # else:
+        #     self.overall_latency_async()
