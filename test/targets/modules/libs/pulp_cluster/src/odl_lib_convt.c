@@ -103,7 +103,7 @@ void odl_naive_parallel_conv2d_transpose_stride_1_fp32(void* args){
                                         h_out_idx, w_out_idx, h_ker_idx, w_ker_idx, h_act_idx, w_act_idx);
                             #endif
                             for (uint32_t c_acts_idx=0; c_acts_idx<inp_ch; c_acts_idx++){
-                                int params_idx = (kernel_h - 1 - h_ker_idx) * kernel_w + (kernel_w - 1 - w_ker_idx) + (c_acts_idx*kernel_h*kernel_w*out_ch) + (c_out_idx*kernel_h*kernel_w);
+                                int params_idx = (kernel_h - 1 - h_ker_idx) * kernel_w + (kernel_w - 1 - w_ker_idx) + (c_acts_idx*kernel_h*kernel_w*out_ch_params) + (c_out_idx*kernel_h*kernel_w);
                                 // int params_idx = (ker_spat_size-w_ker_idx-h_ker_idx*kernel_w) + c_out_idx*kernel_w*kernel_h + c_acts_idx*kernel_w*kernel_h*out_ch_params;
                                 int act_idx = w_act_idx + h_act_idx*inp_width + c_acts_idx*inp_height*inp_width;
                                 #ifdef ODL_DEBUG_KERNEL
@@ -275,7 +275,7 @@ void odl_naive_parallel_conv2d_transpose_stride_2_fp32(void* args){
                                         h_out_idx, w_out_idx, h_ker_idx, w_ker_idx, h_act_idx, w_act_idx);
                             #endif
                             for (uint32_t c_acts_idx=0; c_acts_idx<inp_ch; c_acts_idx++){
-                                int params_idx = (kernel_h - 1 - h_ker_idx) * kernel_w + (kernel_w - 1 - w_ker_idx) + (c_acts_idx*kernel_h*kernel_w*out_ch) + (c_out_idx*kernel_h*kernel_w);
+                                int params_idx = (kernel_h - 1 - h_ker_idx) * kernel_w + (kernel_w - 1 - w_ker_idx) + (c_acts_idx*kernel_h*kernel_w*out_ch_params) + (c_out_idx*kernel_h*kernel_w);
                                 // int params_idx = (ker_spat_size-w_ker_idx-h_ker_idx*kernel_w) + c_out_idx*kernel_w*kernel_h + c_acts_idx*kernel_w*kernel_h*out_ch_params;
                                 int act_idx = w_act_idx + h_act_idx*inp_width + c_acts_idx*inp_height*inp_width;
                                 #ifdef ODL_DEBUG_KERNEL
