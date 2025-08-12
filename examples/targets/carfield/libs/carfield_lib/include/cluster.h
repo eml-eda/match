@@ -56,7 +56,7 @@ void* init_l1_scratchpad_memory(MatchCtx* ctx);
 int handle_dma_transfer(
     MatchCtx* ctx, MatchTensor* tensor,
     void* tensor_l2_pt, void* tensor_l1_pt,
-    int match_transfer_type, int match_tensor_type,
+    int match_transfer_type,
     int ext_mem, int int_mem 
 );
 
@@ -81,6 +81,8 @@ void pulp_nn_hoparallel_conv2d_wrapper(MatchCtx* ctx);
 void pulp_nn_add_wrapper(MatchCtx* ctx);
 
 void pulp_nn_dense_fp16_wrapper(MatchCtx* ctx);
+
+void pulp_nn_conv3d_wrapper(void* args);
 
 void pulp_nn_wrapper(MatchCtx* ctx);
 
