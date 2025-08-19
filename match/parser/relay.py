@@ -13,6 +13,7 @@ class MatchRelayParser(MatchTVMParser):
             "nn.conv2d": self.visit_conv_2d,
             "nn.conv2d_transpose": self.visit_conv_2d_transpose,
             "nn.conv3d": self.visit_conv_3d,
+            "nn.instance_norm": self.visit_instance_norm,
             "cast": self.visit_cast,
             "right_shift": self.visit_right_shift,
             "clip": self.visit_clip,
@@ -21,11 +22,36 @@ class MatchRelayParser(MatchTVMParser):
             "add": self.visit_add,
             "multiply": self.visit_multiply,
             "nn.relu": self.visit_relu,
+            "sqrt": self.visit_sqrt,
+            "divide": self.visit_divide,
+            "repeat": self.visit_repeat,
+            "reshape": self.visit_reshape,
+            "sum": self.visit_sum,
+            "subtract": self.visit_subtract,
+            "rsqrt": self.visit_rsqrt,
         }
-    
-    def visit_relu(self, call, attrs, name):
+
+    def visit_rsqrt(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call, call.args[0], 0)
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+        self.infer_layout_if_empty(inp_tensor)
+        out_tensor = MatchTensor(name=name, dims=inp_tensor.dims, dtype=inp_tensor.dtype, tensor_type="output", layout=inp_tensor.layout)
+        self.calls_tensors[name] = out_tensor
+        op = ops.MatchOpRsqrt(
+            var_arr=[inp_tensor],
+            out_arr=[out_tensor],
+        )
+        self.update_match_node(op=op, call=call, name=name)
+
+    def visit_subtract(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call,call.args[1],1)
+        self.update_if_intermediate_tensor(tensor=w_tensor, name=w_name)
+        inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type = self.rearrange_if_const_first(
+            inp_name=inp_name, inp_tensor=inp_tensor, inp_type=inp_type,
+            w_name=w_name, w_tensor=w_tensor, weights_type=weights_type
+        )
         if inp_tensor.layout=="":
             if len(inp_tensor.dims)==4:
                 inp_tensor.layout = "NCHW"
@@ -35,6 +61,23 @@ class MatchRelayParser(MatchTVMParser):
                 inp_tensor.layout = "NC"
             elif len(inp_tensor.dims)==1:
                 inp_tensor.layout = "N"
+        odtype = call.checked_type.dtype
+        out_dims, axeses = self.check_broadcasting_and_get_out_dims(inp_tensor=inp_tensor, w_tensor=w_tensor)
+        out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(odtype),tensor_type="output", layout=inp_tensor.layout)
+        self.calls_tensors[name]=out_tensor
+        op=ops.MatchOpSubtract(
+            out_arr=[out_tensor],
+            var_arr=[inp_tensor],
+            const_arr=[w_tensor],
+            axis=-1 if len(axeses)>1 or len(axeses)==0 else axeses[0],
+            subtractor=int(w_tensor.data) if w_tensor.tensor_type=="const" and len(w_tensor.dims)==0 else 0,
+        )
+        self.update_match_node(op=op,call=call,name=name)
+
+    def visit_relu(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+        self.infer_layout_if_empty(inp_tensor)
         out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op = ops.MatchOpReLU(
@@ -46,15 +89,7 @@ class MatchRelayParser(MatchTVMParser):
     def visit_cast(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
-        if inp_tensor.layout=="":
-            if len(inp_tensor.dims)==4:
-                inp_tensor.layout = "NCHW"
-            elif len(inp_tensor.dims)==3:
-                inp_tensor.layout = "NCH"
-            elif len(inp_tensor.dims)==2:
-                inp_tensor.layout = "NC"
-            elif len(inp_tensor.dims)==1:
-                inp_tensor.layout = "N"
+        self.infer_layout_if_empty(inp_tensor)
         out_tensor = MatchTensor(name=name,dims=inp_tensor.dims, dtype=np.dtype(attrs.dtype),
                                  tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
@@ -81,15 +116,7 @@ class MatchRelayParser(MatchTVMParser):
     def visit_clip(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)
         self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
-        if inp_tensor.layout=="":
-            if len(inp_tensor.dims)==4:
-                inp_tensor.layout = "NCHW"
-            elif len(inp_tensor.dims)==3:
-                inp_tensor.layout = "NCH"
-            elif len(inp_tensor.dims)==2:
-                inp_tensor.layout = "NC"
-            elif len(inp_tensor.dims)==1:
-                inp_tensor.layout = "N"
+        self.infer_layout_if_empty(inp_tensor)
         out_tensor = MatchTensor(name=name,dims=inp_tensor.dims,dtype=inp_tensor.dtype,tensor_type="output", layout=inp_tensor.layout)
         self.calls_tensors[name]=out_tensor
         op = ops.MatchOpClip(
@@ -240,6 +267,218 @@ class MatchRelayParser(MatchTVMParser):
             adder=int(w_tensor.data) if w_tensor.tensor_type=="const" and len(w_tensor.dims)==0 else 0,
         )
         self.update_match_node(op=op,call=call,name=name)
+
+    def visit_sqrt(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call, call.args[0], 0)
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+        self.infer_layout_if_empty(inp_tensor)
+        out_tensor = MatchTensor(name=name, dims=inp_tensor.dims, dtype=inp_tensor.dtype, 
+                                tensor_type="output", layout=inp_tensor.layout)
+        self.calls_tensors[name] = out_tensor
+        op = ops.MatchOpSqrt(
+            var_arr=[inp_tensor],
+            out_arr=[out_tensor],
+        )
+        self.update_match_node(op=op, call=call, name=name)
+
+    def visit_divide(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call, call.args[0], 0)
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+        w_name, w_tensor, weights_type = self.get_name_and_tensor_of_arg(call, call.args[1], 1)
+        self.update_if_intermediate_tensor(tensor=w_tensor, name=w_name)
+        inp_name, inp_tensor, inp_type, w_name, w_tensor, weights_type = self.rearrange_if_const_first(
+            inp_name=inp_name, inp_tensor=inp_tensor, inp_type=inp_type,
+            w_name=w_name, w_tensor=w_tensor, weights_type=weights_type
+        )
+        self.infer_layout_if_empty(inp_tensor)
+        self.infer_layout_if_empty(w_tensor)
+        odtype = call.checked_type.dtype
+        out_dims, axeses = self.check_broadcasting_and_get_out_dims(inp_tensor=inp_tensor, w_tensor=w_tensor)
+        out_tensor = MatchTensor(name=name, dims=out_dims, dtype=np.dtype(odtype), 
+                                tensor_type="output", layout=inp_tensor.layout)
+        self.calls_tensors[name] = out_tensor
+        op = ops.MatchOpDivide(
+            out_arr=[out_tensor],
+            var_arr=[inp_tensor],
+            const_arr=[w_tensor],
+            axis=-1 if len(axeses) > 1 or len(axeses) == 0 else axeses[0],
+        )
+        self.update_match_node(op=op, call=call, name=name)
+
+    def visit_repeat(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call, call.args[0], 0)
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+        self.infer_layout_if_empty(inp_tensor)
+        
+        # Get repeat parameters
+        repeats = int(attrs.repeats) if hasattr(attrs, 'repeats') else 1
+        axis = int(attrs.axis) if hasattr(attrs, 'axis') else 0
+        
+        # Calculate output dimensions
+        out_dims = inp_tensor.dims.copy()
+        if 0 <= axis < len(out_dims) and repeats > 1:
+            # Update the dimension size at the specified axis
+            out_dims[axis] = MatchDim(
+                name=f"{name}_repeat_dim_{axis}", 
+                size=inp_tensor.dims[axis].size * repeats
+            )
+            inp_tensor.dims[axis].dim_dependency = DimDependency(
+                size_dependencies=[(inp_tensor.dims[axis], 1/repeats)],
+                idx_dependencies=[(inp_tensor.dims[axis], 1/repeats)]
+            )
+            self.node_all_dims[out_dims[axis].name] = out_dims[axis]
+        
+        out_tensor = MatchTensor(name=name, dims=out_dims, dtype=inp_tensor.dtype,
+                                tensor_type="output", layout=inp_tensor.layout)
+        self.calls_tensors[name] = out_tensor
+        op = ops.MatchOpRepeat(
+            var_arr=[inp_tensor],
+            out_arr=[out_tensor],
+            repeats=repeats,
+            axis=axis,
+        )
+        self.update_match_node(op=op, call=call, name=name)
+
+    def visit_instance_norm(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call, call.args[0], 0)
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+        self.infer_layout_if_empty(inp_tensor)
+
+        # scale (gamma) and shift (beta) are optional in relay.nn.instance_norm signature but
+        # in our patterns we expect them (see fw_instance_norm pattern). Fetch them if present.
+        gamma_tensor = beta_tensor = None
+        const_arr = []
+        if len(call.args) > 1:
+            gamma_name, gamma_tensor, gamma_type = self.get_name_and_tensor_of_arg(call, call.args[1], 1)
+            self.update_if_intermediate_tensor(tensor=gamma_tensor, name=gamma_name)
+            const_arr.append(gamma_tensor)
+        if len(call.args) > 2:
+            beta_name, beta_tensor, beta_type = self.get_name_and_tensor_of_arg(call, call.args[2], 2)
+            self.update_if_intermediate_tensor(tensor=beta_tensor, name=beta_name)
+            const_arr.append(beta_tensor)
+
+        # Get instance normalization parameters
+        eps = float(attrs.epsilon) if hasattr(attrs, 'epsilon') else 1e-5
+        momentum = float(attrs.momentum) if hasattr(attrs, 'momentum') else 0.9
+        # NOTE: axis and layout could be extended here if needed
+
+        # Create output tensor with the same dimensions and dtype as input
+        out_tensor = MatchTensor(
+            name=name, dims=inp_tensor.dims, dtype=inp_tensor.dtype,
+            tensor_type="output", layout=inp_tensor.layout
+        )
+        self.calls_tensors[name] = out_tensor
+        op = ops.MatchOpInstanceNorm(
+            var_arr=[inp_tensor],
+            out_arr=[out_tensor],
+            const_arr=const_arr,
+            epsilon=eps,
+            momentum=momentum,
+        )
+        self.update_match_node(op=op, call=call, name=name)
+
+    def visit_reshape(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call, call.args[0], 0)
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+        self.infer_layout_if_empty(inp_tensor)
+        
+        # Get new shape from attributes or from constant argument
+        if hasattr(attrs, 'newshape') and attrs.newshape:
+            new_shape = [int(v) for v in attrs.newshape]
+        elif len(call.args) > 1:
+            # newshape might be passed as second argument
+            new_shape = [int(v) for v in call.args[1].data.numpy()]
+        else:
+            # Get from checked_type
+            new_shape = [int(v) for v in call.checked_type.shape]
+        
+        # Create new dimensions
+        out_dims = inp_tensor.dims
+        out_layout = inp_tensor.layout
+        # TODO: Handle layout changes if needed, needs to find a way to make dependencies
+        # if new_shape != [inp_tensor.dims[i].size for i in range(len(inp_tensor.dims))]:
+        #     for i, size in enumerate(new_shape):
+        #         dim = MatchDim(name=f"{name}_reshape_dim_{i}", size=size)
+        #         out_dims.append(dim)
+        #         self.node_all_dims[dim.name] = dim
+            
+        #     # Determine layout based on number of dimensions
+        #     if len(out_dims) == 4:
+        #         out_layout = "NCHW"
+        #     elif len(out_dims) == 3:
+        #         out_layout = "NCH"
+        #     elif len(out_dims) == 2:
+        #         out_layout = "NC"
+        #     elif len(out_dims) == 1:
+        #         out_layout = "N"
+        
+        out_tensor = MatchTensor(name=name, dims=out_dims, dtype=inp_tensor.dtype,
+                                tensor_type="output", layout=out_layout)
+        self.calls_tensors[name] = out_tensor
+        op = ops.MatchOpReshape(
+            var_arr=[inp_tensor],
+            out_arr=[out_tensor],
+            newshape=new_shape,
+        )
+        self.update_match_node(op=op, call=call, name=name)
+
+    def visit_sum(self, call, attrs, name):
+        inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call, call.args[0], 0)
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+        self.infer_layout_if_empty(inp_tensor)
+        
+        # Get sum parameters
+        axis = attrs.axis if hasattr(attrs, 'axis') and attrs.axis is not None else None
+        keepdims = bool(attrs.keepdims) if hasattr(attrs, 'keepdims') else False
+        
+        # Calculate output dimensions
+        out_dims = inp_tensor.dims.copy()
+        if axis is not None:
+            if isinstance(axis, (list, tuple)):
+                # Multiple axes - remove them in reverse order to maintain indices
+                for ax in sorted(axis, reverse=True):
+                    if keepdims:
+                        out_dims[ax] = MatchDim(name=f"{name}_sum_dim_{ax}", size=1)
+                    else:
+                        out_dims.pop(ax)
+            else:
+                # Single axis
+                ax = int(axis)
+                if keepdims:
+                    out_dims[ax] = MatchDim(name=f"{name}_sum_dim_{ax}", size=1)
+                    self.node_all_dims[out_dims[ax].name] = out_dims[ax]
+                else:
+                    out_dims.pop(ax)
+        else:
+            # Sum over all axes
+            if keepdims:
+                out_dims = [MatchDim(name=f"{name}_sum_dim_{i}", size=1) for i in range(len(out_dims))]
+                for dim in out_dims:
+                    self.node_all_dims[dim.name] = dim
+            else:
+                out_dims = []  # Scalar result
+        
+        # Update layout for output
+        out_layout = inp_tensor.layout
+        if len(out_dims) == 4:
+            out_layout = "NCHW"
+        elif len(out_dims) == 3:
+            out_layout = "NCH"
+        elif len(out_dims) == 2:
+            out_layout = "NC"
+        elif len(out_dims) == 1:
+            out_layout = "N"
+        
+        out_tensor = MatchTensor(name=name, dims=out_dims, dtype=inp_tensor.dtype,
+                                tensor_type="output", layout=out_layout)
+        self.calls_tensors[name] = out_tensor
+        op = ops.MatchOpSum(
+            var_arr=[inp_tensor],
+            out_arr=[out_tensor],
+            axis=axis,
+            keepdims=keepdims,
+        )
+        self.update_match_node(op=op, call=call, name=name)
 
     def visit_conv_3d(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call,call.args[0],0)

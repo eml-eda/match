@@ -203,12 +203,14 @@ class MatchTarget(ABC):
         """
         node=mod.body.op.body
         match_pt=self.get_match_pattern_from_pattern_name(pattern_name=f"{self.name}.{exec_module_name}.{pattern_name}")
-        schedule_gen = ScheduleGenerator(node=node,args_list=mod.body.args,
-                                         target=self,
-                                         exec_module=match_pt.exec_module,
-                                         pattern_name=match_pt.original_name,
-                                         partitioned=True,
-                                         pattern_inst=match_pt)
+        schedule_gen = ScheduleGenerator(
+            node=node,args_list=mod.body.args,
+            target=self,
+            exec_module=match_pt.exec_module,
+            pattern_name=match_pt.original_name,
+            partitioned=True,
+            pattern_inst=match_pt
+        )
         schedule_gen.parse()
         match_node=schedule_gen.get_match_node()
         pt_res=PatternResult(match_pt,match_node)
@@ -275,12 +277,14 @@ class MatchTarget(ABC):
         Returns:
             Number,Number: latency and energy consumption results of the node with the given pattern
         """
-        schedule_gen = ScheduleGenerator(node=node,args_list=[],
-                                         target=self,
-                                         exec_module=match_pt.exec_module,
-                                         pattern_name=match_pt.original_name,
-                                         partitioned=False,
-                                         pattern_inst=match_pt)
+        schedule_gen = ScheduleGenerator(
+            node=node,args_list=[],
+            target=self,
+            exec_module=match_pt.exec_module,
+            pattern_name=match_pt.original_name,
+            partitioned=False,
+            pattern_inst=match_pt
+        )
         schedule_gen.parse()
         match_node=schedule_gen.get_match_node()
         pt_res=PatternResult(match_pt,match_node)
@@ -411,8 +415,11 @@ class MatchTarget(ABC):
             List[PartitioningPattern]: list of pattern supported by the target sorted
         """
         return [
-            PartitioningPattern(name=m_pt.name,pattern=m_pt.pattern,
-                                ordered_operation=m_pt.ordered_operation,additional_checks=m_pt.match_additional_checks)
+            PartitioningPattern(
+                name=m_pt.name,pattern=m_pt.pattern,
+                ordered_operation=m_pt.ordered_operation,
+                additional_checks=m_pt.match_additional_checks
+            )
             for m_pt in self.match_patterns
             if m_pt.exec_module.name not in self.disabled_exec_modules
         ]

@@ -19,7 +19,6 @@ class MatchTensor:
         self.name = name
         self.name_up = name.upper()
         self.dims = dims
-        self.num_dims = len(dims)
         self.dtype = dtype
         self.bits = dtype.itemsize * 8
         self.tensor_type = tensor_type
@@ -29,6 +28,10 @@ class MatchTensor:
         self.is_fused = False
         self.stored_in_ext_mem = False
 
+    @property
+    def num_dims(self):
+        return len(self.dims)
+    
     @property
     def tensor_type_up(self):
         return "MATCH_" + ("OUT" if self.tensor_type == "output" else self.tensor_type.upper()) + "_TENSOR"
@@ -130,6 +133,8 @@ class MatchTensor:
     def c_offset_expr_size_sw_mem(self, mem, node_name):
         if self.layout in SUPPORTED_DIVIDED_TENSOR_LAYOUTS:
             dims_with_subtiles, dims_subtiles = self.get_subtile()
+            if all(dim.size == 1 for dim in self.dims):
+                return f"{self.bits//8}"
             sizes_ = list()
             for idx, dim in enumerate(self.dims):
                 if dim.size > 1:

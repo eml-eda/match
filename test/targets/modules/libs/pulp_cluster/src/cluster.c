@@ -252,6 +252,14 @@ void pulp_nn_wrapper(MatchCtx* ctx){
                     pi_cl_team_fork(NUM_CORES, odl_fast_parallel_conv2d_bw_fp32, ctx);
             }
             break;
+        
+        case bw_instance_norm_tail:
+            pi_cl_team_fork(NUM_CORES, odl_bw_instance_norm_tail_fp32, ctx);
+            break;
+
+        case fw_instance_norm_tail:
+            pi_cl_team_fork(NUM_CORES, odl_fw_instance_norm_tail_fp32, ctx);
+            break;
 
         default:
             break;

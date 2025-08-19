@@ -1,4 +1,5 @@
 # TVM imports
+from collections import OrderedDict
 import numpy as np
 from match.dim.dim import MatchDim
 from match.node.node import MatchNode
@@ -23,13 +24,14 @@ def get_depth_arr_pattern(pattern_inst_):
 LAYOUTS_RESHAPES_AND_TRANSFORMS_OF_CONSTANTS_OPS = ("reshape","transpose","expand_dims","squeeze","cast","reshape_like","transpose_like","layout_transform")
 
 class MatchTVMParser:
-    def __init__(self, node:tvm.ir.IRModule, args_list:List=[],
-                 exec_module:ExecModule=None, pattern_name:str="",
-                 partitioned:bool=False, pattern_inst=None,
-                 match_node:MatchNode=None
-                ):
+    def __init__(
+        self,
+        node:tvm.ir.IRModule, args_list:List=[],
+        exec_module:ExecModule=None, pattern_name:str="",
+        partitioned:bool=False, pattern_inst=None,
+        match_node:MatchNode=None
+    ):
         self.exec_module=exec_module
-        self.args_list=args_list
         self.pattern_name=pattern_name
         self.node = node
         self.match_node = match_node
@@ -49,32 +51,28 @@ class MatchTVMParser:
         self.visit_router = dict()
         self.tensor_name_mapping = dict()
         self.original_node = node
-        # partition graph and infer type
-        if not partitioned:
-            mod = tvm.ir.IRModule()
-            self.node=InferType()(mod.from_expr(pattern_inst.pattern().partition(node)))
+        mod = tvm.ir.IRModule()
+        self.node=InferType()(mod.from_expr(pattern_inst.pattern().partition(node)))
+        if partitioned:
+            self.args_list=args_list
+        else:
             self.args_list = self.node["main"].body.args
-            params_ = self.node["main"].body.op.params
-            new_args = []
-            for idx,arg in enumerate(self.args_list):
-                new_arg = arg
-                # its actually a function
-                if isinstance(new_arg, tvm.relay.Call) and not hasattr(new_arg.op, "name"):
-                    new_arg = params_[idx]
-                # its actually a function
-                elif isinstance(new_arg, tvm.relay.Call) and isinstance(new_arg, tvm.relay.Function):
-                    new_arg = params_[idx]
-                elif isinstance(new_arg, tvm.relay.Call):
-                    while isinstance(new_arg, tvm.relay.Call) and new_arg.op.name in LAYOUTS_RESHAPES_AND_TRANSFORMS_OF_CONSTANTS_OPS:
-                        new_arg = new_arg.args[0]
-                        if isinstance(new_arg, tvm.relay.Var) or isinstance(new_arg, tvm.relay.Constant) or (isinstance(new_arg, tvm.relay.Call) and not hasattr(new_arg.op, "name")):
-                            new_arg = params_[idx]
-                            break
-                if not isinstance(new_arg, tvm.relay.Var) and not isinstance(new_arg, tvm.relay.Constant):
-                    new_arg = params_[idx]
-                new_args.append(new_arg)
-            self.args_list = new_args
-            self.node=self.node["main"].body.op.body
+        self.node_params = self.node["main"].body.op.params
+        self.node_params_to_arg = {param.name_hint: arg for param, arg in zip(self.node_params, self.args_list)}
+        self.node_params_to_vname = dict()
+        curr_var_idx = 0
+        curr_const_idx = 0
+        for param in self.node_params:
+            if isinstance(self.node_params_to_arg[param.name_hint], tvm.relay.Constant):
+                self.node_params_to_vname[param.name_hint] = f"const_{curr_const_idx}"
+                curr_const_idx += 1
+            else:
+                self.node_params_to_vname[param.name_hint] = f"input_{curr_var_idx}"
+                curr_var_idx += 1
+        self.node_params_vars = curr_var_idx
+        self.node_params_consts = curr_const_idx
+        self.extra_consts_names = dict()
+        self.node=self.node["main"].body.op.body
 
     def infer_layout_if_empty(self, tensor):
         """Helper method to infer layout based on tensor dimensions if layout is empty"""
@@ -90,12 +88,14 @@ class MatchTVMParser:
 
     def get_name_and_tensor_of_arg(self,call,arg,arg_idx:int=0):
         if isinstance(arg, tvm.relay.Var):
+            param_name = self.tensor_name_mapping[arg.name_hint]
             if self.tensor_name_mapping[arg.name_hint] in self.node_vars:
-                return arg.name_hint, self.node_vars[self.tensor_name_mapping[arg.name_hint]],"var"
+                return param_name, self.node_vars[param_name], "var"
             else:
-                return arg.name_hint, self.node_consts[self.tensor_name_mapping[arg.name_hint]],"const"
+                return param_name, self.node_consts[param_name], "const"
         elif isinstance(arg, tvm.relay.Constant):
-            return f"{self.calls_to_name[call]}_arg_{arg_idx}", self.node_consts[f"{self.calls_to_name[call]}_arg_{arg_idx}"],"var"
+            param_name = f"{self.calls_to_name[call]}_arg_{arg_idx}"
+            return param_name, self.node_consts[param_name], "const"
         else:
             return self.calls_to_name[arg], self.calls_tensors[self.calls_to_name[arg]],"call"
 
@@ -135,6 +135,17 @@ class MatchTVMParser:
         dim_idxs_to_remove = []
         axeses = []
         dim_idx = 0
+
+        if (len(inp_tensor.dims) < len(w_tensor.dims)) or (len(w_tensor.dims) < len(inp_tensor.dims)):
+            # if inp_tensor is 1D and w_tensor is not, we broadcast inp_tensor
+            broadcasted_tensor = inp_tensor if len(inp_tensor.dims) < len(w_tensor.dims) else w_tensor
+            other_tensor = w_tensor if broadcasted_tensor == inp_tensor else inp_tensor
+            # add default dims at the beginning of the broadcasted tensor [4] x [ 2, 4] so broadcasted_tensor is [1, 4] x [2, 4]
+            if len(broadcasted_tensor.dims) == 1:
+                broadcasted_tensor.dims = [MatchDim(name=f"broadcasted_dim", size=1) for _ in range(len(other_tensor.dims) - len(broadcasted_tensor.dims))] + broadcasted_tensor.dims
+            # add default dims at the end of the broadcasted tensor [2, 4] x [ 2, 4, 6] so broadcasted_tensor is [2, 4, 1] x [2, 4, 6]
+            else:
+                broadcasted_tensor.dims = broadcasted_tensor.dims + [MatchDim(name=f"broadcasted_dim", size=1) for _ in range(len(other_tensor.dims) - len(broadcasted_tensor.dims))]
         for inp_dim, w_dim in zip(inp_tensor.dims, w_tensor.dims):
             if inp_dim.size!=w_dim.size and inp_dim.size!=1 and w_dim.size!=1:
                 raise RuntimeError(f"[TVM PARSER] Trying to do broadcast an operation which violates constraints,\
@@ -146,10 +157,10 @@ class MatchTVMParser:
                     broadcasted_tensor = inp_tensor
                 if broadcasted_tensor==w_tensor and w_dim.size==1:
                     dim_idxs_to_remove.append(dim_idx)
-                    self.update_all_dim_names_occurrences_with(old_dim_name=w_dim.name, new_dim_name=inp_dim.name)
-                elif broadcasted_tensor==inp_tensor and inp_tensor.size==1:
+                    # self.update_all_dim_names_occurrences_with(old_dim_name=w_dim.name, new_dim_name=inp_dim.name)
+                elif broadcasted_tensor==inp_tensor and inp_dim.size==1:
                     dim_idxs_to_remove.append(dim_idx)
-                    self.update_all_dim_names_occurrences_with(old_dim_name=inp_dim.name, new_dim_name=w_dim.name)
+                    # self.update_all_dim_names_occurrences_with(old_dim_name=inp_dim.name, new_dim_name=w_dim.name)
             else:
                 axeses.append(dim_idx)
             dim_idx += 1
@@ -161,18 +172,19 @@ class MatchTVMParser:
         else:
             sum_sizes_other_tensor = sum([dim.size for dim in other_tensor.dims])
             for dim_idx in range(len(broadcasted_tensor.dims)):
+                if dim_idx in dim_idxs_to_remove:
+                    self.update_all_dim_names_occurrences_with(old_dim_name=broadcasted_tensor.dims[dim_idx].name, new_dim_name="broadcasted_dim")
                 if sum_sizes_other_tensor>1 and broadcasted_tensor.dims[dim_idx].size==1 and dim_idx not in dim_idxs_to_remove:
-                    dim_idxs_to_remove.append(dim_idx)
+                    # dim_idxs_to_remove.append(dim_idx)
                     axeses.remove(dim_idx)
                     self.update_all_dim_names_occurrences_with(old_dim_name=broadcasted_tensor.dims[dim_idx].name, new_dim_name=other_tensor.dims[dim_idx].name)
-                else:
+                elif broadcasted_tensor.dims[dim_idx].size == other_tensor.dims[dim_idx].size:
                     self.update_all_dim_names_occurrences_with(old_dim_name=broadcasted_tensor.dims[dim_idx].name, new_dim_name=other_tensor.dims[dim_idx].name)
             broadcasted_tensor.dims = [broadcasted_tensor.dims[dim_idx] for dim_idx in range(len(broadcasted_tensor.dims)) if dim_idx not in dim_idxs_to_remove]
             if broadcasted_tensor.tensor_type=="const":
                 new_broadcasted_tensor_shape = tuple([dim.size for dim in broadcasted_tensor.dims])
                 broadcasted_tensor.data = broadcasted_tensor.data.reshape(new_broadcasted_tensor_shape)
-                broadcasted_tensor.num_dims = len(broadcasted_tensor.dims)
-        if len(axeses) not in (1, len(other_tensor.dims)):
+        if len(axeses) not in (0, 1, len(other_tensor.dims)):
             raise RuntimeError(f"[TVM PARSER] Trying to do broadcast an operation which violates constraints,\
                                     shape A {[dim.size for dim in inp_tensor.dims]} shape B {[dim.size for dim in w_tensor.dims]}")
         return other_tensor.dims, axeses
@@ -348,94 +360,77 @@ class MatchTVMParser:
         # the call is just a function pre partitioned
         elif not isinstance(call.op,tvm.ir.Op):
             return
-        self.calllist.append(call)
+        self.calllist = [call] + [c for c in self.calllist if c!= call]
         for arg_ in call.args:
             self.visit_calls(arg_)
     
     def visit(self):
-        call = self.node
+        last_call = self.node
         self.calllist=[]
-        #self.visit_calls_with_depth(call,[self.depth_limits])
-        self.visit_calls(call)
-        self.calllist.reverse()
-        var_and_consts_not_unrolled = dict()
-        var_and_consts_unrolled = dict()
-        for c in self.calllist:
-            unique_name=self.get_unique_name_and_update_occs(c)
+        self.visit_calls(last_call)
+        for call in self.calllist:
+            unique_name=self.get_unique_name_and_update_occs(call)
             # fit variables and constants
-            for idx_arg,a in enumerate(c.args):
-                if isinstance(a, tvm.relay.Var):
-                    if len(self.args_list)>len(var_and_consts_not_unrolled):
-                        ## this can be either a constant or the input still so let's check the real type
-                        if isinstance(
-                            self.args_list[len(var_and_consts_not_unrolled)], tvm.relay.Var
-                        ):
-                            v_name = "input_"+str(len(self.node_vars))
-                            self.tensor_name_mapping[a.name_hint] = v_name
-                            var_and_consts_not_unrolled[v_name] = self.args_list[
-                                len(var_and_consts_not_unrolled)
-                            ]
-                            var_ = self.args_list[
-                                len(var_and_consts_not_unrolled)-1
-                            ]
-                            shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in var_.checked_type.shape]
-                            dtype = var_.checked_type.dtype
-                            var_dims=[MatchDim(name=v_name+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
-                            for dim in var_dims:
-                                self.node_all_dims[dim.name]=dim
-                            self.node_vars[v_name] = MatchTensor(name=v_name,
-                                                                dims=var_dims,
-                                                                dtype=np.dtype(dtype),tensor_type="var")
-                        else:
-                            v_name=unique_name + f"_arg_{idx_arg}"
-                            self.tensor_name_mapping[a.name_hint] = v_name
-                            var_and_consts_not_unrolled[v_name] = self.args_list[len(var_and_consts_not_unrolled)]
-                            const_  = self.args_list[len(var_and_consts_not_unrolled)-1]
-                            # if isinstance(const_.checked_type, tvm.ir.type.TupleType):
-                                # breakpoint()
-                            shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in const_.checked_type.shape]
-                            dtype = const_.checked_type.dtype
-                            const_dims=[MatchDim(name=v_name+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
-                            for dim in const_dims:
-                                self.node_all_dims[dim.name]=dim
-                            self.node_consts[v_name] = MatchTensor(name=v_name,
-                                                                dims=const_dims,
-                                                                dtype=np.dtype(dtype),tensor_type="const",
-                                                                data = const_.data.numpy())
+            for idx_arg,arg in enumerate(call.args):
+                if arg in self.node_params:
+                    arg_ = self.node_params_to_arg[arg.name_hint]
+                    if isinstance(arg_, tvm.relay.Constant):
+                        v_name = self.node_params_to_vname[arg.name_hint]
+                        self.tensor_name_mapping[arg.name_hint] = v_name
+                        shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in arg.checked_type.shape]
+                        dtype = arg.checked_type.dtype
+                        const_dims=[MatchDim(name=v_name+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
+                        for dim in const_dims:
+                            self.node_all_dims[dim.name]=dim
+                        self.node_consts[v_name] = MatchTensor(
+                            name=v_name,
+                            dims=const_dims,
+                            dtype=np.dtype(dtype),
+                            tensor_type="const",
+                            data = arg_.data.numpy()
+                        )
                     else:
-                        v_name = "input_"+str(len(self.node_vars))
-                        self.tensor_name_mapping[a.name_hint] = v_name
-                        var_and_consts_not_unrolled[v_name] = a
-                        shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in a.checked_type.shape]
-                        dtype = a.checked_type.dtype
+                        v_name = self.node_params_to_vname[arg.name_hint]
+                        self.tensor_name_mapping[arg.name_hint] = v_name
+                        shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in arg.checked_type.shape]
+                        dtype = arg.checked_type.dtype
                         var_dims=[MatchDim(name=v_name+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
                         for dim in var_dims:
                             self.node_all_dims[dim.name]=dim
-                        self.node_vars[v_name] = MatchTensor(name=v_name,
-                                                                dims=var_dims,
-                                                                dtype=np.dtype(dtype),tensor_type="var")
-                elif isinstance(a, tvm.relay.Constant):
-                    v_name=unique_name + f"_arg_{idx_arg}"
+                        self.node_vars[v_name] = MatchTensor(
+                            name=v_name,
+                            dims=var_dims,
+                            dtype=np.dtype(dtype),
+                            tensor_type="var"
+                        )
+                        
+                # this is an unrolled variable or constant
+                elif isinstance(arg, tvm.relay.Constant):
+                    # this is a constant
+                    v_name = unique_name + f"_arg_{idx_arg}"
                     self.tensor_name_mapping[v_name] = v_name
-                    var_and_consts_unrolled[v_name] = a
-                    shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in a.checked_type.shape]
-                    dtype = a.checked_type.dtype
+                    shape = [int(v) if isinstance(v,tvm.tir.IntImm) else -1 for v in arg.checked_type.shape]
+                    dtype = arg.checked_type.dtype
                     const_dims=[MatchDim(name=v_name+f"_dim_{idx}",size=shape[idx],is_dynamic=shape[idx]!=-1) for idx in range(len(shape))]
                     for dim in const_dims:
                         self.node_all_dims[dim.name]=dim
-                    self.node_consts[v_name] = MatchTensor(name=v_name,
-                                                            dims=const_dims,
-                                                            dtype=np.dtype(dtype),tensor_type="const",
-                                                            data = a.data.numpy())
+                    self.node_consts[v_name] = MatchTensor(
+                        name=v_name,
+                        dims=const_dims,
+                        dtype=np.dtype(dtype),
+                        tensor_type="const",
+                        data = arg.data.numpy()
+                    )
+            
             self.index += 1
             #self.ops_names.append(c.op.name)
-            self.calls_to_name[c] = unique_name
-            self.visit_call(c,unique_name)
-            self.name_to_calls[unique_name] = c
-            self.callsindexes[c] = self.index
-        
+            self.calls_to_name[call] = unique_name
+            self.visit_call(call,unique_name)
+            self.name_to_calls[unique_name] = call
+            self.callsindexes[call] = self.index
+
         # save vars
-        self.match_node.var_tensors = self.node_vars
+        self.match_node.var_tensors = OrderedDict(sorted(self.node_vars.items(), key=lambda x: x[0]))
         self.match_node.const_tensors = self.node_consts
         # add out to name of call tensors
         for call_tensor in self.calls_tensors.values():
@@ -453,7 +448,9 @@ class MatchTVMParser:
             for _, tensor in tensor_dict.items():
                 updated_dims = []
                 for dim in tensor.dims:
-                    if dim.original_name!=dim.name:
+                    if dim.name=="broadcasted_dim":
+                        pass
+                    elif dim.original_name!=dim.name and dim.name in self.node_all_dims:
                         # Use the canonical dim instead
                         canonical_dim = self.node_all_dims[dim.name]
                         updated_dims.append(canonical_dim)
@@ -478,4 +475,5 @@ class MatchTVMParser:
                 f"Currently the operator {call.op.name} is not supported."
             )
         else:
+            # print("[MATCH TVM PARSER] Visiting call",call.op.name,"with unique name",unique_name)
             self.visit_router[call.op.name](call, call.attrs, unique_name)

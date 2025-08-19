@@ -6,9 +6,12 @@ from match.schedule.instr import MatchInstr
 from match.schedule.mem_transfer import MatchMemTransfer
 
 class MatchLoop:
-    def __init__(self, dim: MatchDim, size: int=0, step: int=1, name: str="width",
-                 mem_transfers: List[MatchMemTransfer]=[], init_instrs: List[MatchInstr]=[],
-                 instrs: List[MatchInstr]=[],) -> None:
+    def __init__(
+        self,
+        dim: MatchDim, size: int=0, step: int=1, name: str="width",
+        mem_transfers: List[MatchMemTransfer]=[], init_instrs: List[MatchInstr]=[],
+        instrs: List[MatchInstr]=[],
+    ) -> None:
         self.name = ""
         self.size = size
         self.name = name

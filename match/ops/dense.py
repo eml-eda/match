@@ -1,4 +1,3 @@
-
 from match.ops.op import MatchOp
 from match.schedule.block import MatchBlock
 from match.schedule.expr import MatchAssignExpr, MatchMulExpr, MatchPlusEqExpr, MatchPrimitiveExpr, MatchTensorExpr
@@ -15,7 +14,7 @@ class MatchOpDense(MatchOp):
         self.inp_features = inp_features
         self.out_features = out_features
         self.out_dtype = out_dtype
-        self.op_code = 1
+        self.op_code = 0
 
     def basic_schedules(self):
         output, activations, weights = self.outs[0], self.vars[0], self.consts[0]

@@ -10,7 +10,7 @@ class MatchOpRightShift(MatchOp):
     def __init__(self, out_arr = ..., var_arr = ..., const_arr = ..., right_shift: int=1, **kwargs):
         super().__init__(out_arr, var_arr, const_arr, op="RightShift", **kwargs)
         self.right_shift = right_shift
-        self.op_code = 5
+        self.op_code = 9
 
     def basic_schedules(self):
         output, activations = self.outs[0], self.vars[0]

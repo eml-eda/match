@@ -4,40 +4,37 @@ from match.node.node import MatchNode
 from match.ops.conv2d import MatchOpConv2D
 from match.ops.conv2d_transpose import MatchOpConv2DTranspose
 from match.ops.conv3d import MatchOpConv3D
-from match.partition.utils import add_checks_get_first_op
 from match.schedule.buffer import MatchMemBuffer
 from match.schedule.schedule import MatchSchedule
 from match.target.exec_module import ComputationalApis, ExecModule, MemoryApis, ModuleLib, PlatformApis, SyncApis
 from match.cost_model.examples.pulp_cluster import PulpClusterCostModel
 from match.target.memory_inst import MemoryInst
 from match.tensor.tensor import MatchTensor
-from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
-from tvm.relay import Constant
 from match.partition.partitioning_pattern import PartitioningPattern
-
-USE_ONLY_FC = False  # Set to True to use only fully connected layers in training patterns
-IS_FW_TRAIN = False  # Set to True to use training patterns
-TRAIN_FW_USE_CLUSTER = not USE_ONLY_FC and IS_FW_TRAIN  # Set to True to use only fully connected layers in training patterns
-TRAIN_BW_USE_CLUSTER = not USE_ONLY_FC and not IS_FW_TRAIN  # Set to True to use only fully connected layers in training patterns
+from .patterns import add_pt_requant, bw_instance_norm_tail_pt, conv2d_bw, conv2d_bw_check, conv2d_fw, conv2d_transpose_ptrain_check, conv2d_transpose_ptrain_pt, conv3d_pt_requant, conv_pt_requant, dense_pt_out, dense_pt_requant, dw_convs_fp32_pulp, fw_instance_norm_tail_pt, only_dw_convs, only_out_int32, only_out_uint8, only_pw_convs, only_std_convs, std_convs_fp32
 
 class PulpCluster(ExecModule):
     def __init__(self, num_cores: int=8, l1_kb_size: int=64, l2_kb_size: int=512,
                  l3_kb_size: int=8912, async_dma: bool=False):
-        super(PulpCluster, self).__init__(name="pulp_cluster",
-                                          libs_required={
-                                              "pulp_nn": ModuleLib(name="pulp_nn", base_path=os.path.dirname(__file__)+"/../libs/pulp_nn"),
-                                              "pulp_cluster": ModuleLib(name="pulp_cluster", base_path=os.path.dirname(__file__)+"/../libs/pulp_cluster"),
-                                              "pulp_mem": ModuleLib(name="pulp_mem", base_path=os.path.dirname(__file__)+"/../libs/pulp_mem"),
-                                              "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/../libs/pulp_utils"),
-                                              "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/../libs/pulp_utils"),
-                                              "pulp_train": ModuleLib(name="pulp_train", base_path=os.path.dirname(__file__)+"/../libs/pulp_train"),
-                                          })
+        super(PulpCluster, self).__init__(
+            name="pulp_cluster",
+            libs_required={
+                "pulp_nn": ModuleLib(name="pulp_nn", base_path=os.path.dirname(__file__)+"/../libs/pulp_nn"),
+                "pulp_cluster": ModuleLib(name="pulp_cluster", base_path=os.path.dirname(__file__)+"/../libs/pulp_cluster"),
+                "pulp_mem": ModuleLib(name="pulp_mem", base_path=os.path.dirname(__file__)+"/../libs/pulp_mem"),
+                "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/../libs/pulp_utils"),
+                "pulp_utils": ModuleLib(name="pulp_utils", base_path=os.path.dirname(__file__)+"/../libs/pulp_utils"),
+                "pulp_train": ModuleLib(name="pulp_train", base_path=os.path.dirname(__file__)+"/../libs/pulp_train"),
+            }
+        )
         self.NUM_CORES = num_cores
         self.L1_SCRATCHPAD_KB_SIZE = l1_kb_size
         self.L2_SHARED_MEM_KB_SIZE = l2_kb_size
         self.L3_FLASH_KB_SIZE = l3_kb_size
         self.ASYNC_DMA = async_dma
-        # self.schedule_engine = "basic"
+
+    def get_schedule_engine_for_pt(self, pattern_name = ""):
+        return "EasyTile" if pattern_name in ["fw_instance_norm_tail", "bw_instance_norm_tail"] else self.schedule_engine
 
     def def_include_list(self):
         return ["pulp_cluster/cluster"]
@@ -89,7 +86,7 @@ class PulpCluster(ExecModule):
         return PulpClusterCostModel
 
     def update_constants(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
-        if pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_grad_params", "conv2d_transpose"]:
+        if pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_grad_params", "conv2d_transpose", "bw_instance_norm_tail", "fw_instance_norm_tail"]:
             return
         for w_tensor in match_node.const_tensors.values():
             if "dense" in w_tensor.name and pattern_name=="flatten_dense_out":
@@ -210,7 +207,7 @@ class PulpCluster(ExecModule):
     def sync_apis_def(self, sync_apis: SyncApis=None, pattern_name: str="conv2d"):
         sync_apis.wait_load = "wait_l1_dma_transfers"
         sync_apis.wait_store = "wait_l1_dma_transfers"
-        if pattern_name not in ["conv2d_train", "conv2ddw_train", "conv2d_transpose", "conv2d_grad_params"]:
+        if pattern_name not in ["conv2d_train", "conv2ddw_train", "conv2d_transpose", "conv2d_grad_params", "bw_instance_norm_tail", "fw_instance_norm_tail"]:
             sync_apis.wait_tile_computation = "wait_pulp_nn_computation"
         else:
             sync_apis.wait_tile_computation = ""
@@ -224,225 +221,12 @@ class PulpCluster(ExecModule):
     
     def partitioning_patterns(self):
         
-        def conv3d_pt_requant():
-            #Create pattern for a 3D Conv block, with bias and ReLU.
-            conv3d = is_op("nn.conv3d")(
-                wildcard(), wildcard()
-            )
-            conv3d = is_op("cast")(conv3d) | conv3d
-            bias_add = is_op("nn.bias_add")(conv3d, wildcard()) | is_op("add")(conv3d, wildcard())
-            scale = is_op("multiply")(conv3d, wildcard()) | is_op("multiply")(wildcard(), conv3d)
-            bias = is_op("add")(scale, wildcard()) | is_op("add")(wildcard(), scale)
-            right_shift = is_op("right_shift")(bias_add | bias, is_constant())
-            clip = is_op("clip")(right_shift)
-            cast = is_op("cast")(clip)
-            return cast
+        def disabled_pattern(node):
+            return False
 
-        def conv_pt_requant():
-            #Create pattern for a 2D Conv block, with bias and ReLU.
-            conv2d = is_op("nn.conv2d")(
-                wildcard(), wildcard()
-            )
-            conv2d = is_op("cast")(conv2d) | conv2d
-            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard())
-            scale = is_op("multiply")(conv2d, wildcard()) | is_op("multiply")(wildcard(), conv2d)
-            bias = is_op("add")(scale, wildcard()) | is_op("add")(wildcard(), scale)
-            right_shift = is_op("right_shift")(bias_add | bias, is_constant())
-            clip = is_op("clip")(right_shift)
-            cast = is_op("cast")(clip)
-            return cast
-
-        
-        def dense_pt_requant():
-            """Create pattern for conv2D with optional fused relu."""
-            dense = is_op("nn.dense")(
-                wildcard(), wildcard()
-            )
-            dense = is_op("cast")(dense) | dense
-            bias_add = is_op("nn.bias_add")(dense, wildcard()) | is_op("add")(dense, wildcard())
-            scale = is_op("multiply")(dense, wildcard()) | is_op("multiply")(wildcard(), dense)
-            bias = is_op("add")(scale, wildcard()) | is_op("add")(wildcard(), scale)
-            right_shift = is_op("right_shift")(bias_add | bias, is_constant())
-            clip = is_op("clip")(right_shift)
-            cast = is_op("cast")(clip)
-            return cast
-
-        def dense_pt_out():
-            dense = is_op("nn.dense")(
-                wildcard(), wildcard()
-            )
-            add = is_op("add")(dense, is_constant()) | is_op("add")(is_op("cast")(dense),is_constant())
-            return add
-        
-        def add_pt_requant():
-            cast_a = is_op("cast")(wildcard())
-            cast_b = is_op("cast")(wildcard())
-            add = is_op("add")(cast_a , cast_b )
-            add = add | is_op("cast")(is_op("add")(wildcard() , wildcard()))
-            # pattern cast cast add clip cast cast multiply right shift cast
-            mul = is_op("multiply")(is_constant(), add) | is_op("multiply")(add, is_constant())
-            rshift = is_op("right_shift")(mul, is_constant())
-            # cast for both paths
-            pt = is_op("cast")(is_op("clip")(rshift))
-            return pt
-
-        def only_out_uint8(node):
-            return add_checks_get_first_op(node, "cast").attrs.dtype=="uint8"
-
-        def only_std_convs(node):
-            conv = add_checks_get_first_op(node, "nn.conv2d")
-            if not only_out_uint8(node):
-                return False
-            # theres a pointwise specific pattern
-            if tuple([int(i) for i in conv.attrs.kernel_size]) == (1,1):
-                return False
-            if conv.attrs.groups!=1:
-                return False
-            if conv.attrs.data_layout!="NHWC":
-                return False
-            return True
-
-        def only_pw_convs(node):
-            conv = add_checks_get_first_op(node, "nn.conv2d")
-            if not only_out_uint8(node):
-                return False
-            if tuple([int(i) for i in conv.attrs.kernel_size]) != (1,1):
-                return False
-            if conv.attrs.groups!=1:
-                return False
-            if conv.attrs.data_layout!="NHWC":
-                return False
-            return True
-        
-        def only_dw_convs(node):
-            conv = add_checks_get_first_op(node, "nn.conv2d")
-            out_chs = conv.args[1].checked_type.shape[3]
-            if not only_out_uint8(node):
-                return False
-            if conv.attrs.groups!=out_chs:
-                return False
-            if conv.attrs.data_layout!="NHWC":
-                return False
-            return True
-        
-        # training layers 
-        def conv2d_fw():
-            #Create pattern for a 2D Conv block, with bias and ReLU.
-            conv2d = is_op("nn.conv2d")(
-                wildcard(), is_constant()
-            )
-            conv2d = is_op("cast")(conv2d) | conv2d
-#            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard()) | conv2d
-            return conv2d
-
-        def conv2d_bw():
-            #Create pattern for a 2D Conv block, with bias and ReLU.
-            conv2d = is_op("nn.conv2d")(
-                wildcard(), wildcard()
-            )
-            conv2d = is_op("cast")(conv2d) | conv2d
-            bias_add = is_op("nn.bias_add")(conv2d, wildcard()) | is_op("add")(conv2d, wildcard()) | conv2d
-            return bias_add
-
-        # checks for training
-        def std_convs_fp32(node):
-            if not TRAIN_FW_USE_CLUSTER:
-                return False
-            conv = add_checks_get_first_op(node, "nn.conv2d")
-            if conv.checked_type.dtype != 'float32':
-                return False
-            if conv.attrs.groups != 1:
-                return False
-            # check for dilated convs
-            if any([int(val)!=1 for val in conv.attrs.dilation]):
-                return False
-            return True
-        
-        def dw_convs_fp32_pulp(node):
-            if not TRAIN_FW_USE_CLUSTER:
-                return False
-            conv = add_checks_get_first_op(node, "nn.conv2d")
-            out_chs = conv.args[1].checked_type.shape[0]
-            in_chs = conv.args[1].checked_type.shape[1]
-            if conv.checked_type.dtype != 'float32':
-                return False
-            if conv.attrs.groups == 1:
-                return False
-            if conv.attrs.groups != out_chs or in_chs != 1 :
-                return False
-            if conv.attrs.data_layout!="NCHW":
-                return False
-            # check for dilated convs
-            if any([int(val)!=1 for val in conv.attrs.dilation]):
-                return False
-            #add checks for stride (temp)
-            if conv.attrs.strides[0] != 1 or conv.attrs.strides[1] != 1:
-                return False
-            return True
-        
-        def conv2d_transpose_ptrain_pt():
-            #Create pattern for a 2D Conv transpose block, with bias and ReLU.
-            conv2d_transpose = is_op("nn.conv2d_transpose")(
-                wildcard(), wildcard()
-            )
-            return conv2d_transpose
-
-        def bw_instance_norm_pt():
-            """
-            %344 = add(%343, 1e-05f /* ty=float32 */) /* ty=Tensor[(8, 1), float32] */;
-            %345 = sqrt(%344) /* ty=Tensor[(8, 1), float32] */;
-            %346 = divide(1f /* ty=float32 */, %345) /* ty=Tensor[(8, 1), float32] */;
-            %347 = repeat(%346, repeats=1, axis=0) /* ty=Tensor[(8, 1), float32] */;
-            %348 = reshape(%338, newshape=[8, 1000]) /* ty=Tensor[(8, 1000), float32] */;
-            %349 = reshape(%347, newshape=[8, 1]) /* ty=Tensor[(8, 1), float32] */;
-            %350 = multiply(%348, %341) /* ty=Tensor[(8, 1000), float32] */;
-            %351 = sum(%350, axis=[1], keepdims=True) /* ty=Tensor[(8, 1), float32] */;
-            %352 = multiply(%349, %349) /* ty=Tensor[(8, 1), float32] */;
-            %353 = multiply(-0.5f /* ty=float32 */, %351) /* ty=Tensor[(8, 1), float32] */;
-            %354 = multiply(%352, %349) /* ty=Tensor[(8, 1), float32] */;
-            %355 = multiply(%353, %354) /* ty=Tensor[(8, 1), float32] */;
-            %356 = multiply(%355, 0.001f /* ty=float32 */) /* ty=Tensor[(8, 1), float32] */;
-            %357 = multiply(%341, %356) /* ty=Tensor[(8, 1000), float32] */;
-            %358 = multiply(%348, %349) /* ty=Tensor[(8, 1000), float32] */;
-            %359 = multiply(%357, 2f /* ty=float32 */) /* ty=Tensor[(8, 1000), float32] */;
-            """
-            add = is_op("add")(wildcard(), is_constant())
-            sqrt = is_op("sqrt")(add)
-            divide = is_op("divide")(is_constant(), sqrt)
-            repeat = is_op("repeat")(divide)
-            reshape = is_op("reshape")(repeat)
-            multiply = is_op("multiply")(reshape, wildcard())
-            return multiply
-        
-        def conv2d_transpose_ptrain_check(node):
-            if not TRAIN_BW_USE_CLUSTER:
-                return False
-            conv2d_transpose = add_checks_get_first_op(node, "nn.conv2d_transpose")
-            if conv2d_transpose.checked_type.dtype != 'float32':
-                return False
-            # check for dilated convs
-            if any([int(val)!=1 for val in conv2d_transpose.attrs.dilation]):
-                return False
-            return True
-        
-        def conv2d_bw_check(node):
-            if not TRAIN_BW_USE_CLUSTER:
-                return False
-            conv2d = add_checks_get_first_op(node, "nn.conv2d")
-            out_chs = conv2d.args[1].checked_type.shape[0]
-            if isinstance(conv2d.args[1], Constant):
-                return False
-            if conv2d.attrs.data_layout != "NCHW":
-                return False
-            if conv2d.checked_type.dtype != 'float32':
-                return False
-            if conv2d.attrs.groups != out_chs and conv2d.attrs.groups != 1:
-                return False
-            return True
-        
         return [
             PartitioningPattern(name="conv3d",pattern=conv3d_pt_requant,additional_checks=only_out_uint8),
-            PartitioningPattern(name="dense_out",pattern=dense_pt_out),
+            PartitioningPattern(name="dense_out",pattern=dense_pt_out,additional_checks=only_out_int32),
             PartitioningPattern(name="dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
             PartitioningPattern(name="conv2d",pattern=conv_pt_requant,additional_checks=only_std_convs),
             PartitioningPattern(name="depthwise_conv2d",pattern=conv_pt_requant,additional_checks=only_dw_convs),
@@ -454,5 +238,6 @@ class PulpCluster(ExecModule):
             PartitioningPattern(name="conv2ddw_train", pattern=conv2d_fw, additional_checks=dw_convs_fp32_pulp),
             PartitioningPattern(name="conv2d_transpose", pattern=conv2d_transpose_ptrain_pt, additional_checks=conv2d_transpose_ptrain_check),
             PartitioningPattern(name="conv2d_grad_params", pattern=conv2d_bw, additional_checks=conv2d_bw_check),
-            # PartitioningPattern(name="bw_instance_norm", pattern=bw_instance_norm_pt),
+            PartitioningPattern(name="bw_instance_norm_tail", pattern=bw_instance_norm_tail_pt, additional_checks=disabled_pattern),
+            PartitioningPattern(name="fw_instance_norm_tail", pattern=fw_instance_norm_tail_pt, additional_checks=disabled_pattern),
         ]

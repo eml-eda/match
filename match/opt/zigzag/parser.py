@@ -245,12 +245,12 @@ class MatchNodeToZigZagParser:
                     if key=="IY":
                         return spat
             elif len(dims)==2:
-                if key=="N":
+                if key=="B":
                     return dims[0]
                 if key in ["C","K"]:
                     return dims[1]
             elif len(dims)==1:
-                if key=="N":
+                if key=="B":
                     return dims[0]
             return self.match_node.default_dim
         
@@ -325,7 +325,7 @@ class MatchNodeToZigZagParser:
         # TODO: currently its a sort of priority queue of operations, should be done better
         if "conv3d" in self.match_node.ops_occurrences:
             self.ACCELERATED_OP = "conv3d"
-        if "conv2d_transpose" in self.match_node.ops_occurrences:
+        elif "conv2d_transpose" in self.match_node.ops_occurrences:
             self.ACCELERATED_OP = "conv2d_transpose"
         elif "conv2d" in self.match_node.ops_occurrences:
             self.ACCELERATED_OP = "conv2d"
@@ -558,4 +558,9 @@ class MatchNodeToZigZagParser:
         self.loop_dim_size["K"] = o_c
         self.loop_dim_size["OY"] = o_h
         self.loop_dim_size["OX"] = o_w
+        del self.loop_dim_size["FY"]
+        del self.loop_dim_size["FX"]
+        self.workload_padding = dict()
+        self.operand_source_dimension_mapping = dict()
+        self.workload_dimensions_relations = list()
         self.spatially_unrolled_dimensions = list()

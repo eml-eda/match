@@ -262,8 +262,12 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         latency=0
         ch_in = self.loop_sizes["C"]
         ch_out = self.size_per_mem_level["O"]["K"][0]
-        kernel_size_x = self.loop_sizes['FX']
-        kernel_size_y = self.loop_sizes['FY']
+        kernel_size_x = 1
+        kernel_size_y = 1
+        if "FX" in self.loop_sizes:
+            kernel_size_x = self.loop_sizes['FX']
+        if "FY" in self.loop_sizes:
+            kernel_size_y = self.loop_sizes['FY']
         output_shape=[1,ch_out,self.size_per_mem_level["O"]["OY"][0],self.size_per_mem_level["O"]["OX"][0]]
         if self.pattern_name in ["conv2d","pointwise_conv2d"]:
             IS_POINTWISE = self.pattern_name=="pointwise_conv2d"
@@ -325,9 +329,8 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         return latency
     
     def def_overall_execution(self):
-        self.overall_latency_single_buffer_match_no_comp()
         # training patterns
-        # if self.pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_grad_params", "conv2d_transpose"]:
-        #     self.overall_latency_single_buffer_match_no_comp()
-        # else:
-        #     self.overall_latency_async()
+        if self.pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_grad_params", "conv2d_transpose"]:
+            self.overall_latency_single_buffer_match_no_comp()
+        else:
+            self.overall_latency_async()

@@ -8,7 +8,7 @@ from match.schedule.schedule import MatchSchedule
 class MatchOpReLU(MatchOp):
     def __init__(self, out_arr = ..., var_arr = ..., const_arr = ..., **kwargs):
         super().__init__(out_arr, var_arr, const_arr, op="ReLU", **kwargs)
-        self.op_code = 0
+        self.op_code = 1
 
     def basic_schedules(self):
         output, activations = self.outs[0], self.vars[0]

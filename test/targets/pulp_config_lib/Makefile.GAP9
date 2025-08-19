@@ -43,7 +43,7 @@ APP_CFLAGS += -DOPTIMIZE
 APP_CFLAGS += -Dabort\(\)=exit\(\-\1\)  -Wno-error=format -w -fno-indirect-inlining -w #-flto
 
 # FP32 precision flags, keep on if precision is good otherwise put off
-APP_CFLAGS += -ffp-contract=on
+# APP_CFLAGS += -ffp-contract=off
 
 APP_LDFLAGS += -lm -Wl,--print-memory-usage #-flto
 

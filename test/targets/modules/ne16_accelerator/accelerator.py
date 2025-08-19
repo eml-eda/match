@@ -60,7 +60,6 @@ class NE16Accelerator(ExecModule):
                 else:
                     w_tensor.dims = [w_tensor.dims[0], w_tensor.dims[1], w_tensor.dims[2], w_tensor.dims[3], w_tensor.dims[1]]
                 w_tensor.layout = "NCHWc16"
-                w_tensor.num_dims = 5
                 
 
     def zigzag_optimal_spatial_mapping_def(self, match_node = None, pattern_name = "conv2d"):

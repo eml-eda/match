@@ -4,14 +4,16 @@ from match.schedule.loop import MatchLoop
 
 
 class MatchBlock:
-    def __init__(self,loops: List[MatchLoop]=[],
-                 init_instrs: List[MatchInstr]=[],
-                 instrs: List[MatchInstr]=[],
-                 backend: str="MATCH",
-                 num_buffers_for_computation: int=1,
-                 parallel_execution: bool=False,
-                 num_tasks: int=1
-                ) -> None:
+    def __init__(
+        self,
+        loops: List[MatchLoop]=[],
+        init_instrs: List[MatchInstr]=[],
+        instrs: List[MatchInstr]=[],
+        backend: str="MATCH",
+        num_buffers_for_computation: int=1,
+        parallel_execution: bool=False,
+        num_tasks: int=1
+    ) -> None:
         self.loops = loops
         self.init_instrs = init_instrs
         self.instrs = instrs

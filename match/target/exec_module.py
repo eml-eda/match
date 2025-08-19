@@ -187,6 +187,9 @@ class ExecModule(ABC):
         self.timer_start_fn = ""
         self.time_stop_fn = ""
 
+    def get_schedule_engine_for_pt(self, pattern_name: str = ""):
+        return self.schedule_engine
+
     def include_libs(self):
         return []
     

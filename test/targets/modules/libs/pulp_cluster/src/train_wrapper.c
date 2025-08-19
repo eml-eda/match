@@ -52,7 +52,7 @@ void pulp_train_conv2d_fp32_wrapper(void* args){
     #ifdef CLUSTER_LIB_DEBUG
     printf("Out tile [%d %d %d] Inp tile [%d %d %d] pad ^ %d v %d < %d > %d\n", out_ch, out_height, out_width, inp_ch, inp_height, inp_width,
             pad_top, pad_bottom, pad_left, pad_right);
-    printf("Num tensors: %d, is fw? %d\n", num_tensors, is_fw);
+    printf("Num tensors: %d\n", num_tensors);
     #endif
 
     // setup the arguments. FIXME: merge with the precedent

@@ -10,7 +10,7 @@ class MatchOpBiasAdd(MatchOp):
         super().__init__(out_arr, var_arr, const_arr, op="BiasAdd", **kwargs)
         self.axis = axis
         self.bias = bias
-        self.op_code = 2
+        self.op_code = 3
 
     def basic_schedules(self):
         output, activations, biases = self.outs[0], self.vars[0], self.consts[0]
