@@ -28,20 +28,27 @@
 </%def>
 
 <%def name="profile_region_begin()">
-    %if exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+    % if not exec_module.separate_build and exec_module.timer_start_fn != "":
+        ${exec_module.timer_start_fn}();
+    %elif exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
         ${exec_module.timer_start_fn}();
     % endif
 </%def>
 
 <%def name="profile_region_end(label)">
-    %if exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
-        real_args[8 + ${label}] += ${exec_module.timer_stop_fn}();
+    % if not exec_module.separate_build and exec_module.timer_stop_fn != "":
+        ${name}_stats.${label}_cycles += ${exec_module.timer_stop_fn}();
+    % elif exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+        real_args[8 + ${"0" if label=="compute" else "1" if label=="load" else "2"}] += ${exec_module.timer_stop_fn}();
     % endif
 </%def>
 
 <%def name="profile_var(label)">
-    %if exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
-        real_args[8 + ${label}] +=
+    ## deactivated now
+    % if False and not exec_module.separate_build and exec_module.timer_start_fn != "":
+        ${name}_stats.${label} += 
+    % elif exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+        real_args[8 + ${"3" if label=="load_bytes" else "4"}] +=
     % endif
 </%def>
 
@@ -200,7 +207,7 @@
                     ${mem_transfer.mem}_curr_pt_offset += ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
                     % if mem_transfer.tensor.tensor_type != "output":
                         // call API for ${exec_module.name}-specific memory transfer handling
-                        <%self:profile_var label="3"/> ${mem_apis.mem_transfer}(
+                        <%self:profile_var label="load_bytes"/> ${mem_apis.mem_transfer}(
                             ctx,${name}_${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)},
                             ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
                             MATCH_SW_LOAD_TENSOR,
@@ -215,7 +222,7 @@
                     % endif
                     <% add_tile_to_tensor_at_block_and_loop(mem_transfer.tensor.name, block_idx, loop_idx, mem_transfer.mem)%>
                 % endfor
-            <%self:profile_region_end label="1"/>
+            <%self:profile_region_end label="load"/>
             <%self:smp_primary_core_region_end/>
             ## finished sw controlled loads and stores
             % if exec_module.backend_constraints_check(match_node,schedule,block,lp,loop_idx) and block.loop_idx_end_sw_controlled_loads>=loop_idx:
@@ -264,7 +271,7 @@
                         % endfor
                     % endif
                 % endfor
-            <%self:profile_region_end label="1"/>
+            <%self:profile_region_end label="load"/>
         <%self:smp_primary_core_region_end/>
         
         <%self:smp_barrier/>
@@ -305,7 +312,7 @@
         <%self:smp_barrier/>
         
         <%self:smp_primary_core_region_begin/>
-            <%self:profile_region_end label="0"/>
+            <%self:profile_region_end label="compute"/>
         <%self:smp_primary_core_region_end/>
         
         ## close braces and save output
@@ -328,7 +335,7 @@
                         <% free_transfer_unique_tile(mem_transfer.tensor.name) %>
                         % if mem_transfer.tensor.tensor_type == "output":
                             // call API for ${exec_module.name}-specific memory transfer handling
-                            <%self:profile_var label="4"/> ${mem_apis.mem_transfer}(
+                            <%self:profile_var label="store_bytes"/> ${mem_apis.mem_transfer}(
                                 ctx,${name}_${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)},
                                 ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
                                 MATCH_SW_STORE_TENSOR,
@@ -346,7 +353,7 @@
                                 ${mem_transfer.mem}_curr_pt_offset -= ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
                         % endif
                     % endfor
-                <%self:profile_region_end label="2"/>
+                <%self:profile_region_end label="store"/>
             <%self:smp_primary_core_region_end/>
         % endfor
 

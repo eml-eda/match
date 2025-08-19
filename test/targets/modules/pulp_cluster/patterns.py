@@ -2,8 +2,8 @@ from tvm.relay.dataflow_pattern import wildcard, is_op, is_constant
 from tvm.relay import Constant
 from match.partition.utils import add_checks_get_first_op
 
-USE_ONLY_FC = True  # Set to True to use only fully connected layers in training patterns
-IS_FW_TRAIN = False  # Set to True to use training patterns
+USE_ONLY_FC = False  # Set to True to use only fully connected layers in training patterns
+IS_FW_TRAIN = True  # Set to True to use training patterns
 TRAIN_FW_USE_CLUSTER = not USE_ONLY_FC  # Set to True to use only fully connected layers in training patterns
 TRAIN_BW_USE_CLUSTER = not USE_ONLY_FC  # Set to True to use only fully connected layers in training patterns
 

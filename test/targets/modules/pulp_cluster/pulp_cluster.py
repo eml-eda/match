@@ -32,12 +32,14 @@ class PulpCluster(ExecModule):
         self.L2_SHARED_MEM_KB_SIZE = l2_kb_size
         self.L3_FLASH_KB_SIZE = l3_kb_size
         self.ASYNC_DMA = async_dma
+        self.timer_start_fn = "start_perf_counter"
+        self.timer_stop_fn = "stop_perf_counter"
 
     def get_schedule_engine_for_pt(self, pattern_name = ""):
         return "EasyTile" if pattern_name in ["fw_instance_norm_tail", "bw_instance_norm_tail"] else self.schedule_engine
 
-    def def_include_list(self):
-        return ["pulp_cluster/cluster"]
+    def include_list(self):
+        return ["pulp_cluster/cluster", "pmsis"]
 
     def module_memories(self):
         return [
