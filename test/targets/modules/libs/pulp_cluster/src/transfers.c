@@ -1,6 +1,6 @@
 #include <pulp_cluster/transfers.h>
 
-void handle_dma_transfer_1d(
+int handle_dma_transfer_1d(
     MatchCtx* ctx, MatchTensor* tensor,
     void* tensor_l2_pt, void* tensor_l1_pt,
     int match_transfer_type,
@@ -15,9 +15,11 @@ void handle_dma_transfer_1d(
         .length_1d_copy = tensor->tiles[L1_SCRATCHPAD*1+0].size*tensor->bits/8,
         .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
     });
+    
+    return tensor->tiles[L1_SCRATCHPAD*1+0].size*tensor->bits/8;
 }
 
-void handle_dma_transfer_2d(
+int handle_dma_transfer_2d(
     MatchCtx* ctx, MatchTensor* tensor,
     void* tensor_l2_pt, void* tensor_l1_pt,
     int match_transfer_type,
@@ -47,9 +49,11 @@ void handle_dma_transfer_2d(
             .stride_1d = tensor->tiles[L2_SHARED_MEM*2+1].size*tensor->bits/8,
             .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
         });
+    
+    return tensor->tiles[L1_SCRATCHPAD*2+0].size*tensor->tiles[L1_SCRATCHPAD*2+1].size*tensor->bits/8;
 }
 
-void handle_dma_transfer_3d(
+int handle_dma_transfer_3d(
     MatchCtx* ctx, MatchTensor* tensor,
     void* tensor_l2_pt, void* tensor_l1_pt,
     int match_transfer_type,
@@ -97,9 +101,14 @@ void handle_dma_transfer_3d(
             .stride_2d = tensor->tiles[L2_SHARED_MEM*3+1].size*tensor->tiles[L2_SHARED_MEM*3+2].size*tensor->bits/8,
             .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
         });
+
+    return tensor->tiles[L1_SCRATCHPAD*3+0].size*
+        tensor->tiles[L1_SCRATCHPAD*3+1].size*
+        tensor->tiles[L1_SCRATCHPAD*3+2].size*
+        tensor->bits/8;
 }
 
-void handle_dma_transfer_4d(
+int handle_dma_transfer_4d(
     MatchCtx* ctx, MatchTensor* tensor,
     void* tensor_l2_pt, void* tensor_l1_pt,
     int match_transfer_type,
@@ -184,9 +193,15 @@ void handle_dma_transfer_4d(
                                 tensor->bits/8,
                 .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
             });
+    
+    return tensor->tiles[L1_SCRATCHPAD*4+0].size*
+        tensor->tiles[L1_SCRATCHPAD*4+1].size*
+        tensor->tiles[L1_SCRATCHPAD*4+2].size*
+        tensor->tiles[L1_SCRATCHPAD*4+3].size*
+        tensor->bits/8;
 }
 
-void handle_dma_transfer_5d(
+int handle_dma_transfer_5d(
     MatchCtx* ctx, MatchTensor* tensor,
     void* tensor_l2_pt, void* tensor_l1_pt,
     int match_transfer_type, int ext_mem, int int_mem
@@ -247,6 +262,12 @@ void handle_dma_transfer_5d(
                                     tensor->bits/8,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
+
+        return tensor->tiles[L1_SCRATCHPAD*5+0].size*
+            tensor->tiles[L1_SCRATCHPAD*5+1].size*
+            tensor->tiles[L1_SCRATCHPAD*5+2].size*
+            tensor->tiles[L1_SCRATCHPAD*5+3].size*
+            tensor->bits/8;
     }
     else{
         // if not NCHWc16, we should do a 4D transfer
@@ -283,5 +304,12 @@ void handle_dma_transfer_5d(
                                     tensor->bits/8,
                     .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
                 });
+        
+        return tensor->tiles[L1_SCRATCHPAD*5+0].size*
+            tensor->tiles[L1_SCRATCHPAD*5+1].size*
+            tensor->tiles[L1_SCRATCHPAD*5+2].size*
+            tensor->tiles[L1_SCRATCHPAD*5+3].size*
+            tensor->tiles[L1_SCRATCHPAD*5+4].size*
+            tensor->bits/8;
     }
 }

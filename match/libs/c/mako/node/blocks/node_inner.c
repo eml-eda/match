@@ -44,8 +44,7 @@
 </%def>
 
 <%def name="profile_var(label)">
-    ## deactivated now
-    % if False and not exec_module.separate_build and exec_module.timer_start_fn != "":
+    % if not exec_module.separate_build and exec_module.timer_start_fn != "":
         ${name}_stats.${label} += 
     % elif exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
         real_args[8 + ${"3" if label=="load_bytes" else "4"}] +=

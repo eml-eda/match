@@ -59,7 +59,7 @@ void* cluster_alloc_buffer(const char* name, int tensor_l1_pt, int size, int mem
     // set_im2col_pt(tensor_l1_pt);
 }
 
-void handle_dma_transfer(
+int handle_dma_transfer(
     MatchCtx* ctx, MatchTensor* tensor,
     void* tensor_l2_pt, void* tensor_l1_pt,
     int match_transfer_type,
@@ -81,9 +81,11 @@ void handle_dma_transfer(
     printf("\n");
     #endif
     
+    int num_bytes = 0;
+
     switch(tensor->num_dims){
         case 1:
-            handle_dma_transfer_1d(
+            num_bytes = handle_dma_transfer_1d(
                 ctx, tensor,
                 tensor_l2_pt, tensor_l1_pt,
                 match_transfer_type,
@@ -91,7 +93,7 @@ void handle_dma_transfer(
             );
             break;
         case 2:
-            handle_dma_transfer_2d(
+            num_bytes = handle_dma_transfer_2d(
                 ctx, tensor,
                 tensor_l2_pt, tensor_l1_pt,
                 match_transfer_type,
@@ -99,7 +101,7 @@ void handle_dma_transfer(
             );
             break;
         case 3:
-            handle_dma_transfer_3d(
+            num_bytes = handle_dma_transfer_3d(
                 ctx, tensor,
                 tensor_l2_pt, tensor_l1_pt,
                 match_transfer_type,
@@ -107,7 +109,7 @@ void handle_dma_transfer(
             );
             break;
         case 4:
-            handle_dma_transfer_4d(
+            num_bytes = handle_dma_transfer_4d(
                 ctx, tensor,
                 tensor_l2_pt, tensor_l1_pt,
                 match_transfer_type,
@@ -115,7 +117,7 @@ void handle_dma_transfer(
             );
             break;
         case 5:
-            handle_dma_transfer_5d(
+            num_bytes = handle_dma_transfer_5d(
                 ctx, tensor,
                 tensor_l2_pt, tensor_l1_pt,
                 match_transfer_type,
@@ -129,6 +131,9 @@ void handle_dma_transfer(
     #ifdef CLUSTER_LIB_DEBUG
     printf("\n");
     #endif
+
+    return num_bytes;
+
 }
 
 void wait_l1_dma_transfers(MatchCtx* ctx){
