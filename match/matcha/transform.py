@@ -84,7 +84,7 @@ class MatchOptimizer:
             dtype_size, 
             scale_time=True, 
             scale_addr=False,
-            tiling=False #True
+            tiling=True
         )
         
         with open("matcha.result.json", "w") as f:
@@ -122,6 +122,7 @@ class MatchOptimizer:
                 print(f"Splitting pattern {p} ({pattern.name})")
                 splitter = NodeSplitter(pattern, p, matched_patterns_chunks[p])
                 mod['main'] = rewrite(splitter, mod['main'])
+                mod = relay.transform.InferType()(mod)
 
         print("\nSPLITTED")
         print(mod)
