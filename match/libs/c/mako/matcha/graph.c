@@ -160,6 +160,14 @@ static int ${model_name}_node_device_id[] = {${", ".join(str(node.device_id) for
             #if __${model_name}_GRAPH_DEBUG__
             ${target.print_fn}("[${model_name} GRAPH] MATCH node ${node.name} done, output differs from checksum by %d\r\n", 
             match_byte_checksum_check(${node.outputs[0].name}_pt_${node.tensor_soc_segments_ids[node.outputs[0].id]}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+            
+            // Print first 8 elements of output
+            ${target.print_fn}("[${model_name} GRAPH] MATCH node ${node.name} output first 8 elements: ");
+            for(int i = 0; i < 8; i++) {
+                ${target.print_fn}("%f ", (float)((half*)${node.outputs[0].name}_pt_${node.tensor_soc_segments_ids[node.outputs[0].id]})[i]);
+            }
+            ${target.print_fn}("\r\n");
+            
             #endif
         }
     % endif
@@ -189,22 +197,36 @@ static int match_${model_name}_node_match2seq_id(int node_match_id) {
 const int match_${model_name}_num_nodes = ${len(nodes)};
 
 const int match_${model_name}_num_parents[] = {${", ".join(str(node.num_parents) for node in nodes)}};
-int match_${model_name}_num_remaining_parents[${len(nodes)}];
+volatile int match_${model_name}_num_remaining_parents[${len(nodes)}];
 
-int match_${model_name}_device_is_busy[${target.num_devices}] = {0};
+volatile int match_${model_name}_device_is_busy[${target.num_devices}] = {0};
 
 static void (*match_${model_name}_start_node_fn[])(void) = {${", ".join(f"match_{model_name}_start_node_{i}" if not node.fallback else f"match_{model_name}_run_tvm_node_{i}" for i, node in enumerate(nodes))}};
 static void (*match_${model_name}_finish_node_fn[])(void) = {${", ".join(f"match_{model_name}_finish_node_{i}" if not node.fallback else f"NULL" for i, node in enumerate(nodes))}};
 
-static int next_tvm_node_id = -1;
+static volatile int next_tvm_node_id = -1;
 
 /* Warning - Begin possibly interrupt region */
 static match_${model_name}_schedule_next_node() {
+#if __model_GRAPH_DEBUG__
+    ${target.print_fn}("[model ASYNC] Scheduling next node. Remaining parents:\r\n");
+    for (int i = 0; i < match_${model_name}_num_nodes; i++) {
+        ${target.print_fn}("  %d", match_${model_name}_num_remaining_parents[i]);
+        if (i % 16 == 15) {
+            ${target.print_fn}("\r\n");
+        }
+    }
+    ${target.print_fn}("\r\nDevice Status:\r\n");
+    for (int i = 0; i < ${target.num_devices}; i++) {
+        ${target.print_fn}("  Device %d: %s\r\n", i, match_model_device_is_busy[i] ? "busy" : "free");
+    }
+#endif
+
     next_tvm_node_id = -1;
     for(int i = 0; i < match_${model_name}_num_nodes; i++) {
         int req_dev_id = ${model_name}_node_device_id[i];
         if(match_${model_name}_num_remaining_parents[i] == 0 && !match_${model_name}_device_is_busy[req_dev_id]) {
-            match_${model_name}_device_is_busy[${model_name}_node_device_id[i]] = 1;
+            // match_${model_name}_device_is_busy[${model_name}_node_device_id[i]] = 1;
 
             if (req_dev_id == 0 && next_tvm_node_id < 0) {
                 // This is a TVM node, set next_tvm_node_id
@@ -215,6 +237,7 @@ static match_${model_name}_schedule_next_node() {
             }
         }
     }
+    asm volatile("fence r,rw":::"memory"); // fai offload args privato
 }
 void match_${model_name}_runtime_eoc_callback(int node_match_id) {
     int node_id = match_${model_name}_node_match2seq_id(node_match_id);
@@ -239,15 +262,20 @@ void match_${model_name}_runtime_eoc_callback(int node_match_id) {
     // Check if last node - TODO improve way to check graph execution finished
     if (node_id == match_${model_name}_num_nodes - 1) {
         match_${model_name}_graph_execution_finished = 1;
+    } else {
+        // Schedule next node
+        match_${model_name}_schedule_next_node();
     }
-
-    // Schedule next node
-    match_${model_name}_schedule_next_node();
 }
 void match_${model_name}_runtime_eoc_host_callback(int node_id) {
     #if __${model_name}_GRAPH_DEBUG__
     ${target.print_fn}("[${model_name} ASYNC] Host EOC callback for node %d\r\n", node_id);
     #endif
+
+    if (node_id < 0 || node_id >= match_${model_name}_num_nodes) {
+        match_${model_name}_schedule_next_node();
+        return;
+    }
 
     // Decrease the number of remaining parents for the node children
     for(int i = 0; i < ${model_name}_num_node_children[node_id]; i++) {
@@ -262,10 +290,10 @@ void match_${model_name}_runtime_eoc_host_callback(int node_id) {
     // Check if last node - TODO improve way to check graph execution finished
     if (node_id == match_${model_name}_num_nodes - 1) {
         match_${model_name}_graph_execution_finished = 1;
+    } else {
+        // Schedule next node
+        match_${model_name}_schedule_next_node();
     }
-
-    // Schedule next node
-    match_${model_name}_schedule_next_node();
 }
 /* Warning - End possibly interrupt region */
 
@@ -379,7 +407,7 @@ while (!match_${model_name}_graph_execution_finished)
             return -1;
     }
 
-    if (next_tvm_node_id >= 0) {
+    if (running_tvm_node_id >= 0) {
         // Reset next_tvm_node_id and free device (host) after execution
         next_tvm_node_id = -1;
         // Call EOC callback after TVM host node execution
