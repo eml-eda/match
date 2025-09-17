@@ -40,6 +40,9 @@ static volatile uint32_t* tensor_ptrs;
 static volatile int32_t   task_id;
 
 int main(int argc, char** argv) {
+    % if platform_apis.startup_fn != "":
+        ${platform_apis.startup_fn}();
+    % endif
 
     while (1) {
         <%self:primary_core_region>
