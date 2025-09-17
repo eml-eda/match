@@ -70,7 +70,7 @@ class RuntimeGraph:
                 return in_shape[1] * out_shape[1]
             else:
                 out_shape = self.tensors[out_tids[0]].shape
-                return math.prod(out_shape)  # Default estimate based on output shape size
+                return math.prod(out_shape) // 10 # Default estimate based on output shape size
 
         # Pass 1: Create memory tensors for inputs and parameters
         for node_id, node in enumerate(mod_info["nodes"]):
@@ -391,7 +391,7 @@ class Runtime:
             return start1 < start2 + size2 and start2 < start1 + size1
         for n, node in enumerate(runtime_graph.nodes):
             for n_, future_node in enumerate(runtime_graph.nodes):
-                if solution['nodes'][n]['end'] <= solution['nodes'][n_]['start']:
+                if solution['nodes'][n]['end'] <= solution['nodes'][n_]['start'] and n != n_:
                     for tid, segment in solution['nodes'][n]['tensors_segments'].items():
                         if solution['tensors'][tid]['static_in_l2']:
                             continue
@@ -405,9 +405,10 @@ class Runtime:
                             if addr_overlap(t_offset, t_size, t_offset_, t_size_):
                                 # Add dependency if segments overlap
                                 if n_ not in node.children_nids:
-                                    node.children_nids.append(n_)
+                                    runtime_graph.nodes[n].children_nids.append(n_)
                                     runtime_graph.nodes[n_].num_parents += 1
                                     print(f"  Adding dependency from node {node.name} to {future_node.name} due to overlapping tensor segments in L2.")
+                                    assert n not in runtime_graph.nodes[n_].children_nids
                                     
         # Add extra node dependencies to enforce execution order in each device
         for d, queue in device_queues.items():
@@ -447,6 +448,7 @@ class Runtime:
             if mem_tensor_ is not None:
                 arr = np.frombuffer(activation.flatten().tobytes(), dtype="uint8")
                 arr.tofile(Path(self.out_path, f"golden/{self.model_name}_{activation_name}_data.hex"))
+                np.savetxt(Path(self.out_path, f"golden/{self.model_name}_{activation_name}_debug.txt"), activation.flatten(), delimiter=", ")
         
         # Calculate checksums for activations
         checksums = {

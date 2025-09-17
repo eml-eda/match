@@ -70,7 +70,7 @@ def plot_gantt_chart(ax, data, time_scale, device_colors, comm_colors):
     """Plot Gantt chart for node execution and communication operations"""
     
     # Determine y-axis layout
-    num_devices = len(set(node['device'] for node in data['nodes']))
+    num_devices = max(set(node['device'] for node in data['nodes'])) + 1
     y_positions = {}
     y_labels = []
     

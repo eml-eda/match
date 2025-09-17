@@ -347,20 +347,21 @@ class MatchaModel:
                 raise e
 
             # Generate exec_modules offloaded graph runtimes when separate_build is needed
+            
             for exec_module in target.exec_modules:
                 if exec_module.separate_build:
-                    em_runtime_template_data = graph_runtime_template_data
+                    em_runtime_template_data = graph_runtime_template_data.copy()
                     em_runtime_template_data["nodes"] = [
                         node
                         for node in graph_runtime_template_data["nodes"]
-                        if node.mapping and node.mapping.exec_module.name == exec_module.name
+                        if node.mapping and (node.mapping.exec_module.name == exec_module.name)
                     ]
                     em_runtime_template_data["exec_module"] = exec_module
                     em_runtime_template_data["mem_apis"] = exec_module.match_mem_apis()
                     em_runtime_template_data["sync_apis"] = exec_module.match_sync_apis()
                     em_runtime_template_data["platform_apis"] = exec_module.match_platform_apis()
                     em_runtime_template_data["comp_apis"] = exec_module.match_comp_apis()
-
+                    
                     try:
                         template = os.path.dirname(__file__) + "/../libs/c/mako/match/src/offload_runtime_main.c"
                         content = format_c_code(Template(filename=template).render(**em_runtime_template_data))

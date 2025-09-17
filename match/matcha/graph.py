@@ -22,7 +22,7 @@ class PatternCollector(DFPatternCallback):
         self.matches = []
         
     def callback(self, pre, post, node_map):
-        if not self.check(pre):
+        if not self.check(post):
             return post
         match = []
         
@@ -55,7 +55,7 @@ class Graph():
         # nid = node (layer) id
         # sid = super-node id
         
-        self.device_speeds = [1, 8, 8]
+        self.device_speeds = [0.5, 8, 6] # remove hardcoded device speeds
         self.mod = mod
         self.patterns = patterns
         
