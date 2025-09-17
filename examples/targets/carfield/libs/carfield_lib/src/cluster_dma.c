@@ -2,6 +2,8 @@
 
 #include <carfield_lib/dma.h>
 
+#include "pulp.h"
+
 dma_transfer_id_t dma_transfer_create() { return plp_dma_counter_alloc(); }
 
 void dma_transfer_free(dma_transfer_id_t transfer) {
@@ -23,7 +25,7 @@ void dma_transfer_hwc_to_chw(dma_transfer_cfg_t conf) {
   for (int i = start_fm_channel; i < end_fm_channel; i++) {
     unsigned int dma_cmd = plp_dma_getCmd(conf.dir, size_2d, 1, 1, 1, 1);
     plp_dma_cmd_push_2d(dma_cmd, loc, ext, conf.stride_1d, 1);
-    ext += 1; // next channel
+    ext += 1; // next channel // TODO check if this is correct for other types different than uint8_t
     loc += conf.number_of_1d_copies * conf.number_of_2d_copies;
   }
 }
