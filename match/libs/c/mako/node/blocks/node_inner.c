@@ -142,7 +142,7 @@
                             ${buffer.mem_name}_base_pt + ${buffer.mem_name}_curr_pt_offset,
                             ${buffer.num_bytes}, ${buffer.mem_name}, ${buffer_idx}
                         );
-                        ${buffer.mem_name}_curr_pt_offset += ${buffer.num_bytes};
+                        ${buffer.mem_name}_curr_pt_offset += (${buffer.num_bytes} + 63) & ~63; // align to 64 bytes
                     % endif
                 % endfor
             % endif
@@ -194,7 +194,7 @@
                     % endif
                     ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}] = ${mem_transfer.mem}_base_pt + ${mem_transfer.mem}_curr_pt_offset;
                     ${name}_${mem_transfer.tensor.name}->pt = ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}];
-                    ${mem_transfer.mem}_curr_pt_offset += ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
+                    ${mem_transfer.mem}_curr_pt_offset += (${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)} + 63) & ~63; // align to 64 bytes
                     % if mem_transfer.tensor.tensor_type != "output":
                         // call API for ${exec_module.name}-specific memory transfer handling
                         <%self:profile_var label="3"/> ${mem_apis.mem_transfer}(
@@ -337,10 +337,10 @@
                             % endif
                         % endif
                         % if block.num_buffers_for_computation==1 or mem_transfer.mem!=memory_hierarchy[mem_transfer.tensor.tensor_type][0].name:
-                            ${mem_transfer.mem}_curr_pt_offset -= ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
+                            ${mem_transfer.mem}_curr_pt_offset -= (${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)} + 63) & ~63; // align to 64 bytes
                         % elif block.num_buffers_for_computation>1 and mem_transfer.mem==memory_hierarchy[mem_transfer.tensor.tensor_type][0].name:
                             if(block_${block_idx}_buffer_for_computation_idx>=BLOCK_${block_idx}_NUM_BUFFERS_FOR_COMPUTATION)
-                                ${mem_transfer.mem}_curr_pt_offset -= ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
+                                ${mem_transfer.mem}_curr_pt_offset -= (${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)} + 63) & ~63; // align to 64 bytes
                         % endif
                     % endfor
                 <%self:profile_region_end label="2"/>
