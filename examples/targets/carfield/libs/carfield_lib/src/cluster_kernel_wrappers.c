@@ -29,34 +29,34 @@ void kernel_wrapper(MatchCtx* ctx)
     switch(ctx->pattern_name){
 
     // Pulp NN int8
-    #ifdef dense
-        case dense:             pulp_nn_dense_wrapper(ctx);             break;
+    #ifdef pulpd_dense
+        case pulpd_dense:             pulp_nn_dense_wrapper(ctx);             break;
     #endif
-    #ifdef conv2d
-        case conv2d:            pulp_nn_hoparallel_conv2d_wrapper(ctx); break;
+    #ifdef pulpd_conv2d
+        case pulpd_conv2d:            pulp_nn_hoparallel_conv2d_wrapper(ctx); break;
     #endif
-    #ifdef dense_out
-        case dense_out:         pulp_nn_dense_out_int_wrapper(ctx);     break;
+    #ifdef pulpd_dense_out
+        case pulpd_dense_out:         pulp_nn_dense_out_int_wrapper(ctx);     break;
     #endif
-    #ifdef depthwise_conv2d
-        case depthwise_conv2d:  pulp_nn_dw_conv2d_wrapper(ctx);         break;
+    #ifdef pulpd_depthwise_conv2d
+        case pulpd_depthwise_conv2d:  pulp_nn_dw_conv2d_wrapper(ctx);         break;
     #endif
-    #ifdef pointwise_conv2d
-        case pointwise_conv2d:  pulp_nn_pw_conv2d_wrapper(ctx);         break;
+    #ifdef pulpd_pointwise_conv2d
+        case pulpd_pointwise_conv2d:  pulp_nn_pw_conv2d_wrapper(ctx);         break;
     #endif
-    #ifdef add_requant
-        case add_requant:       pulp_nn_add_wrapper(ctx);               break;
+    #ifdef pulpd_add_requant
+        case pulpd_add_requant:       pulp_nn_add_wrapper(ctx);               break;
     #endif
 
     // Pulp NN fp16
-    #ifdef dense_fp16
-        case dense_fp16:        pulp_fp16_dense_wrapper(ctx);           break;
+    #ifdef pulpd_dense_fp16
+        case pulpd_dense_fp16:        pulp_fp16_dense_wrapper(ctx);           break;
     #endif
-    #ifdef conv2d_fp16
-        case conv2d_fp16:       pulp_fp16_conv2d_wrapper(ctx);          break;
+    #ifdef pulpd_conv2d_fp16
+        case pulpd_conv2d_fp16:       pulp_fp16_conv2d_wrapper(ctx);          break;
     #endif
-    #ifdef avgpool2d_fp16
-        case avgpool2d_fp16:    pulp_fp16_avgpool2d_wrapper(ctx);       break;
+    #ifdef pulpd_avgpool2d_fp16
+        case pulpd_avgpool2d_fp16:    pulp_fp16_avgpool2d_wrapper(ctx);       break;
     #endif
 
         default:                wtf_wrapper(ctx);                       break;
@@ -72,8 +72,8 @@ void pulp_nn_dense_wrapper(MatchCtx* ctx){
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
     int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
-    int out_ch = tensors[num_tensors-1].tiles[MEM_L1*2+1].size;
-    int inp_ch = tensors[0].tiles[MEM_L1*2+1].size;
+    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*2+1].size;
+    int inp_ch = tensors[0].tiles[MEM_L1_PULPD*2+1].size;
 
 #if DEBUG_CLUSTER_LIB
     smp_printf("[PULP][KER] 'pulp_nn_linear': Out. tile (%d,) | Inp. tile (%d,) | Requant Shift: %d\r\n", out_ch, inp_ch, right_shift);
@@ -99,8 +99,8 @@ void pulp_nn_dense_wrapper(MatchCtx* ctx){
 void pulp_nn_dense_out_int_wrapper(MatchCtx* ctx){
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_tensors = ctx->tensors->num_tensors;
-    int inp_ch = tensors[0].tiles[MEM_L1*2+1].size;
-    int out_ch = tensors[num_tensors-1].tiles[MEM_L1*2+1].size;
+    int inp_ch = tensors[0].tiles[MEM_L1_PULPD*2+1].size;
+    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*2+1].size;
     
 #if DEBUG_CLUSTER_LIB
     smp_printf("[PULP][KER] 'pulp_nn_linear_out_32': Out. tile (%d,) | Inp. tile (%d,)\r\n", out_ch, inp_ch);
@@ -124,18 +124,18 @@ void pulp_nn_dw_conv2d_wrapper(MatchCtx* ctx){
     int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
     // Ouput
-    int out_width = tensors[num_tensors-1].tiles[MEM_L1*4+2].size; // out width
-    int out_height = tensors[num_tensors-1].tiles[MEM_L1*4+1].size; // out height
-    int out_ch = tensors[num_tensors-1].tiles[MEM_L1*4+3].size; // out ch
+    int out_width = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+2].size; // out width
+    int out_height = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+1].size; // out height
+    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+3].size; // out ch
     // Input
-    int inp_width = tensors[0].tiles[MEM_L1*4+2].size; // out width
-    int inp_height = tensors[0].tiles[MEM_L1*4+1].size; // out height
-    int inp_ch = tensors[0].tiles[MEM_L1*4+3].size; // out ch
+    int inp_width = tensors[0].tiles[MEM_L1_PULPD*4+2].size; // out width
+    int inp_height = tensors[0].tiles[MEM_L1_PULPD*4+1].size; // out height
+    int inp_ch = tensors[0].tiles[MEM_L1_PULPD*4+3].size; // out ch
     // Padding
-    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1*4+1]));
-    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1*4+2]));
-    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1*4+1]));
-    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1*4+2]));
+    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+1]));
+    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+2]));
+    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+1]));
+    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+2]));
 
 #if DEBUG_CLUSTER_LIB
     smp_printf("[PULP][KER] 'pulp_nn_depthwise_generic': ");
@@ -181,18 +181,18 @@ void pulp_nn_pw_conv2d_wrapper(MatchCtx* ctx){
     int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
     // Output
-    int out_width = tensors[num_tensors-1].tiles[MEM_L1*4+2].size; // out width
-    int out_height = tensors[num_tensors-1].tiles[MEM_L1*4+1].size; // out height
-    int out_ch = tensors[num_tensors-1].tiles[MEM_L1*4+3].size; // out ch
+    int out_width = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+2].size; // out width
+    int out_height = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+1].size; // out height
+    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+3].size; // out ch
     // Input
-    int inp_width = tensors[0].tiles[MEM_L1*4+2].size; // out width
-    int inp_height = tensors[0].tiles[MEM_L1*4+1].size; // out height
-    int inp_ch = tensors[0].tiles[MEM_L1*4+3].size; // out ch
+    int inp_width = tensors[0].tiles[MEM_L1_PULPD*4+2].size; // out width
+    int inp_height = tensors[0].tiles[MEM_L1_PULPD*4+1].size; // out height
+    int inp_ch = tensors[0].tiles[MEM_L1_PULPD*4+3].size; // out ch
     // Padding
-    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1*4+1]));
-    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1*4+2]));
-    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1*4+1]));
-    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1*4+2]));
+    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+1]));
+    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+2]));
+    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+1]));
+    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+2]));
 
 #if DEBUG_CLUSTER_LIB
     smp_printf("[PULP][KER] pulp_nn_pointwise_HoWo_parallel: ");
@@ -237,18 +237,18 @@ void pulp_nn_hoparallel_conv2d_wrapper(MatchCtx* ctx){
     int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
     // out
-    int out_width = tensors[num_tensors-1].tiles[MEM_L1*4+2].size; // out width
-    int out_height = tensors[num_tensors-1].tiles[MEM_L1*4+1].size; // out height
-    int out_ch = tensors[num_tensors-1].tiles[MEM_L1*4+3].size; // out ch
+    int out_width = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+2].size; // out width
+    int out_height = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+1].size; // out height
+    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+3].size; // out ch
     // inp
-    int inp_width = tensors[0].tiles[MEM_L1*4+2].size; // out width
-    int inp_height = tensors[0].tiles[MEM_L1*4+1].size; // out height
-    int inp_ch = tensors[0].tiles[MEM_L1*4+3].size; // out ch
+    int inp_width = tensors[0].tiles[MEM_L1_PULPD*4+2].size; // out width
+    int inp_height = tensors[0].tiles[MEM_L1_PULPD*4+1].size; // out height
+    int inp_ch = tensors[0].tiles[MEM_L1_PULPD*4+3].size; // out ch
     // pad
-    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1*4+1]));
-    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1*4+2]));
-    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1*4+1]));
-    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1*4+2]));
+    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+1]));
+    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+2]));
+    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+1]));
+    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+2]));
 
 #if DEBUG_CLUSTER_LIB
     smp_printf("[PULP][KER] pulp_nn_conv_Ho_parallel: ");
@@ -292,9 +292,9 @@ void pulp_nn_add_wrapper(MatchCtx* ctx){
     int num_tensors = ctx->tensors->num_tensors;
     int right_shift = ((MatchRightShiftAttrs*)ctx->ops->ops[num_ops-3].attrs)->right_shift;
     // Output
-    int out_width = tensors[num_tensors-1].tiles[MEM_L1*4+2].size;
-    int out_height = tensors[num_tensors-1].tiles[MEM_L1*4+1].size;
-    int out_ch = tensors[num_tensors-1].tiles[MEM_L1*4+3].size;
+    int out_width = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+2].size;
+    int out_height = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+1].size;
+    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+3].size;
 
 #if DEBUG_CLUSTER_LIB
     smp_printf("[PULP][KER] pulp_nn_add: ");
@@ -324,8 +324,8 @@ void pulp_fp16_dense_wrapper(MatchCtx* ctx) {
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
-    int inp_ch = tensors[0].tiles[MEM_L1*2+1].size;
-    int out_ch = tensors[num_tensors-1].tiles[MEM_L1*2+1].size;
+    int inp_ch = tensors[0].tiles[MEM_L1_PULPD*2+1].size;
+    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*2+1].size;
 
     // TODO improve this - use RedMulE when supported
     if (inp_ch == 64 && out_ch == 10) {
@@ -363,18 +363,18 @@ void pulp_fp16_conv2d_wrapper(MatchCtx* ctx){
     void *output = tensors[num_tensors-1].pt;
     void *im2col = im2col_pt_;
 
-    int out_width = tensors[num_tensors-1].tiles[MEM_L1*4+2].size; 
-    int out_height = tensors[num_tensors-1].tiles[MEM_L1*4+1].size;
-    int out_ch = tensors[num_tensors-1].tiles[MEM_L1*4+3].size;
+    int out_width = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+2].size; 
+    int out_height = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+1].size;
+    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*4+3].size;
 
-    int inp_width = tensors[0].tiles[MEM_L1*4+2].size; 
-    int inp_height = tensors[0].tiles[MEM_L1*4+1].size;
-    int inp_ch = tensors[0].tiles[MEM_L1*4+3].size;
+    int inp_width = tensors[0].tiles[MEM_L1_PULPD*4+2].size; 
+    int inp_height = tensors[0].tiles[MEM_L1_PULPD*4+1].size;
+    int inp_ch = tensors[0].tiles[MEM_L1_PULPD*4+3].size;
 
-    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1*4+1]));
-    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1*4+2]));
-    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1*4+1]));
-    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1*4+2]));
+    int pad_top = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+1]));
+    int pad_left = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+2]));
+    int pad_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+1]));
+    int pad_right = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*4+2]));
     
     MatchConv2DAttrs* conv_attrs = (MatchConv2DAttrs*)ctx->ops->ops[0].attrs;
     int filter_width = conv_attrs->kernel_size[1];
@@ -418,8 +418,8 @@ void redmule_fp16_dense_wrapper(MatchCtx* ctx) {
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
-    int inp_neurons = tensors[0].tiles[MEM_L1*2+1].size;
-    int out_neurons = tensors[num_tensors-1].tiles[MEM_L1*2+1].size;
+    int inp_neurons = tensors[0].tiles[MEM_L1_PULPD*2+1].size;
+    int out_neurons = tensors[num_tensors-1].tiles[MEM_L1_PULPD*2+1].size;
 
 #if DEBUG_CLUSTER_LIB
     smp_printf("[PULP][KER] 'redmule_gemm_fp16': M = 1 | N = %d | K = %d\r\n", inp_neurons,  out_neurons);

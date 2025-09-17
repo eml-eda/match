@@ -53,7 +53,7 @@ class PulpCluster(ExecModule):
         # Execution model is Symmetric Multiprocessing
         self.is_smp = True
         # Shared memory extern address variable
-        self.shared_memory_extern_addr = "offload_args"
+        self.shared_memory_extern_addr = "pulp_cluster_args"
         # Timer functions
         self.timer_start_fn = "cluster_timer_start"
         self.timer_stop_fn = "cluster_timer_stop"
@@ -68,7 +68,7 @@ class PulpCluster(ExecModule):
     def module_memories(self):
         return [
             # from lower level to higher level memories
-            MemoryInst(name="MEM_L1", k_bytes=self.L1_SCRATCHPAD_KB_SIZE, sw_controlled=True),
+            MemoryInst(name="MEM_L1_PULPD", k_bytes=self.L1_SCRATCHPAD_KB_SIZE, sw_controlled=True),
         ]
 
     def zigzag_optimal_spatial_mapping_def(
@@ -99,7 +99,7 @@ class PulpCluster(ExecModule):
                     w_tensor.data = w_tensor.data.transpose(1,0)
                     w_tensor.dims = [w_tensor.dims[1], w_tensor.dims[0]]
                 w_tensor.layout = "CN"
-            elif "dense" in w_tensor.name and pattern_name == "dense_fp16":
+            elif "dense" in w_tensor.name and "dense" in pattern_name:
                 # RedMulE expects weights in CN layout
                 if w_tensor.layout != "CN":
                     w_tensor.data = w_tensor.data.transpose(1,0)
@@ -130,10 +130,10 @@ class PulpCluster(ExecModule):
             elif pattern_name=="depthwise_conv2d":
                 # CORES * (ks[0] * (tile_n_in + p[0] + p[2]) + ks[0])
                 im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
-            elif pattern_name=="conv2d_fp16":
+            elif pattern_name=="pulpd_conv2d_fp16":
                 im2col_size_l1 = 2 * self.NUM_CORES * math.prod(filter_shape) * tile_inp_chs
             if im2col_size_l1:
-                schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="MEM_L1",
+                schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="MEM_L1_PULPD",
                                                    num_bytes=im2col_size_l1))
             # I searched in the pulp_nn lib but also for DW convs the pwt buffer(bufferB in pulp_nn_depthwise_generic declaration)
             # doesnt seem to be used anywhere...
@@ -156,8 +156,8 @@ class PulpCluster(ExecModule):
     def mem_apis_def(self, memory_apis: MemoryApis=None, pattern_name="conv2d"):
         memory_apis.mem_transfer = "handle_dma_transfer"
         memory_apis.alloc_buffer = "cluster_alloc_buffer"
-        memory_apis.init_memory["MEM_L1"] = "init_l1_scratchpad_memory"
-        memory_apis.free_memory["MEM_L1"] = "free_l1_scratchpad_memory"
+        memory_apis.init_memory["MEM_L1_PULPD"] = "init_l1_scratchpad_memory"
+        memory_apis.free_memory["MEM_L1_PULPD"] = "free_l1_scratchpad_memory"
         
         return memory_apis
     
@@ -245,6 +245,7 @@ class PulpCluster(ExecModule):
             return add_checks_get_first_op(node, "cast").attrs.dtype=="uint8"
         
         def only_out_fp16(node):
+            #return False
             #is_fp16 = add_checks_get_first_op(node, "nn.dense").attrs.out_dtype == "float16"
             #is_fp16 |= getattr(node.attrs, "out_dtype", None) == "float16"
             is_fp16 = (node.args[0].checked_type.dtype == "float16")
@@ -288,14 +289,14 @@ class PulpCluster(ExecModule):
 
         return [
             # fp16
-            PartitioningPattern(name="dense_fp16",pattern=dense,additional_checks=only_out_fp16),
-            PartitioningPattern(name="conv2d_fp16",pattern=conv2d,additional_checks=only_out_fp16),
+            PartitioningPattern(name="pulpd_dense_fp16",pattern=dense,additional_checks=only_out_fp16),
+            PartitioningPattern(name="pulpd_conv2d_fp16",pattern=conv2d,additional_checks=only_out_fp16),
             #PartitioningPattern(name="avgpool2d_fp16",pattern=avgpool2d,additional_checks=only_out_fp16),
             # int8
             #PartitioningPattern(name="dense_out",pattern=dense_pt_out),
-            PartitioningPattern(name="dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
-            PartitioningPattern(name="conv2d",pattern=conv_pt_requant,additional_checks=only_std_convs),
-            PartitioningPattern(name="depthwise_conv2d",pattern=conv_pt_requant,additional_checks=only_dw_convs),
-            PartitioningPattern(name="pointwise_conv2d",pattern=conv_pt_requant,additional_checks=only_pw_convs),
-            PartitioningPattern(name="add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8)
+            PartitioningPattern(name="pulpd_dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
+            PartitioningPattern(name="pulpd_conv2d",pattern=conv_pt_requant,additional_checks=only_std_convs),
+            PartitioningPattern(name="pulpd_depthwise_conv2d",pattern=conv_pt_requant,additional_checks=only_dw_convs),
+            PartitioningPattern(name="pulpd_pointwise_conv2d",pattern=conv_pt_requant,additional_checks=only_pw_convs),
+            PartitioningPattern(name="pulpd_add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8)
         ]

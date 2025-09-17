@@ -1,3 +1,4 @@
+#ifdef __pulp_cluster__
 #ifndef CAR_LIB_CLUSTER_H
 #define CAR_LIB_CLUSTER_H
 
@@ -101,7 +102,7 @@ void redmule_fp16_matmul_wrapper(MatchCtx* ctx);
 
 // Debug Flags
 
-#define DEBUG_CLUSTER_LIB           1
+#define DEBUG_CLUSTER_LIB           0
 #define DEBUG_CALLOC_L1_SCRATCHPAD  0
 #define DEBUG_BLOCKING_DMA          0
 #define DEBUG_COUNT_CORE_SYNCS      0
@@ -110,11 +111,8 @@ void redmule_fp16_matmul_wrapper(MatchCtx* ctx);
 
 // Float16 typedef for cluster
 
-#ifdef __pulp_cluster__
-
 typedef float16 fp16;
 typedef fp16 v2f16 __attribute__((vector_size (4)));
 
-#endif
-
 #endif // CAR_LIB_CLUSTER_H
+#endif // __pulp_cluster__
