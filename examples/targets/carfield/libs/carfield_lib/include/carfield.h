@@ -65,6 +65,19 @@ int pulp_cluster_wait_end_of_task_poll(volatile uint32_t* args, uint32_t task_id
 void pulp_cluster_send_task_mbox(volatile uint32_t* args, uint32_t task_id);
 int pulp_cluster_wait_end_of_task_mbox(volatile uint32_t* args, uint32_t task_id);
 
+// Host functions specific for spatz exec module
+
+void spatz_reset();
+
+void spatz_offload_async(void* boot_addr);
+void spatz_offload_blk(void* boot_addr);
+
+void spatz_send_task_poll(volatile uint32_t* args, uint32_t task_id);
+int spatz_wait_end_of_task_poll(volatile uint32_t* args, uint32_t task_id);
+
+void spatz_send_task_mbox(volatile uint32_t* args, uint32_t task_id);
+int spatz_wait_end_of_task_mbox(volatile uint32_t* args, uint32_t task_id);
+
 
 extern const uint8_t __l2_common_start[];
 extern const uint8_t __l2_common_end[];

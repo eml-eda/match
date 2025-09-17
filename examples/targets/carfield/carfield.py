@@ -1,10 +1,13 @@
 import os
+from tvm import relay
+
 from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
 from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM
 from match.transform.requant import MatchRequantRewriter
+
 from pulp_cluster import PulpCluster
-from tvm import relay
+from spatz import Spatz
 
 # pulp config
 PULP_CORES = 8
@@ -27,6 +30,13 @@ class Carfield(MatchTarget):
                 l2_kb_size=L2_SHARED_MEM_KB_SIZE,
                 l3_kb_size=L3_FLASH_KB_SIZE,
                 async_dma=ASYNC_DMA
+            ),
+            Spatz(
+                num_cores=PULP_CORES,
+                l1_kb_size=L1_SCRATCHPAD_KB_SIZE,
+                l2_kb_size=L2_SHARED_MEM_KB_SIZE,
+                l3_kb_size=L3_FLASH_KB_SIZE,
+                async_dma=ASYNC_DMA
             )
         ],name="carfield")
         self.set_target_host()
@@ -41,6 +51,8 @@ class Carfield(MatchTarget):
         self.other_files_to_copy = [
             os.path.dirname(__file__)+"/config/link.ld",
             os.path.dirname(__file__)+"/config/link_pulpd.ld",
+            os.path.dirname(__file__)+"/config/link_spatz.ld",
+            os.path.dirname(__file__)+"/config/CMakeLists.txt",
             os.path.dirname(__file__)+"/config/elf2payload.py"
         ]
         self.tvm_runtime_include_path = os.path.dirname(__file__)+"/config/tvm_runtime.h"
