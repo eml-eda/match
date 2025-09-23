@@ -87,7 +87,7 @@ def optimize(graph, devices, l2_size, l3_size, bandwidth, dtype_size, scale_time
     # Add dependency constraints
     for node in nodes + super_nodes:
         for child_id in node.children_nids:
-            model.add(node_vars[node.id][1] <= node_vars[child_id][0]).only_enforce_if([node_active_vars[node.id], node_active_vars[child_id]])
+            model.add(node_vars[node.id][1] < node_vars[child_id][0]).only_enforce_if([node_active_vars[node.id], node_active_vars[child_id]])
 
     # Add non-overlapping node execution in devices
     for d in range(0, len(devices)):
@@ -392,6 +392,7 @@ def optimize(graph, devices, l2_size, l3_size, bandwidth, dtype_size, scale_time
     
     # Fix makespan minimize l2_usage
     if True:
+        print("Now minimizing L2 and L3 usage...")
         model.add(makespan <= solver.value(makespan))  # fix previous objective
         peak_l2_usage = model.new_int_var(0, l2_size, "peak_l2_usage")
         peak_l3_usage = model.new_int_var(0, l3_size, "peak_l3_usage")
@@ -402,7 +403,8 @@ def optimize(graph, devices, l2_size, l3_size, bandwidth, dtype_size, scale_time
             for i, (l3_start, l3_end, l3_duration, l3_interval, active) in enumerate(tensor_addrs_l3[t]):
                 model.add(peak_l3_usage >= l3_end).only_enforce_if(active)
         model.minimize(10*peak_l3_usage + peak_l2_usage + num_loads + num_stores)  # optimize for second objective
-        solver.solve(model)
+        status = solver.solve(model)
+        assert status == cp.OPTIMAL
     
     # Extract solution
     print("  Extracting solution...")

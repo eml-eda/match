@@ -268,6 +268,8 @@ class MatchaModel:
             subprocess.getoutput(f"mkdir {build_dir}/codegen/host")
             subprocess.getoutput(f"mkdir {build_dir}/codegen/host/include")
             subprocess.getoutput(f"mkdir {build_dir}/codegen/host/src")
+            math_file = os.path.dirname(__file__) + "/../libs/c/static/default/src/math.c"
+            subprocess.getoutput(f"cp {math_file} {build_dir}/codegen/host/src/math.c")
             subprocess.getoutput(f"tar -xvf {build_dir}/mod.tar -C {build_dir}/codegen/host/src")
             include_paths = [
                 "-I" + os.path.join(tvm.__path__[0], "../..", "3rdparty", "dlpack", "include"),
@@ -283,6 +285,7 @@ class MatchaModel:
                     f"{build_dir}/codegen/host/src/devc.c",
                     f"{build_dir}/codegen/host/src/lib0.c",
                     f"{build_dir}/codegen/host/src/lib1.c",
+                    f"{build_dir}/codegen/host/src/math.c",
                 ],
                 options=include_paths + other_flags,
                 cc="clang",

@@ -284,6 +284,6 @@ class Graph():
             dims = [int(i) for i in call.checked_type.shape]
             return math.prod(dims)
         else:
-            return 0  # Fallback for other ops
+            return 1000  # Fallback for other ops
 
   

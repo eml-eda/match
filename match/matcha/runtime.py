@@ -407,8 +407,8 @@ class Runtime:
                                 if n_ not in node.children_nids:
                                     runtime_graph.nodes[n].children_nids.append(n_)
                                     runtime_graph.nodes[n_].num_parents += 1
-                                    print(f"  Adding dependency from node {node.name} to {future_node.name} due to overlapping tensor segments in L2.")
-                                    assert n not in runtime_graph.nodes[n_].children_nids
+                                    #print(f"  Adding dependency from node {node.name} to {future_node.name} due to overlapping tensor segments in L2.")
+                                    assert n not in runtime_graph.nodes[n_].children_nids, f"Cycle detected between nodes ({n}) {node.name} and ({n_}) {future_node.name}!"
                                     
         # Add extra node dependencies to enforce execution order in each device
         for d, queue in device_queues.items():
@@ -420,7 +420,7 @@ class Runtime:
                 if next_node_id not in runtime_graph.nodes[node_id].children_nids:
                     runtime_graph.nodes[node_id].children_nids.append(next_node_id)
                     runtime_graph.nodes[next_node_id].num_parents += 1
-                    print(f"  Adding dependency from node {runtime_graph.nodes[node_id].name} to {runtime_graph.nodes[next_node_id].name} to enforce execution order in device {d}.")
+                    #print(f"  Adding dependency from node {runtime_graph.nodes[node_id].name} to {runtime_graph.nodes[next_node_id].name} to enforce execution order in device {d}.")
 
         # Gather inputs and outputs
         input_tensors = [tens for tens in runtime_graph.tensors if tens.is_input]
