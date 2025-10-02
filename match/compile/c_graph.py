@@ -1,12 +1,16 @@
-import tarfile
-from match.compile.compiler import MatchCompiler
-from match.target import DefaultMatchTarget, MatchTarget
-from tvm.driver.tvmc.model import TVMCModel
 import os
-from typing import Dict
-import tvm
-from match.relay.utils.utils import create_build_dir
 import pathlib
+import tarfile
+from typing import Dict
+
+import tvm
+from tvm.ir import register_intrin_lowering
+from tvm.tir import call_pure_extern
+from tvm.driver.tvmc.model import TVMCModel
+
+from match.target import DefaultMatchTarget, MatchTarget
+from match.compile.compiler import MatchCompiler
+from match.relay.utils.utils import create_build_dir
 
 
 def match_tvmc_graph_compile_wrapper(
@@ -104,6 +108,15 @@ def match_tvmc_graph_compile_wrapper(
     # pass_context_configs.append("relay.backend.disable_memory_plan=1")
     if not fuse_layers:
         pass_context_configs.append("relay.FuseOps.max_depth=1")
+        
+    #pass_context_configs.append("tir.add_lower_pass=1,match.matcha.passes.replace_exp_with_custom_call")
+    
+    def _rule_float_direct(op):
+        if str(op.dtype).startswith("float"):
+            return call_pure_extern(op.dtype, "my_" + op.op.name[4:], *op.args)
+        return None
+    register_intrin_lowering("tir.exp", target="c", f=_rule_float_direct, level=99)
+    
 
     tvmc_pkg = tvm.driver.tvmc.compiler.compile_model(
         tvmc_model=model,
