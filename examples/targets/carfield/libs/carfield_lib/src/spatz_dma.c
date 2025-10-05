@@ -54,12 +54,10 @@ void dma_transfer_1d_async(dma_transfer_cfg_t conf) {
 }
 
 void dma_transfer_2d_async(dma_transfer_cfg_t conf) {
-  const int size_2d = conf.number_of_1d_copies * conf.length_1d_copy;
-  
   if (conf.dir == DMA_DIR_L2_TO_L1) {
-    snrt_dma_start_2d(conf.loc, conf.ext, size_2d, conf.stride_1d, 1, 1);
+    snrt_dma_start_2d(conf.loc, conf.ext, conf.length_1d_copy, conf.length_1d_copy, conf.stride_1d, conf.number_of_1d_copies);
   } else {
-    snrt_dma_start_2d(conf.ext, conf.loc, size_2d, conf.stride_1d, 1, 1);
+    snrt_dma_start_2d(conf.ext, conf.loc, conf.length_1d_copy, conf.length_1d_copy, conf.stride_1d, conf.number_of_1d_copies);
   }
 }
 
