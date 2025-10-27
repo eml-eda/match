@@ -184,19 +184,56 @@ class Spatz(ExecModule):
             has_even_out_channels = (conv.args[1].checked_type.shape[3] % 2 == 0)
             return has_even_in_channels and has_even_out_channels
         
+        def check_conv2d_even_output_channels(node):
+            conv = add_checks_get_first_op(node, "nn.conv2d")
+            has_even_out_channels = (conv.args[1].checked_type.shape[3] % 2 == 0)
+            return has_even_out_channels
+        
+        def check_conv2d_even_input_group_channels(node):
+            conv = add_checks_get_first_op(node, "nn.conv2d")
+            has_even_in_group_channels = ((conv.args[0].checked_type.shape[3] // conv.attrs.groups) % 2 == 0)
+            return has_even_in_group_channels
 
         def check_linear_even_out_channels(node):
             dense = add_checks_get_first_op(node, "nn.dense")
-            has_even_out_channels = (dense.args[1].checked_type.shape[0] % 2 == 0)
+            has_even_out_channels = (dense.args[1].checked_type.shape[0] % 4 == 0)
             return has_even_out_channels
         
         def spatz_conv2d_check(node):
-            return check_fp16_out(node) and check_conv2d_even_channels(node)
+            valid = check_fp16_out(node)
+            valid = valid and check_conv2d_even_channels(node)
+            
+            conv = add_checks_get_first_op(node, "nn.conv2d")
+            valid = valid and conv.attrs.data_layout == "NHWC"
+            valid = valid and conv.attrs.groups == 1 # Grouped conv currently not supported
+            valid = valid and conv.attrs.dilation[0] == 1 and conv.attrs.dilation[1] == 1 # Dilation currently not supported
+            
+            return valid
+        
+        def spatz_conv2d_grouped_check(node):
+            valid = check_fp16_out(node)
+            valid = valid and check_conv2d_even_output_channels(node)
+            valid = valid and check_conv2d_even_input_group_channels(node)
+            
+            conv = add_checks_get_first_op(node, "nn.conv2d")
+            valid = valid and conv.attrs.data_layout == "NHWC"
+            valid = valid and conv.attrs.groups == conv.args[1].checked_type.shape[3] # Only depthwise conv supported in match
+            valid = valid and conv.attrs.dilation[0] == 1 and conv.attrs.dilation[1] == 1 # Dilation currently not supported
+            return valid
         
         def spatz_dense_check(node):
-            return check_fp16_out(node) # and check_linear_even_out_channels(node)
+            return check_fp16_out(node) and check_linear_even_out_channels(node)
         
         def conv2d():
+            conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
+            return conv2d
+        
+        def conv2d_bias():
+            conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
+            conv2d_add = is_op("add")(conv2d, is_constant()) | is_op("add")(is_constant(), conv2d)
+            return conv2d_add
+        
+        def conv2d_bnorm():
             conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
             conv2d_bias = is_op("add")(conv2d, is_constant()) | is_op("add")(is_constant(), conv2d)
             conv2d_batch_mul = is_op("multiply")(conv2d_bias, is_constant()) | is_op("multiply")(is_constant(), conv2d_bias)
@@ -206,10 +243,21 @@ class Spatz(ExecModule):
         def dense():
             dense = is_op("nn.dense")(wildcard(), wildcard())
             return dense
-            dense_bias = is_op("add")(dense, is_constant()) | is_op("add")(is_constant(), dense)
-            return dense_bias
+        
+        def dense_bias():
+            dense = is_op("nn.dense")(wildcard(), wildcard())
+            dense_add = is_op("add")(dense, wildcard()) | is_op("add")(wildcard(), dense)
+            return dense_add
         
         return [
             PartitioningPattern(name="spatz_conv2d_fp16", pattern=conv2d, additional_checks=spatz_conv2d_check),
+            PartitioningPattern(name="spatz_conv2d_bias_fp16", pattern=conv2d_bias, additional_checks=spatz_conv2d_check),
+            PartitioningPattern(name="spatz_conv2d_bnorm_fp16", pattern=conv2d_bnorm, additional_checks=spatz_conv2d_check),
+            
+            PartitioningPattern(name="spatz_conv2d_grouped_fp16", pattern=conv2d, additional_checks=spatz_conv2d_grouped_check),
+            PartitioningPattern(name="spatz_conv2d_grouped_bias_fp16", pattern=conv2d_bias, additional_checks=spatz_conv2d_grouped_check),
+            PartitioningPattern(name="spatz_conv2d_grouped_bnorm_fp16", pattern=conv2d_bnorm, additional_checks=spatz_conv2d_grouped_check),
+            
             PartitioningPattern(name="spatz_dense_fp16", pattern=dense, additional_checks=spatz_dense_check),
+            PartitioningPattern(name="spatz_dense_bias_fp16", pattern=dense_bias, additional_checks=spatz_dense_check),
         ]
