@@ -5,8 +5,8 @@ ENTRY( _start )
 /* L2 uses port 2 instead of port 1 used by host */
 MEMORY
 {
-  l2           : ORIGIN = 0x78200000 + 768K + 64, LENGTH = 128K
-  l2_common    : ORIGIN = 0x78200000 + 768K - 256, LENGTH = 256
+  l2           : ORIGIN = 0x78200000 + 832K + 64, LENGTH = 96K
+  l2_common    : ORIGIN = 0x78200000 + 832K - 256, LENGTH = 256
   l1_pulpd     : ORIGIN = 0x50000000, LENGTH = 256K
 }
 

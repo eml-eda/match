@@ -7,9 +7,9 @@ ENTRY(_start)
 
 MEMORY
 {
-    l2           : ORIGIN = 0x78200000 + 768K + 64 + 128K, LENGTH =  1M - 768K - 64 - 128K
-    l2_common    : ORIGIN = 0x78200000 + 768K - 256, LENGTH = 256
-    l1_spatz     : ORIGIN = 0x51000000, LENGTH = 128K
+    l2           : ORIGIN = 0x78200000 + 832K + 64 + 96K, LENGTH =  1M - 832K - 64 - 96K
+    l2_common    : ORIGIN = 0x78200000 + 832K - 256, LENGTH = 256
+    l1_spatz     : ORIGIN = 0x51000000, LENGTH = 96K
 }
 
 SECTIONS
