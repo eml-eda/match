@@ -151,6 +151,8 @@ class MatchTarget(ABC):
         for exec_module in exec_modules:
             self.add_exec_module(exec_module)
             self.exec_modules_dict[exec_module.name] = exec_module
+            
+        self.enable_device_parallelism = True
 
     def singleton_instantiated(self, **kwargs):
         prev_kwargs_ = dict() if not hasattr(self, "prev_kwargs") else self.prev_kwargs
@@ -205,6 +207,7 @@ class MatchTarget(ABC):
             if pt.name == pattern_name:
                 return pt
         return None
+    
 
     def get_layer_from_module(self, mod: tvm.ir.IRModule, exec_module_name: str = "", pattern_name: str = "conv2d"):
         """Function to retrieve the schedule with caching of a certain TVM module

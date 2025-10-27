@@ -14,34 +14,38 @@ PULP_CORES = 8
 #L1_SCRATCHPAD_KB_SIZE = 128*1024
 #L2_SHARED_MEM_KB_SIZE = 256*1024
 
-L1_SCRATCHPAD_KB_SIZE = 128
+L1_PULPD_KB = 128
+L1_SPATZ_KB = 64
 #L2_SHARED_MEM_KB_SIZE = 480
 L2_SHARED_MEM_KB_SIZE = 256*1024
 L3_FLASH_KB_SIZE = 8*1024*1024
 
 ASYNC_DMA = False
+LAYER_SPLIT = True
 
 class Carfield(MatchTarget):
     def __init__(self):
         super(Carfield,self).__init__([
             PulpCluster(
                 num_cores=PULP_CORES,
-                l1_kb_size=L1_SCRATCHPAD_KB_SIZE,
+                l1_kb_size=L1_PULPD_KB,
                 l2_kb_size=L2_SHARED_MEM_KB_SIZE,
                 l3_kb_size=L3_FLASH_KB_SIZE,
                 async_dma=ASYNC_DMA
             ),
             Spatz(
                 num_cores=PULP_CORES,
-                l1_kb_size=L1_SCRATCHPAD_KB_SIZE,
+                l1_kb_size=L1_SPATZ_KB,
                 l2_kb_size=L2_SHARED_MEM_KB_SIZE,
                 l3_kb_size=L3_FLASH_KB_SIZE,
                 async_dma=ASYNC_DMA
             )
-        ],name="carfield")
+        ], name="carfield")
         self.set_target_host()
         self.set_paths()
         self.set_apis()
+        
+        self.enable_device_parallelism = LAYER_SPLIT
 
     def set_target_host(self):
         self.cpu_type = "riscv_cpu -march=riscv64"
