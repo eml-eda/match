@@ -72,10 +72,16 @@ def partition(mod, params, dpu, opts):
     target = get_target()
 
     pipeline = []
-    pipeline.append(MatchSaveRelay("start"))
+    
+    def saved_relay_id():
+        saved_relay_id.counter += 1
+        return saved_relay_id.counter
+    saved_relay_id.counter = -1
+    
+    pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_start"))
     pipeline.append(transform.InferType())
     pipeline.append(MatchRenameIO())
-    pipeline.append(MatchSaveRelay("renamed"))
+    pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_renamed"))
     
     pipeline.append(transform.InferType())
     # TODO: understand if current broadcast rel of outdtype is fixed with new releases
@@ -86,18 +92,18 @@ def partition(mod, params, dpu, opts):
     # to -->conv(outdtype="int32") --> cast(outdtype="int32") --> multiply() -> add()
     pipeline.append(MatchRemoveFakeOutDtypeCasts())
     pipeline.append(transform.InferType())
-    pipeline.append(MatchSaveRelay("removed_fake_casts"))
+    pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_removed_fake_casts"))
 
     pipeline.append(transform.InferType())
     for net_transform_name, net_transform in target.transform_before_partitioning(opts):
         pipeline.append(net_transform)
-        pipeline.append(MatchSaveRelay(net_transform_name))
+        pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_{net_transform_name}"))
         pipeline.append(transform.InferType())
     pipeline.append(transform.FoldConstant())
-    pipeline.append(MatchSaveRelay("folded"))
+    pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_folded"))
     
     pipeline.append(transform.InferType())
-    pipeline.append(MatchSaveRelay("transformed"))
+    pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_transformed"))
 
     if True:
         pipeline.append(MatchOptimizer(target))
@@ -105,29 +111,29 @@ def partition(mod, params, dpu, opts):
         pipeline.append(transform.MergeComposite(pattern_table(target=target)))
         
     pipeline.append(transform.AnnotateTarget(["match"]))
-    pipeline.append(MatchSaveRelay("merged"))
+    pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_merged"))
 
     for net_transform_name, net_transform in target.transform_after_partitioning(opts):
         pipeline.append(net_transform)
         pipeline.append(MatchSaveRelay(net_transform_name))
         pipeline.append(transform.InferType())
-    pipeline.append(MatchSaveRelay("adjusted"))
+    pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_adjusted"))
     
-    pipeline.append(transform.PartitionGraph(get_model_name()))
+    pipeline.append(transform.PartitionGraph(get_model_name(), bind_constants=True))
     pipeline.append(transform.InferType())
-    pipeline.append(MatchSaveRelay("partitioned"))
+    pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_partitioned"))
 
     pipeline.append(MatchRemoveIdentityBYOC())
     pipeline.append(transform.DeadCodeElimination())
     pipeline.append(transform.RemoveUnusedFunctions())
-    pipeline.append(MatchSaveRelay("cleaned"))
+    pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_cleaned"))
 
     pipeline.append(MatchSaveModule())
     seq = tvm.transform.Sequential(pipeline)
     with tvm.transform.PassContext(opt_level=3):
         try:
             fused = seq(mod)
-            MatchSaveRelay("final")(fused)
+            MatchSaveRelay(f"{saved_relay_id()}_final")(fused)
             return fused
         except Exception as exc:
             raise Exception("[PARTITION] Error converting layout to {0}".format(str(exc)))
