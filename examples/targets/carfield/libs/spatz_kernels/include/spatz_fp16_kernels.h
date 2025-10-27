@@ -32,8 +32,8 @@ void spatz_fp16_matmul(
 void spatz_fp16_linear(
     fp16 *__restrict__ input,
     fp16 *__restrict__ weight,
-    fp16 *__restrict__ output,
     fp16 *__restrict__ bias,
+    fp16 *__restrict__ output,
     uint32_t dim_i,
     uint32_t dim_o
 );

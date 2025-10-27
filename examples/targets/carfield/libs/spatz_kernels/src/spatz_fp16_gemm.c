@@ -23,8 +23,8 @@ static void spatz_fp16_gemm_mn_nk_mk_rvv(
 ) {
 
     int m_chunk = (dim_m + nthreads - 1) / nthreads;
-    int m_start = min(tid * m_chunk, dim_k);
-    int m_end = min(m_start + m_chunk, dim_k);
+    int m_start = min(tid * m_chunk, dim_m);
+    int m_end = min(m_start + m_chunk, dim_m);
 
     if (dim_m <= 2) {
         if (tid != 0) goto sync;
@@ -56,6 +56,42 @@ static void spatz_fp16_gemm_mn_nk_mk_rvv(
             }
 
             asm volatile("vse16.v v16, (%0);" ::"r"(&output[m * dim_k + k]) : "v16", "memory");
+        }
+    }
+
+    sync:
+    barrier();
+
+    return;
+}
+
+static void spatz_fp16_gemm_mn_nk_mk_naive(
+  const fp16 *__restrict__ input,   // M x N
+  const fp16 *__restrict__ weight,  // N x K
+  const fp16 *__restrict__ bias,    // M x K
+  fp16 *__restrict__ output,        // M x K
+  uint32_t dim_m,
+  uint32_t dim_n,
+  uint32_t dim_k
+) {
+
+    int m_chunk = (dim_m + nthreads - 1) / nthreads;
+    int m_start = min(tid * m_chunk, dim_m);
+    int m_end = min(m_start + m_chunk, dim_m);
+
+    if (dim_m <= 2) {
+        if (tid != 0) goto sync;
+        m_start = 0;
+        m_end = dim_m;
+    }
+    
+    for (int m = m_start; m < m_end; ++m) {
+        for (int k = 0; k < dim_k; ++k) {
+            fp16 sum = bias ? bias[m * dim_k + k] : 0.0f;
+            for (int n = 0; n < dim_n; ++n) {
+                sum += input[m * dim_n + n] * weight[n * dim_k + k];
+            }
+            output[m * dim_k + k] = (fp16)sum;
         }
     }
 
@@ -113,8 +149,8 @@ void spatz_fp16_matmul(
 void spatz_fp16_linear(
     fp16 *__restrict__ input,
     fp16 *__restrict__ weight,
-    fp16 *__restrict__ output,
     fp16 *__restrict__ bias,
+    fp16 *__restrict__ output,
     uint32_t dim_i,
     uint32_t dim_o
 ) {
