@@ -130,7 +130,7 @@ class PulpCluster(ExecModule):
             elif pattern_name=="depthwise_conv2d":
                 # CORES * (ks[0] * (tile_n_in + p[0] + p[2]) + ks[0])
                 im2col_size_l1 = self.NUM_CORES * (filter_shape[0] * (tile_inp_chs + padding[0] + padding[2]) + filter_shape[0])
-            elif pattern_name=="pulpd_conv2d_fp16":
+            elif pattern_name in {"pulpd_conv2d_fp16", "pulpd_conv2d_bias_fp16", "pulpd_conv2d_bnorm_fp16"}:
                 im2col_size_l1 = 2 * self.NUM_CORES * math.prod(filter_shape) * tile_inp_chs
             if im2col_size_l1:
                 schedule.buffers.append(MatchMemBuffer(name="im2col", mem_name="MEM_L1_PULPD",
@@ -177,6 +177,79 @@ class PulpCluster(ExecModule):
     
     def partitioning_patterns(self):
         
+        def batch_matmul():
+            bmatmul = is_op("nn.batch_matmul")(wildcard(), wildcard()) 
+            return bmatmul
+        
+        def dense():
+            dense = is_op("nn.dense")(wildcard(), wildcard()) 
+            return dense
+        
+        def dense_bias():
+            dense = is_op("nn.dense")(wildcard(), wildcard()) 
+            dense_add = is_op("add")(dense, wildcard()) | is_op("add")(wildcard(), dense)
+            return dense_add
+        
+        def conv2d():
+            conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
+            return conv2d
+        
+        def conv2d_bias():
+            conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
+            conv2d_add = is_op("add")(conv2d, is_constant()) | is_op("add")(is_constant(), conv2d)
+            return conv2d_add
+        
+        def conv2d_bnorm():
+            conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
+            conv2d_add = is_op("add")(conv2d, is_constant()) | is_op("add")(is_constant(), conv2d)
+            conv2d_batch_mul = is_op("multiply")(conv2d_add, is_constant()) | is_op("multiply")(is_constant(), conv2d_add)
+            conv2d_batch_add = is_op("add")(conv2d_batch_mul, is_constant()) | is_op("add")(is_constant(), conv2d_batch_mul)
+            return conv2d_batch_add
+        
+        def only_out_fp16(node):
+            #return False
+            #is_fp16 = add_checks_get_first_op(node, "nn.dense").attrs.out_dtype == "float16"
+            #is_fp16 |= getattr(node.attrs, "out_dtype", None) == "float16"
+            is_fp16 = (node.args[0].checked_type.dtype == "float16")
+            return is_fp16
+        
+        def pulpd_batch_matmul_fp16_check(node):
+            valid = only_out_fp16(node)
+            #bmatmul_node = add_checks_get_first_op(node, "nn.batch_matmul")
+            #print(bmatmul_node)
+            #print(dict(bmatmul_node.attrs))
+            #quit()
+            return valid
+
+        def pulpd_conv2d_fp16_check(node):
+            valid = only_out_fp16(node)
+            conv_node = add_checks_get_first_op(node, "nn.conv2d")
+            valid = valid and conv_node.attrs.data_layout == "NHWC"
+            valid = valid and conv_node.attrs.groups == 1
+            valid = valid and conv_node.attrs.dilation[0] == 1 and conv_node.attrs.dilation[1] == 1
+            return valid
+        
+        def pulpd_conv2d_grouped_fp16_check(node):
+            valid = only_out_fp16(node)
+            conv_node = add_checks_get_first_op(node, "nn.conv2d")
+            valid = valid and conv_node.attrs.data_layout == "NHWC"
+            valid = valid and conv_node.attrs.groups == conv_node.args[1].checked_type.shape[3]
+            valid = valid and conv_node.attrs.dilation[0] == 1 and conv_node.attrs.dilation[1] == 1
+            return valid
+        
+        # Int8 old checks
+        
+        def only_out_uint8(node):
+            return add_checks_get_first_op(node, "cast").attrs.dtype=="uint8"
+        
+        
+        def dense_pt_out():
+            dense = is_op("nn.dense")(
+                wildcard(), wildcard()
+            )
+            add = is_op("add")(dense, is_constant()) | is_op("add")(is_op("cast")(dense),is_constant())
+            return add
+        
         def conv_pt_requant():
             #Create pattern for a 2D Conv block, with bias and ReLU.
             conv2d = is_op("nn.conv2d")(
@@ -205,30 +278,6 @@ class PulpCluster(ExecModule):
             clip = is_op("clip")(right_shift)
             cast = is_op("cast")(clip)
             return cast
-
-        def dense_pt_out():
-            dense = is_op("nn.dense")(
-                wildcard(), wildcard()
-            )
-            add = is_op("add")(dense, is_constant()) | is_op("add")(is_op("cast")(dense),is_constant())
-            return add
-        
-        def dense():
-            dense = is_op("nn.dense")(wildcard(), wildcard()) 
-            dense_bias = is_op("add")(dense, is_constant()) | is_op("add")(is_constant(), dense)
-            return dense_bias
-        
-        def conv2d():
-            conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
-            conv2d_bias = is_op("add")(conv2d, is_constant()) | is_op("add")(is_constant(), conv2d)
-            #return conv2d_bias
-            conv2d_batch_mul = is_op("multiply")(conv2d_bias, is_constant()) | is_op("multiply")(is_constant(), conv2d_bias)
-            conv2d_batch_add = is_op("add")(conv2d_batch_mul, is_constant()) | is_op("add")(is_constant(), conv2d_batch_mul)
-            return conv2d_batch_add
-            
-        def avgpool2d():
-            avgpool2d = is_op("nn.avgpool2d")(wildcard())
-            return avgpool2d
         
         def add_pt_requant():
             cast_a = is_op("cast")(wildcard())
@@ -240,17 +289,7 @@ class PulpCluster(ExecModule):
             # cast for both paths
             pt = is_op("cast")(is_op("clip")(rshift))
             return pt
-
-        def only_out_uint8(node):
-            return add_checks_get_first_op(node, "cast").attrs.dtype=="uint8"
         
-        def only_out_fp16(node):
-            #return False
-            #is_fp16 = add_checks_get_first_op(node, "nn.dense").attrs.out_dtype == "float16"
-            #is_fp16 |= getattr(node.attrs, "out_dtype", None) == "float16"
-            is_fp16 = (node.args[0].checked_type.dtype == "float16")
-            return is_fp16
-
         def only_std_convs(node):
             conv = add_checks_get_first_op(node, "nn.conv2d")
             if not only_out_uint8(node):
@@ -286,13 +325,27 @@ class PulpCluster(ExecModule):
             if conv.attrs.data_layout!="NHWC":
                 return False
             return True
-
+            
         return [
+            
             # fp16
+            
             PartitioningPattern(name="pulpd_dense_fp16",pattern=dense,additional_checks=only_out_fp16),
-            PartitioningPattern(name="pulpd_conv2d_fp16",pattern=conv2d,additional_checks=only_out_fp16),
+            PartitioningPattern(name="pulpd_dense_bias_fp16",pattern=dense_bias,additional_checks=only_out_fp16),
+            #PartitioningPattern(name="pulpd_batch_matmul_fp16",pattern=batch_matmul,additional_checks=pulpd_batch_matmul_fp16_check),
+            
+            PartitioningPattern(name="pulpd_conv2d_fp16",pattern=conv2d,additional_checks=pulpd_conv2d_fp16_check),
+            PartitioningPattern(name="pulpd_conv2d_bias_fp16",pattern=conv2d_bias,additional_checks=pulpd_conv2d_fp16_check),
+            PartitioningPattern(name="pulpd_conv2d_bnorm_fp16",pattern=conv2d_bnorm,additional_checks=pulpd_conv2d_fp16_check),
+            
+            PartitioningPattern(name="pulpd_conv2d_grouped_fp16",pattern=conv2d,additional_checks=pulpd_conv2d_grouped_fp16_check),
+            PartitioningPattern(name="pulpd_conv2d_grouped_bias_fp16",pattern=conv2d_bias,additional_checks=pulpd_conv2d_grouped_fp16_check),
+            PartitioningPattern(name="pulpd_conv2d_grouped_bnorm_fp16",pattern=conv2d_bnorm,additional_checks=pulpd_conv2d_grouped_fp16_check),
+        
             #PartitioningPattern(name="avgpool2d_fp16",pattern=avgpool2d,additional_checks=only_out_fp16),
+            
             # int8
+            
             #PartitioningPattern(name="dense_out",pattern=dense_pt_out),
             PartitioningPattern(name="pulpd_dense",pattern=dense_pt_requant,additional_checks=only_out_uint8),
             PartitioningPattern(name="pulpd_conv2d",pattern=conv_pt_requant,additional_checks=only_std_convs),
