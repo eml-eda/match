@@ -146,7 +146,7 @@ PULPD_TEST_NAME ?=
 PULPD_BOOTMODE  ?=
 
 LD_DIR     ?= $(BUILD_DIR)/link
-HOST_LDFLAGS ?= $(CHS_SW_LDFLAGS) -L$(CAR_LD_DIR)
+HOST_LDFLAGS ?= $(CHS_SW_LDFLAGS) -L$(CAR_LD_DIR) -mcmodel=medany
 #HOST_LD_SCRIPT  ?= $(CAR_SW_DIR)/link/l2.ld
 HOST_LD_SCRIPT  ?= link.ld
 
@@ -163,7 +163,7 @@ $(HOST_LIB): $(HOST_LIB_SRCS_O)
 $(CAR_SW_DIR)/%.car.o: $(CAR_SW_DIR)/%.c
 	$(CHS_SW_CC) $(CAR_SW_INCLUDES) $(CHS_SW_CCFLAGS) -c $< -o $@
 
-HOST_FLAGS := -T$(HOST_LD_SCRIPT) -Wno-pointer-to-int-cast -DIntClustNumCores=8 -Dhalf=_Float16 -g -march=rv64gc_zifencei_zfh
+HOST_FLAGS := -T$(HOST_LD_SCRIPT) -Wno-pointer-to-int-cast -DIntClustNumCores=8 -Dhalf=_Float16 -g -march=rv64gc_zifencei_zfh -mcmodel=medany
 
 
 
@@ -177,3 +177,12 @@ build-host: $(HOST_LIB) build-pulpd-payload build-spatz-payload
 	@echo "Generating objdump"
 	@$(CHS_SW_OBJDUMP) -drwCS $(BUILD_DIR)/host.elf > $(BUILD_DIR)/host.dump
 	@echo "Host build done"
+
+
+build-host-seq: $(HOST_LIB) build-pulpd-payload build-spatz-payload
+	@echo "Building host sequential runtime"
+	@echo $(HOST_LIB_SRCS_O)
+	$(CHS_SW_CC) $(HOST_INCLUDES) $(MATCH_INCLUDES) $(CHS_SW_LDFLAGS) $(HOST_FLAGS) -DMATCHA_DISABLE_ASYNC -o $(BUILD_DIR)/host_seq.elf $(HOST_LIB) $(MATCH_COMMON_SRCS) $(MATCH_HOST_SRC) $(CHS_SW_LIBS) -lm
+	@echo "Generating objdump"
+	@$(CHS_SW_OBJDUMP) -drwCS $(BUILD_DIR)/host_seq.elf > $(BUILD_DIR)/host_seq.dump
+	@echo "Host sequential runtime build done"

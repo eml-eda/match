@@ -235,6 +235,11 @@ static match_${model_name}_schedule_next_node() {
                 // This is a MATCH node, start it async
                 match_${model_name}_start_node_fn[i]();
             }
+
+#ifdef MATCHA_DISABLE_ASYNC
+            // If async is disabled, run only one node at a time
+            break;
+#endif
         }
     }
     asm volatile("fence r,rw":::"memory"); // fai offload args privato

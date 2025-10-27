@@ -112,10 +112,12 @@ def match_tvmc_graph_compile_wrapper(
     #pass_context_configs.append("tir.add_lower_pass=1,match.matcha.passes.replace_exp_with_custom_call")
     
     def _rule_float_direct(op):
-        if str(op.dtype).startswith("float"):
+        if str(op.dtype) == "float16":
             return call_pure_extern(op.dtype, "my_" + op.op.name[4:], *op.args)
         return None
     register_intrin_lowering("tir.exp", target="c", f=_rule_float_direct, level=99)
+    register_intrin_lowering("tir.pow", target="c", f=_rule_float_direct, level=99)
+    register_intrin_lowering("tir.sqrt", target="c", f=_rule_float_direct, level=99)
     
 
     tvmc_pkg = tvm.driver.tvmc.compiler.compile_model(
