@@ -11,7 +11,7 @@
 
 #include "carfield_lib/dma.h"
 
-#define MEM_L1_SIZE 32768 * 2 // 128kB
+#define MEM_L1_SIZE 128 * 1024 // 128kB
 
 extern const uint8_t __l2_common_start[];
 extern const uint8_t __l2_common_end[];
@@ -86,8 +86,9 @@ void pulp_nn_add_wrapper(MatchCtx* ctx);
 
 // Pulp NN Wrappers (fp16)
 
-void pulp_nn_fp16_dense_wrapper(MatchCtx* ctx);
 void pulp_nn_fp16_conv2d_wrapper(MatchCtx* ctx);
+void pulp_nn_fp16_conv2d_grouped_wrapper(MatchCtx* ctx);
+void pulp_nn_fp16_dense_wrapper(MatchCtx* ctx);
 
 // Redmule Wrappers (fp16)
 

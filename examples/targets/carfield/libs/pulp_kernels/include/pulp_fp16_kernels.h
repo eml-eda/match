@@ -58,6 +58,31 @@ void pulp_fp16_conv2d(
     uint32_t                 apply_relu     // Apply ReLU activation
 );
 
+void pulp_fp16_conv2d_grouped(
+    const fp16 *__restrict__ input,         // Pointer to the input feature map
+    const fp16 *__restrict__ weight,        // Pointer to the weights
+    const fp16 *__restrict__ bias,          // Pointer to the bias vector
+    const fp16 *__restrict__ bnorm_mul,     // Pointer to the batch normalization scale
+    const fp16 *__restrict__ bnorm_add,     // Pointer to the batch normalization offset
+    fp16 *__restrict__       output,        // Pointer to the output feature map
+    fp16 *__restrict__       im2col,        // Pointer to the im2col buffer
+    uint32_t                 dim_ix,        // Input Width
+    uint32_t                 dim_iy,        // Input Height
+    uint32_t                 dim_ic,        // Input Channels
+    uint32_t                 dim_ox,        // Output Width
+    uint32_t                 dim_oy,        // Output Height
+    uint32_t                 dim_oc,        // Output Channels
+    uint32_t                 dim_fx,        // Kernel Width
+    uint32_t                 dim_fy,        // Kernel Height 
+    uint32_t                 pad_t,         // Padding Top
+    uint32_t                 pad_b,         // Padding Bottom
+    uint32_t                 pad_l,         // Padding Left
+    uint32_t                 pad_r,         // Padding Right
+    uint32_t                 stride_x,      // Stride Horizontal
+    uint32_t                 stride_y,      // Stride Vertical
+    uint32_t                 apply_relu,    // Apply ReLU activation
+    uint32_t                 groups         // Number of groups
+);
 
 void pulp_fp16_im2col(
     const fp16 *__restrict__ input,         

@@ -187,4 +187,117 @@ void pulp_fp16_conv2d(
 }
 
 
+// Grouped
+
+
+static void pulp_fp16_conv2d_nhwc_ohwi_par_oc_grouped(
+    const fp16   *input,      // NHWC
+    const fp16   *weight,     // OHWI (CO, H, W, group_ic)
+    const fp16   *bias,       // O
+    const fp16   *bnorm_mul,  // O
+    const fp16   *bnorm_add,  // O
+    fp16         *output,     // NHWC
+    fp16         *im2col,     // im2col buffer (not used)
+    uint32_t      dim_ix,     // input width
+    uint32_t      dim_iy,     // input height
+    uint32_t      dim_ic,     // input channels
+    uint32_t      dim_ox,     // output width
+    uint32_t      dim_oy,     // output height
+    uint32_t      dim_oc,     // output channels
+    uint32_t      dim_fx,     // kernel width
+    uint32_t      dim_fy,     // kernel height
+    uint32_t      pad_t,
+    uint32_t      pad_b,
+    uint32_t      pad_l,
+    uint32_t      pad_r,
+    uint32_t      stride_x,
+    uint32_t      stride_y,
+    uint32_t      apply_relu,
+    uint32_t      groups      // Number of groups
+) {
+    uint32_t group_ic = dim_ic / groups;
+    uint32_t group_oc = dim_oc / groups;
+
+    int oc_chunk = (dim_oc + nthreads - 1) / nthreads;
+    int oc_start = min(tid * oc_chunk, dim_oc);
+    int oc_end = min(oc_start + oc_chunk, dim_oc);
+
+    for (int oy = 0; oy < dim_oy; ++oy) {
+        for (int ox = 0; ox < dim_ox; ++ox) {
+            for (int oc = oc_start; oc < oc_end; ++oc) {
+                int group = oc / group_oc;
+                int oc_in_group = oc % group_oc;
+
+                fp16 dot = (bias != NULL) ? bias[oc] : (fp16)0.0f;
+
+                for (int fy = 0; fy < dim_fy; ++fy) {
+                    for (int fx = 0; fx < dim_fx; ++fx) {
+                        for (int ic_in_group = 0; ic_in_group < group_ic; ++ic_in_group) {
+                            int ic = group * group_ic + ic_in_group;
+                            int iy = oy * stride_y + fy - pad_t;
+                            int ix = ox * stride_x + fx - pad_l;
+
+                            if (iy >= 0 && iy < dim_iy && ix >= 0 && ix < dim_ix) {
+                                int input_idx  = idx_NHWC(iy, ix, ic, dim_iy, dim_ix, dim_ic);
+                                int weight_idx = ((oc * dim_fy * dim_fx * group_ic)
+                                                + fy * dim_fx * group_ic
+                                                + fx * group_ic
+                                                + ic_in_group);
+                                dot += input[input_idx] * weight[weight_idx];
+                            }
+                        }
+                    }
+                }
+                if (bnorm_mul != NULL && bnorm_add != NULL) {
+                    dot = dot * bnorm_mul[oc] + bnorm_add[oc];
+                }
+                if (apply_relu && dot < (fp16)0.0f) {
+                    dot = 0.0f;
+                }
+                int output_idx = idx_NHWC(oy, ox, oc, dim_oy, dim_ox, dim_oc);
+                output[output_idx] = dot;
+            }
+        }
+    }
+}
+
+
+void pulp_fp16_conv2d_grouped(
+    const fp16 *__restrict__ input,         // Pointer to the input feature map
+    const fp16 *__restrict__ weight,        // Pointer to the weights
+    const fp16 *__restrict__ bias,          // Pointer to the bias vector
+    const fp16 *__restrict__ bnorm_mul,     // Pointer to the batch normalization scale
+    const fp16 *__restrict__ bnorm_add,     // Pointer to the batch normalization offset
+    fp16 *__restrict__       output,        // Pointer to the output feature map
+    fp16 *__restrict__       im2col,        // Pointer to the im2col buffer
+    uint32_t                 dim_ix,        // Input Width
+    uint32_t                 dim_iy,        // Input Height
+    uint32_t                 dim_ic,        // Input Channels
+    uint32_t                 dim_ox,        // Output Width
+    uint32_t                 dim_oy,        // Output Height
+    uint32_t                 dim_oc,        // Output Channels
+    uint32_t                 dim_fx,        // Kernel Width
+    uint32_t                 dim_fy,        // Kernel Height 
+    uint32_t                 pad_t,         // Padding Top
+    uint32_t                 pad_b,         // Padding Bottom
+    uint32_t                 pad_l,         // Padding Left
+    uint32_t                 pad_r,         // Padding Right
+    uint32_t                 stride_x,      // Stride Horizontal
+    uint32_t                 stride_y,      // Stride Vertical
+    uint32_t                 apply_relu,    // Apply ReLU activation
+    uint32_t                 groups         // Number of groups
+) {
+    pulp_fp16_conv2d_nhwc_ohwi_par_oc_grouped(
+        input, weight, bias, bnorm_mul, bnorm_add, output, im2col,
+        dim_ix, dim_iy, dim_ic,
+        dim_ox, dim_oy, dim_oc,
+        dim_fx, dim_fy,
+        pad_t, pad_b, pad_l, pad_r,
+        stride_x, stride_y, 
+        apply_relu,
+        groups
+    );
+}
+
+
 #endif // __pulp_cluster__
