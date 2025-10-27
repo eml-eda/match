@@ -63,8 +63,9 @@ def plot_optimization_result(data, filename='optimization_result.png'):
         ax.grid(True, alpha=0.3)
     
     plt.tight_layout()
-    plt.savefig(filename, bbox_inches='tight', dpi=300)
-    plt.show()
+    fig.savefig(filename, bbox_inches='tight', dpi=300)
+    plt.close(fig)
+
 
 def plot_gantt_chart(ax, data, time_scale, device_colors, comm_colors):
     """Plot Gantt chart for node execution and communication operations"""
