@@ -13,7 +13,62 @@ from .optimize import optimize
 from .splitter import NodeSplitter
 from .viz import plot_optimization_result
 
+def get_shape(expr):
+    # Wrap expr in a dummy function/module to run InferType
+    free_vars = relay.analysis.free_vars(expr)
+    func = relay.Function(free_vars, expr)
+    mod = tvm.IRModule({"main": func})
+    mod = relay.transform.InferType()(mod)
+    # For a function, the body is expr
+    shape = [int(x) for x in mod["main"].body.checked_type.shape]
+    return shape
 
+class SplitGroupedConvMutator(relay.ExprMutator):
+    def visit_call(self, call):
+        new_call = super().visit_call(call)
+        if isinstance(new_call.op, tvm.ir.Op) and new_call.op.name == "nn.conv2d":
+            attrs = new_call.attrs
+            groups = attrs.groups
+            if groups > 1 and groups != new_call.args[1].checked_type.shape[-1]: # Split if not depthwise
+                data, weight = new_call.args
+                data_shape = get_shape(data)
+                weight_shape = get_shape(weight)
+                
+                print("fm_shape: ", data_shape, " weight_shape: ", weight_shape, " groups: ", groups)
+
+                # Input: (N, H, W, CI), Weight: (KH, KW, CI//groups, CO) TODO - get data_layout and weight_layout from attrs
+                in_channels = data_shape[-1]
+                out_channels = weight_shape[-1]
+                in_step = in_channels // groups
+                out_step = out_channels // groups
+                
+                print("in_channels: ", in_channels, " out_channels: ", out_channels, " in_step: ", in_step, " out_step: ", out_step)
+
+                out_convs = []
+                for g in range(groups):
+                    data_slice = relay.strided_slice(
+                        data,
+                        begin=[0, 0, 0, g * in_step],
+                        end=[data_shape[0], data_shape[1], data_shape[2], (g + 1) * in_step]
+                    )
+                    weight_slice = relay.strided_slice(
+                        weight,
+                        begin=[0, 0, 0, g * out_step],
+                        end=[weight_shape[0], weight_shape[1], weight_shape[2], (g + 1) * out_step]
+                    )
+                    # Set groups=1 for split conv
+                    new_attrs = dict(attrs)
+                    new_attrs['groups'] = 1
+                    new_attrs['channels'] = in_step
+                    
+                    conv_op = relay.nn.conv2d(data_slice, weight_slice, **new_attrs)
+                    out_convs.append(conv_op)
+
+                # Concatenate along channel axis
+                print("Done splitting grouped conv with groups=", groups)
+                concat = relay.concatenate(out_convs, axis=3)
+                return concat
+        return new_call
 
 class NodeAnnotator(relay.ExprMutator):
     # Just yet another workaround to uniquely identify nodes across transformations in TVM :)
@@ -61,9 +116,15 @@ class MatchOptimizer:
         
         func = mod['main']
         
+        if False:
+            grouped_conv_splitter = SplitGroupedConvMutator()
+            mod['main'] = grouped_conv_splitter.visit(func)
+            mod = relay.transform.FoldConstant()(mod)
+            func = mod['main']
+        
         node_annotator = NodeAnnotator()
         mod['main'] = node_annotator.visit(func)
-        
+          
         mod = relay.transform.InferType()(mod)
             
         graph = Graph(mod, patterns)
@@ -71,7 +132,11 @@ class MatchOptimizer:
         
         devices = list(range(len(self.target.exec_modules) + 1))
         l2_size = self.target.soc_memory_bytes # 256_000
-        l3_size = 4_000_000
+        #l2_size = 512_000
+        print(l2_size)
+        #quit()
+        #l3_size = 4_000_000
+        l3_size = 0
         bandwidth = 4
         dtype_size = 2
         
@@ -84,7 +149,8 @@ class MatchOptimizer:
             dtype_size, 
             scale_time=True, 
             scale_addr=False,
-            tiling=True
+            tiling=self.target.enable_device_parallelism,
+            optimize_space=False
         )
         
         with open("matcha.result.json", "w") as f:
