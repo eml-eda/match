@@ -54,7 +54,9 @@ class RuntimeGraph:
         shapes = mod_info["attrs"]["shape"][1]
         self.heads = [head[0] for head in mod_info["heads"]]
 
+        # Map nop nodes id to input tensors for bypass
         nop_maps = {}
+        
         self.activations = {inp["name"]: inp["np_values"] for inp in match_inputs.values()}
         
         def estimate_latency_tvm(func_name, inp_tids, out_tids):
@@ -71,6 +73,12 @@ class RuntimeGraph:
             else:
                 out_shape = self.tensors[out_tids[0]].shape
                 return math.prod(out_shape) // 10 # Default estimate based on output shape size
+        
+        print("[RUNTIME GRAPH] Generating runtime graph from TVM graph.")
+        for node_id, node in enumerate(mod_info["nodes"]):
+            print(f"Node {node_id}: {node['name']} (op: {node['op']})")
+            print("  Inputs: ", node["inputs"])
+        print(" ")
 
         # Pass 1: Create memory tensors for inputs and parameters
         for node_id, node in enumerate(mod_info["nodes"]):
@@ -134,24 +142,29 @@ class RuntimeGraph:
             if node["op"] == "null":
                 continue
 
-            input_tensors = []
+            node_input_tensors = []
 
             # Build input list for this node
+            print("Node:", node["name"], "Inputs:", node["inputs"])
+            
             for inp_idxs in node["inputs"]:
-                inp_node = mod_info["nodes"][inp_idxs[0]]
+                inp_id = inp_idxs[0]
+                inp_node = mod_info["nodes"][inp_id]
                 inp_name = inp_node["name"]
                 inp_tensor_name = (inp_name + "_out") if inp_node["op"] != "null" else inp_name
 
-                if inp_node["op"] != "null" and "_nop" in inp_name and inp_name in nop_maps:
+                if inp_node["op"] != "null" and inp_id in nop_maps:
                     # NOP input node, bypass to NOP input node input
-                    input_tensors.append(nop_maps[inp_name])
+                    print("  Bypassing NOP input node:", inp_name)
+                    node_input_tensors.append(nop_maps[inp_id])
                 else:
-                    input_tensors.append(self.tensor_map[inp_tensor_name])
+                    print("  Input tensor name:", inp_tensor_name)
+                    node_input_tensors.append(self.tensor_map[inp_tensor_name])
 
             # NOP nodes: map and skip
             if "_nop" in node["name"]:
-                if len(input_tensors) == 1:
-                    nop_maps[node["name"]] = input_tensors[0]
+                if len(node_input_tensors) == 1:
+                    nop_maps[node_id] = node_input_tensors[0]
                 continue
 
             # MATCH nodes: get schedule and add constant tensors
@@ -176,11 +189,11 @@ class RuntimeGraph:
                             self.tensors.append(mem_tensor)
                             self.tensor_map[s_tensor.name] = mem_tensor
                             self.idx_tensor_map[(node_id, 0)] = mem_tensor
-                            input_tensors.append(mem_tensor)
+                            node_input_tensors.append(mem_tensor)
                             tensor_name_to_tid[mem_tensor.name] = mem_tensor.id
 
             # Mark tensor usage info for memory planning
-            for inp in input_tensors:
+            for inp in node_input_tensors:
                 if "match" not in node["name"]:
                     inp.used_by_tvm = True
                 if inp.is_output:
@@ -223,7 +236,8 @@ class RuntimeGraph:
 
             # Get self.activations for each input for debugging purposes
             node_activations = []
-            for tens_inp in input_tensors:
+            for tens_inp in node_input_tensors:
+                print("  ", tens_inp.name)
                 if tens_inp.is_input or tens_inp.is_intermediate:
                     node_activations.append(tvm.nd.array(self.activations[tens_inp.name]))
                 elif tens_inp.is_constant:
@@ -238,7 +252,9 @@ class RuntimeGraph:
             # Run the CPU version of the MATCH-node to get the debugging values
             else:
                 module = tvm.contrib.graph_executor.GraphModule(host_lib["default"](self.tvm_device))
+                print("   node_activations:", [n.shape for n in node_activations])
                 for tens_inp, param in zip(node_activations, host_lib.ir_mod["main"].params):
+                    print("  ", param.name_hint, tens_inp.shape, tens_inp.dtype, param)
                     module.set_input(param.name_hint, tens_inp)
                 module.run()
                 output_np = module.get_output(0).numpy()
@@ -249,11 +265,11 @@ class RuntimeGraph:
             tensor_name_to_tid[mem_tensor.name] = mem_tensor.id
             outputs = [mem_tensor]
 
-            inp_tids = [tensor_name_to_tid[tens.name] for tens in input_tensors]
+            inp_tids = [tensor_name_to_tid[tens.name] for tens in node_input_tensors]
             out_tids = [tensor_name_to_tid[tens.name] for tens in outputs]
             call_node = RuntimeNode(
                 id=len(self.nodes),
-                inputs=input_tensors,
+                inputs=node_input_tensors,
                 outputs=outputs,
                 name=f"{self.model_name}_node_{node_id}",
                 fn_name=node["attrs"]["func_name"],
@@ -386,6 +402,10 @@ class Runtime:
         assert set(sum(device_queues.values(), [])) == set(n.id for n in runtime_graph.nodes)
         print("  Device queues: ", device_queues)
         
+        for n, node in enumerate(runtime_graph.nodes):
+            for child_id in node.children_nids:
+                assert solution['nodes'][n]['end'] <= solution['nodes'][child_id]['start'], f"Dependency violation between nodes ({n}) {node.name} and ({child_id}) {runtime_graph.nodes[child_id].name}!"
+        
         # Add extra node dependencies between nodes sharing the same pool address space
         def addr_overlap(start1, size1, start2, size2):
             return start1 < start2 + size2 and start2 < start1 + size1
@@ -448,7 +468,7 @@ class Runtime:
             if mem_tensor_ is not None:
                 arr = np.frombuffer(activation.flatten().tobytes(), dtype="uint8")
                 arr.tofile(Path(self.out_path, f"golden/{self.model_name}_{activation_name}_data.hex"))
-                np.savetxt(Path(self.out_path, f"golden/{self.model_name}_{activation_name}_debug.txt"), activation.flatten(), delimiter=", ")
+                np.savetxt(Path(self.out_path, f"golden/{self.model_name}_{activation_name}_debug.txt"), activation.flatten(), delimiter=", ", fmt="%f")
         
         # Calculate checksums for activations
         checksums = {
