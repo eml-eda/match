@@ -120,6 +120,13 @@ static int ${model_name}_node_device_id[] = {${", ".join(str(node.device_id) for
         #if __${model_name}_GRAPH_DEBUG__ && __${model_name}_FALLBACK_GRAPH_DEBUG__
             ${target.print_fn}("[${model_name} GRAPH] TVM node ${node.name} done, output differs from checksum by %d\r\n", 
             match_byte_checksum_check(${node.outputs[0].name}_pt_${node.tensor_soc_segments_ids[node.outputs[0].id]}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+        
+            // Print first 8 elements of output
+            ${target.print_fn}("[${model_name} GRAPH] TVM node ${node.name} output first 8 elements: ");
+            for(int i = 0; i < 8; i++) {
+                ${target.print_fn}("%f ", (float)((half*)${node.outputs[0].name}_pt_${node.tensor_soc_segments_ids[node.outputs[0].id]})[i]);
+            }
+            ${target.print_fn}("\r\n");
         #endif
 
     % else:

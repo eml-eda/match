@@ -42,18 +42,6 @@ class NodeSplitter(DFPatternCallback):
         recursive_collect(self.pattern)
         match = list(reversed(match))
         
-        # splitting on H
-    
-        inp_fm = match[0].args[0]  # Assuming the first argument is the input feature map
-        
-        
-        try:
-            inp_fm_shape = inp_fm.checked_type.shape
-        except ValueError:
-            return post
-        
-        print(inp_fm_shape, chunks)
-        
         # Find main node
         main_node = None
         for i, node in enumerate(match):
@@ -69,10 +57,11 @@ class NodeSplitter(DFPatternCallback):
             print("No main node found in pattern match")
             return post
         
+        # Split match in two branches based on the main node (conv, dense, etc)
         if main_node.op == tvm.ir.Op.get("nn.conv2d"):
-            return self.split_conv2d(pre, post, node_map, inp_fm, inp_fm_shape, main_node, chunks, match)
+            return self.split_conv2d(pre, post, match, main_node, chunks)
         elif main_node.op == tvm.ir.Op.get("nn.dense"):
-            return self.split_dense(pre, post, node_map, inp_fm, inp_fm_shape, main_node, chunks, match)
+            return self.split_dense(pre, post, match, main_node, chunks)
         else:
             print(f"Pattern main node ({main_node.op}) is not supported for splitting.")
             return post
@@ -80,7 +69,9 @@ class NodeSplitter(DFPatternCallback):
     
     @staticmethod
     def conv_height_slice_for_output_range(H_in, y_start, y_end_incl, k_h, s_h, d_h, pad_top, pad_bottom):
-        # returns (slice_start, slice_end_excl, pad_before, pad_after) for the unpadded input
+        # Calculate the input height slice needed and vertical paddings to produce output rows y_start to y_end_incl
+        # considering kernel size k_h, stride s_h, dilation d_h, and padding (pad_top, pad_bottom).
+        
         in_padded_start = y_start * s_h
         in_padded_end = y_end_incl * s_h + (k_h - 1) * d_h   # inclusive
         in_unpadded_start = in_padded_start - pad_top
@@ -96,16 +87,26 @@ class NodeSplitter(DFPatternCallback):
         
         
     
-    def split_conv2d(self, pre, post, node_map, inp_fm, inp_fm_shape, main_node, chunks, match):
-        branch_a = None
-        branch_b = None
-        # Split input feature map in two branches based on the main node
+    def split_conv2d(self, pre, post, match, main_node, chunks):
+        # Splitting on output height dimension (H)
         print("Pattern main node is conv2d.")
         
-        print("Input shape:", main_node.checked_type.shape, " chunks:", chunks, " out_h:", main_node.checked_type.shape[1], "strides:", main_node.attrs.strides, \
-            "dilation:", main_node.attrs.dilation, "padding:", main_node.attrs.padding, "kernel_size:", main_node.attrs.kernel_size)
+        branch_a = None
+        branch_b = None
         
         
+        inp_fm = match[0].args[0]
+        try:
+            inp_fm_shape = inp_fm.checked_type.shape
+        except ValueError:
+            print("  Cannot get input feature map shape, skipping split.")
+            return post
+        
+        print("   Input fm shape:", inp_fm_shape, " - Main node out shape:", main_node.checked_type.shape)
+        print("   Chunks:", chunks, "- Output height:", main_node.checked_type.shape[1])
+        print("   Strides:", main_node.attrs.strides, "- Dilation:", main_node.attrs.dilation, 
+               "- Padding:", main_node.attrs.padding, "- Kernel size:", main_node.attrs.kernel_size)
+
         stride = main_node.attrs.strides[0]
         dilation = main_node.attrs.dilation[0]
         padding = main_node.attrs.padding
@@ -133,7 +134,7 @@ class NodeSplitter(DFPatternCallback):
             branch_a_begin = [0, 0, inp_slice_a_start, 0]
             branch_a_end = [inp_fm_shape[0], inp_slice_a_end, inp_fm_shape[2], inp_fm_shape[3]]
             branch_a = relay.strided_slice(inp_fm, begin = branch_a_begin, end = branch_a_end)
-            print("branch_a slice", branch_a_begin, branch_a_end, "pad_top_a", pad_top_a, "pad_bottom_a", pad_bottom_a)
+            print("  branch_a slice", branch_a_begin, branch_a_end, "pad_top_a", pad_top_a, "pad_bottom_a", pad_bottom_a)
             
         # ---- Second tile: output rows chunks to H-1 - calculate receptive field slice ----
         inp_slice_b_start, inp_slice_b_end, pad_top_b, pad_bottom_b = self.conv_height_slice_for_output_range(
@@ -146,7 +147,7 @@ class NodeSplitter(DFPatternCallback):
                 branch_b_begin = [0, inp_slice_b_start, 0, 0]
                 branch_b_end = [inp_fm_shape[0], inp_slice_b_end, inp_fm_shape[2], inp_fm_shape[3]]
                 branch_b = relay.strided_slice(inp_fm, begin = branch_b_begin, end = branch_b_end)
-                print("branch_b slice", branch_b_begin, branch_b_end, "pad_top_b", pad_top_b, "pad_bottom_b", pad_bottom_b)
+                print("  branch_b slice", branch_b_begin, branch_b_end, "pad_top_b", pad_top_b, "pad_bottom_b", pad_bottom_b)
     
         # Split ops
         for i, node in enumerate(match):
@@ -197,41 +198,38 @@ class NodeSplitter(DFPatternCallback):
             #    return post
             return relay.concatenate([branch_a, branch_b], axis=1)        
 
-        print("missing other branch")
+        print("  Missing other branch.")
         #return post
         return branch_a
-    
-    
-    def split_dense(self, pre, post, node_map, inp_fm, inp_fm_shape, main_node, chunks, match):
+
+
+    def split_dense(self, pre, post, match, main_node, chunks):
+        # Splitting on output feature/neuron dimension
+        print("Pattern main node is dense.")
+
         branch_a = None
         branch_b = None
         
-        # Split input feature map in two branches based on the main node
-        print("Pattern main node is dense.")
+        inp_fm = match[0].args[0]
+        weight_shape = main_node.args[1].checked_type.shape
         
         # Tiling dim
-        out_shape = main_node.checked_type
-        
-        print("out_shape", out_shape)
-        print("chunks ", chunks)
-    
+        print("   Chunks:", chunks, "- Output features:", weight_shape[0])
+        print("   Input fm shape:", inp_fm.checked_type.shape)
+        print("   Weight shape:", weight_shape)
+        print("   Main node out shape:", main_node.checked_type.shape)
+
         # Split ops
         branch_a = inp_fm
-        branch_b = inp_fm if main_node.args[1].checked_type.shape[0] != chunks else None
+        branch_b = inp_fm if weight_shape[0] != chunks else None
         
          # Split ops
         
         for i, node in enumerate(match):
             if node.op == tvm.ir.Op.get("nn.dense"):
                 
-                print("weight shape", node.args[1].checked_type.shape)
-                
-                if main_node.args[1].checked_type.shape[0] != chunks:
-                    weight_a = relay.strided_slice(
-                        node.args[1],
-                        begin=[0]*len(node.args[1].checked_type.shape),
-                        end=[chunks] + list(node.args[1].checked_type.shape[1:])
-                    )
+                if weight_shape[0] != chunks:
+                    weight_a = relay.strided_slice(node.args[1], begin=[0]*len(weight_shape), end=[chunks, *weight_shape[1:]])
                 else:
                     weight_a = node.args[1]
                     
@@ -243,12 +241,9 @@ class NodeSplitter(DFPatternCallback):
                     type_args=node.type_args,
                     span=tvm.ir.Span(node.span.source_name, node.span.line, 0, self.device_id, 0)
                 )
+                
                 if branch_b:
-                    weight_b = relay.strided_slice(
-                        node.args[1],
-                        begin=[chunks] + [0]*len(node.args[1].checked_type.shape[1:]),
-                        end=list(node.args[1].checked_type.shape)
-                    )
+                    weight_b = relay.strided_slice(node.args[1], begin=[chunks] + [0]*len(weight_shape[1:]), end=[*weight_shape])
                     node_ = relay.nn.dense(branch_b, weight_b)
                     branch_b = tvm.relay.Call(
                         node_.op,
@@ -257,10 +252,11 @@ class NodeSplitter(DFPatternCallback):
                         type_args=node.type_args,
                         span=tvm.ir.Span(node.span.source_name, node.span.line, -1, 0, 0)
                     )  
+                    
             elif node.op == tvm.ir.Op.get("add"): 
-                print("bias shape", node.args[1].checked_type.shape)
+                print("   Bias shape", node.args[1].checked_type.shape)
                 
-                if main_node.args[1].checked_type.shape[0] != chunks:
+                if weight_shape[0] != chunks:
                     weight_a = relay.strided_slice(
                         node.args[1],
                         begin=[0]*len(node.args[1].checked_type.shape),
@@ -311,8 +307,8 @@ class NodeSplitter(DFPatternCallback):
             self.only_once += 1
             #if self.only_once != 4:
             #    return post
-            return relay.concatenate([branch_a, branch_b], axis=1)        
+            return relay.concatenate([branch_a, branch_b], axis=-1)        
 
-        print("missing other branch")
+        print("  Missing other branch.")
         #return post
         return branch_a

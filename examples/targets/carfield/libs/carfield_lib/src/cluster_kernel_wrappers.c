@@ -346,29 +346,49 @@ void pulp_fp16_dense_wrapper(MatchCtx* ctx) {
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
+    int batch_size = tensors[0].tiles[MEM_L1_PULPD*2+0].size;
     int inp_ch = tensors[0].tiles[MEM_L1_PULPD*2+1].size;
     int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*2+1].size;
 
     // TODO improve this - use RedMulE when supported
-    if (inp_ch == 64 && out_ch == 10) {
+    if (inp_ch == 64 && out_ch == 10 && batch_size == 1) {
+        #if DEBUG_CLUSTER_LIB
+            smp_printf("[PULP][KER] Found supported RedMulE input.\r\n");
+        #endif
         redmule_fp16_dense_wrapper(ctx);
         return;
     }
-    
-#if DEBUG_CLUSTER_LIB
-    smp_printf("[PULP][KER] pulp_fp16_linear: ");
-    smp_printf("Out. tile (%d,) | ", out_ch);
-    smp_printf("Inp. tile (%d,)\r\n", inp_ch);
-#endif
 
-    pulp_fp16_linear(
-        tensors[0].pt,             // Activations pt
-        tensors[1].pt,             // Weights pt
-        tensors[num_tensors-1].pt, // Output pt
-        num_tensors > 3 ? tensors[2].pt : NULL, // Bias ptr
-        inp_ch,                    // Input Neurons
-        out_ch                     // Output Neurons
-    );
+    if (batch_size > 1) {
+        #if DEBUG_CLUSTER_LIB
+            smp_printf("[PULP][KER] pulp_fp16_gemm: ");
+            smp_printf("Out. tile (%d, %d) | ", batch_size, out_ch);
+            smp_printf("Inp. tile (%d, %d)\r\n", batch_size, inp_ch);
+        #endif
+        pulp_fp16_gemm(
+            tensors[0].pt,                // Activations pt
+            tensors[1].pt,                // Weights pt
+            num_tensors > 3 ? tensors[2].pt : NULL, // Bias ptr
+            tensors[num_tensors-1].pt,    // Output pt
+            batch_size,                   // Batch size
+            inp_ch,                       // Input Neurons
+            out_ch                        // Output Neurons
+        );
+    } else {
+        #if DEBUG_CLUSTER_LIB
+            smp_printf("[PULP][KER] pulp_fp16_linear: ");
+            smp_printf("Out. tile (%d, %d) | ", batch_size, out_ch);
+            smp_printf("Inp. tile (%d, %d)\r\n", batch_size, inp_ch);
+        #endif
+        pulp_fp16_linear(
+            tensors[0].pt,             // Activations pt
+            tensors[1].pt,                                             // Weights pt
+            tensors[num_tensors-1].pt,// Output pt
+            num_tensors > 3 ? tensors[2].pt : NULL,                    // Bias ptr
+            inp_ch,                                                    // Input Neurons
+            out_ch                                                     // Output Neurons
+        );
+    }
 }
 
 

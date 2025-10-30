@@ -422,7 +422,7 @@ class MatchNodeToZigZagParser:
 
     def visit_dense(self):
         dense_node: MatchOpDense = self.match_node.ops["dense"]
-
+        self.loop_dim_size["B"] = dense_node.outs[0].dims[0].size
         self.loop_dim_size["C"] = dense_node.inp_features
         self.loop_dim_size["K"] = dense_node.out_features
         self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"

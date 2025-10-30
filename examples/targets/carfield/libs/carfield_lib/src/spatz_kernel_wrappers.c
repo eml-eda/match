@@ -176,20 +176,22 @@ void spatz_fp16_dense_wrapper(MatchCtx* ctx) {
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
+    int batch_size = tensors[0].tiles[MEM_L1_SPATZ*2+0].size;
     int inp_ch = tensors[0].tiles[MEM_L1_SPATZ*2+1].size;
     int out_ch = tensors[num_tensors-1].tiles[MEM_L1_SPATZ*2+1].size;
 
 #if DEBUG_SPATZ_LIB
-    smp_printf("[SPATZ][KER] spatz_fp16_linear: ");
-    smp_printf("Out. tile (%d,) | ", out_ch);
-    smp_printf("Inp. tile (%d,)\r\n", inp_ch);
+    smp_printf("[SPATZ][KER] spatz_fp16_gemm: ");
+    smp_printf("Out. tile (%d, %d) | ", batch_size, out_ch);
+    smp_printf("Inp. tile (%d, %d)\r\n", batch_size, inp_ch);
 #endif
 
-    spatz_fp16_linear(
+    spatz_fp16_gemm(
         tensors[0].pt,             // Activations pt
         tensors[1].pt,             // Weights pt
         num_tensors > 3 ? tensors[2].pt : NULL, // Bias ptr
         tensors[num_tensors-1].pt, // Output pt
+        batch_size,                // Batch size
         inp_ch,                    // Input Neurons
         out_ch                     // Output Neurons
     );
