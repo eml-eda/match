@@ -6,6 +6,7 @@ from match.ops.conv1d import MatchOpConv1D
 from match.ops.conv2d import MatchOpConv2D
 from match.ops.conv3d import MatchOpConv3D
 from match.ops.dense import MatchOpDense
+from match.ops.batch_matmul import MatchOpBatchMatMul
 from match.tensor.tensor import MatchTensor
 
 
@@ -199,6 +200,13 @@ class MatchNodeToZigZagParser:
                 n = dims[0]
                 c = dims[1]
                 spat = dims[2]
+                if layout == "BMN":
+                    if key == "B":
+                        return dims[0]
+                    if key == "M":
+                        return dims[1]
+                    if key == "N":
+                        return dims[2]
                 if tensor.tensor_type=="const":
                     if key=="C":
                         return c
@@ -304,6 +312,8 @@ class MatchNodeToZigZagParser:
             self.visit_maxpool2d()
         elif "add" in self.match_node.ops_occurrences:
             self.visit_add()
+        elif "batch_matmul" in self.match_node.ops_occurrences:
+            self.visit_batch_matmul()
         else:
             print("[ZIGZAG PARSER] Warning, no operator found to tile, continuing with default workload")
 
@@ -437,3 +447,23 @@ class MatchNodeToZigZagParser:
         self.loop_dim_size["OY"] = o_h
         self.loop_dim_size["OX"] = o_w
         self.spatially_unrolled_dimensions = list()
+        
+    def visit_batch_matmul(self):
+        bmatmul_node: MatchOpBatchMatMul = self.match_node.ops["batch_matmul"]
+        dim_b = bmatmul_node.outs[0].dims[0].size
+        dim_m = bmatmul_node.outs[0].dims[1].size
+        dim_n = bmatmul_node.vars[0].dims[2].size
+        dim_k = bmatmul_node.outs[0].dims[2].size
+    
+        self.equation = "O[b][m][n]+=X[b][m][k]*Y[b][k][n]"
+        self.loop_dim_size = {"B": dim_b, "M": dim_m, "N": dim_n, "K": dim_k}
+        self.operand_source_dimension_mapping = {
+            "X": {"B":"B", "M":"M", "N":"K"},
+            "Y": {"B":"B", "N":"M", "K":"K"},
+        }
+        self.spatially_unrolled_dimensions = ["N"]
+        
+        self.workload_dimensions_relations = list()
+        self.operand_source_dimension_mapping = dict()
+        self.padding = []
+        self.strides = []

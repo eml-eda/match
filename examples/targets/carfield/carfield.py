@@ -5,6 +5,7 @@ from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
 from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM
 from match.transform.requant import MatchRequantRewriter
+from match.transform.bmatmul import BatchMatmulTranspose
 
 from pulp_cluster import PulpCluster
 from spatz import Spatz
@@ -96,6 +97,7 @@ class Carfield(MatchTarget):
             ("requant", MatchRequantRewriter()),
             ("layout", MatchLayoutNCHWtoNHWCTVM),
             ("folded", relay.transform.FoldConstant()),
+            ("mm_transpose", BatchMatmulTranspose()),
         ]
     
     def host_memories(self):

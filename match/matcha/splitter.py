@@ -11,6 +11,12 @@ class NodeSplitter(DFPatternCallback):
         self.matched_patterns_chunks = matched_patterns_chunks
         self.device_id = match_pattern.exec_module.id + 1
         self.only_once = 0
+        
+        self.splitter_router = {
+            "nn.conv2d": self.split_conv2d,
+            "nn.dense": self.split_dense,
+            "nn.batch_matmul": self.split_batch_matmul,
+        }
     
     def callback(self, pre, post, node_map):
         
@@ -48,7 +54,7 @@ class NodeSplitter(DFPatternCallback):
             if hasattr(node, "span") and node.span and node.span.source_name.name == "GID":
                 if node.span.column > 0: # or node.span.end_line == -1:
                     return post
-            if node.op in [tvm.ir.Op.get("nn.conv2d"), tvm.ir.Op.get("nn.dense")]:
+            if node.op.name in self.splitter_router:
                 if main_node is not None:
                     raise Exception("Multiple main nodes found in pattern match")
                 main_node = node
@@ -58,13 +64,7 @@ class NodeSplitter(DFPatternCallback):
             return post
         
         # Split match in two branches based on the main node (conv, dense, etc)
-        if main_node.op == tvm.ir.Op.get("nn.conv2d"):
-            return self.split_conv2d(pre, post, match, main_node, chunks)
-        elif main_node.op == tvm.ir.Op.get("nn.dense"):
-            return self.split_dense(pre, post, match, main_node, chunks)
-        else:
-            print(f"Pattern main node ({main_node.op}) is not supported for splitting.")
-            return post
+        return self.splitter_router[main_node.op.name](pre, post, match, main_node, chunks)
         
     
     @staticmethod
@@ -312,3 +312,88 @@ class NodeSplitter(DFPatternCallback):
         print("  Missing other branch.")
         #return post
         return branch_a
+    
+
+    def split_batch_matmul(self, pre, post, match, main_node, chunks):
+        # Splitting on batch dimension
+        print("Pattern main node is batch_matmul.")
+
+        # main_node should be match[0]
+        x1 = match[0].args[0]        
+        x2 = match[0].args[1]
+        
+        x1_shape = x1.checked_type.shape
+        x2_shape = x2.checked_type.shape
+
+        max_chunks = x1_shape[0]
+        
+        # Tiling dim
+        print("   Chunks:", chunks, "- Batch Size:", max_chunks)
+        print("   X1 shape:", x1_shape, "- X2 shape:", x2_shape)
+        print("   Output shape:", main_node.checked_type.shape)
+        
+        # Only a pattern with single batch_matmul is supported
+        for i, node in enumerate(match):
+            if node.op.name != "nn.batch_matmul" or i > 0:
+                raise NotImplementedError(f"Operator not supported in splitting a pattern containing batch_matmul: {node.op}")
+
+        if chunks == 0:
+            # Nothing to split
+            return post
+        
+        branch_a = None
+        branch_b = None
+        
+        chunks_a, chunks_b = chunks, max_chunks - chunks
+        
+        # First branch
+        if chunks_a > 0:
+            if chunks_a >= max_chunks:
+                x1_a, x2_a = x1, x2
+            else:
+                begin_a = [0] + [0]*(len(x1_shape)-1)
+                end_a = [chunks_a] + [*x1_shape[1:]]
+                x1_a = relay.strided_slice(x1, begin=begin_a, end=end_a)
+                
+                begin_a = [0] + [0]*(len(x2_shape)-1)
+                end_a = [chunks_a] + [*x2_shape[1:]]
+                x2_a = relay.strided_slice(x2, begin=begin_a, end=end_a)
+            
+            print({key: main_node.attrs[key] for key in main_node.attrs.keys()})
+            
+            branch_a = relay.nn.batch_matmul(x1_a, x2_a, **main_node.attrs)
+            branch_a = tvm.relay.Call(
+                branch_a.op,
+                branch_a.args,
+                attrs=branch_a.attrs,
+                type_args=branch_a.type_args,
+                span=tvm.ir.Span(main_node.span.source_name, main_node.span.line, 0, self.device_id, 0)
+            )
+            
+        if chunks_b > 0:
+            if chunks_b >= max_chunks:
+                x1_b, x2_b = x1, x2
+            else:
+                begin_b = [chunks_a] + [0]*(len(x1_shape)-1)
+                end_b = [max_chunks] + [*x1_shape[1:]]
+                x1_b = relay.strided_slice(x1, begin=begin_b, end=end_b)
+                
+                begin_b = [chunks_a] + [0]*(len(x2_shape)-1)
+                end_b = [max_chunks] + [*x2_shape[1:]]
+                x2_b = relay.strided_slice(x2, begin=begin_b, end=end_b)
+            
+            branch_b = relay.nn.batch_matmul(x1_b, x2_b, **main_node.attrs)
+            branch_b = tvm.relay.Call(
+                branch_b.op,
+                branch_b.args,
+                attrs=branch_b.attrs,
+                type_args=branch_b.type_args,
+                span=tvm.ir.Span(main_node.span.source_name, main_node.span.line, -1, 0, 0)
+            )
+            
+        if branch_a and branch_b:
+            return relay.concatenate([branch_a, branch_b], axis=0)
+        elif branch_a:
+            return branch_a
+        elif branch_b:
+            return branch_b

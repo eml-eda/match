@@ -97,6 +97,15 @@ typedef struct {
 } MatchDenseAttrs;
 
 typedef struct {
+    // (B, M, N) @ (B, N, K) = (B, M, K)
+    int idx;
+    int dim_b; 
+    int dim_m;
+    int dim_n;
+    int dim_k;
+} MatchBatchMatMulAttrs;
+
+typedef struct {
     int idx;
     int right_shift;
 } MatchRightShiftAttrs;

@@ -182,6 +182,48 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
             self.dmaconfstruct=dmaconfstruct
             self.overhead_per_op=overhead_per_op
             return {operand:calc_total_transfer_cost_per_op(operand) for operand in self.operands}
+        elif "batch_matmul" in self.pattern_name:
+            possible_dims = [
+                ("B", "M", "N"),
+                ("B", "N", "K"),
+                ("B", "M", "K"),
+            ]
+            def calc_transfer_costs(operand):
+                BYTES_PER_CYCLE = 8
+                API_OVERHEAD = 550
+                MATCH_SETUP_OVERHEAD = 920 - API_OVERHEAD
+                OVERHEAD_2D_TRANSFER = 1
+                OVERHEAD_3D_TRANSFER = 10
+                
+                TRANS_CYCLES = 0
+                
+                # NHWC
+                # BMN o BNK
+                dims = None
+                for dim_tuple in possible_dims:
+                    if set(self.size_per_mem_level[operand].keys()) == set(dim_tuple):
+                        dims = dim_tuple
+                        break
+                assert dims is not None, f"Operand {operand} does not have expected dimensions."
+                
+                dim_0_l1, dim_0_l2 = self.size_per_mem_level[operand][dims[0]]
+                dim_1_l1, dim_1_l2 = self.size_per_mem_level[operand][dims[1]]
+                dim_2_l1, dim_2_l2 = self.size_per_mem_level[operand][dims[2]]
+                
+                # 1D transfers
+                if dim_1_l1 == dim_1_l2 and dim_2_l1 == dim_2_l2:
+                    TRANS_CYCLES = dim_0_l1 * dim_1_l1 * dim_2_l1 / BYTES_PER_CYCLE
+                # 2D transfer
+                elif dim_2_l1 == dim_2_l2:
+                    TRANS_CYCLES = (dim_0_l1 * dim_1_l1 * dim_2_l1 / BYTES_PER_CYCLE) + dim_0_l1 * OVERHEAD_2D_TRANSFER
+                # 3D transfer
+                else:
+                    TRANS_CYCLES = (((dim_2_l1 * dim_0_l1 / BYTES_PER_CYCLE) + dim_2_l1 * OVERHEAD_2D_TRANSFER) * dim_1_l1) * dim_1_l1 * OVERHEAD_3D_TRANSFER
+                
+                # add API and MATCH overhead
+                return MATCH_SETUP_OVERHEAD + API_OVERHEAD + TRANS_CYCLES
+            
+            return {operand:calc_transfer_costs(operand) for operand in self.operands}
         else:
             def calc_transfer_costs(operand):
                 BYTES_PER_CYCLE = 8
@@ -191,7 +233,7 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
                 OVERHEAD_3D_TRANSFER = 10
                 
                 TRANS_CYCLES = 0
-                if operand in self.input_operands and operand!="W":
+                if operand in self.input_operands and operand != "W":
                     IN_HEIGHT_L1 = self.size_per_mem_level[operand]["OY"][0]
                     IN_HEIGHT_L2 = self.size_per_mem_level[operand]["OY"][1]
 
@@ -253,6 +295,14 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         def _floor(ch, N):
             return floor((ch + N - 1) / N)
         latency=0
+        
+        if "batch_matmul" in self.pattern_name:
+            ch_in = self.loop_sizes["N"]
+            ch_out = self.size_per_mem_level["O"]["K"][0]
+            batch_size = self.loop_sizes["B"]
+            latency += batch_size * _floor(ch_in, 2) * _floor(ch_out, 4)
+            return latency
+        
         ch_in = self.loop_sizes["C"]
         ch_out = self.size_per_mem_level["O"]["K"][0]
         kernel_size_x = self.loop_sizes['FX']

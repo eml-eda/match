@@ -85,6 +85,8 @@ class PulpCluster(ExecModule):
         elif "dense" in pattern_name:
             # TODO: K 8 C 4
             return [("K", 8)]
+        elif "batch_matmul" in pattern_name:
+            return [("K", 8)]
         else:
             # DEFAULT LIKE CONV2D
             return [("OY", 8), ("OX", 2), ("K", 4)]
@@ -214,11 +216,9 @@ class PulpCluster(ExecModule):
             return is_fp16
         
         def pulpd_batch_matmul_fp16_check(node):
+            matmul_node = add_checks_get_first_op(node, "nn.batch_matmul")
             valid = only_out_fp16(node)
-            #bmatmul_node = add_checks_get_first_op(node, "nn.batch_matmul")
-            #print(bmatmul_node)
-            #print(dict(bmatmul_node.attrs))
-            #quit()
+            valid = valid and not matmul_node.attrs.transpose_b
             return valid
 
         def pulpd_conv2d_fp16_check(node):
@@ -236,7 +236,7 @@ class PulpCluster(ExecModule):
             valid = valid and conv_node.attrs.groups == conv_node.args[1].checked_type.shape[3]
             valid = valid and conv_node.attrs.dilation[0] == 1 and conv_node.attrs.dilation[1] == 1
             return valid
-        
+                
         # Int8 old checks
         
         def only_out_uint8(node):
@@ -343,7 +343,9 @@ class PulpCluster(ExecModule):
             PartitioningPattern(name="pulpd_conv2d_grouped_bnorm_fp16",pattern=conv2d_bnorm,additional_checks=pulpd_conv2d_grouped_fp16_check),
         
             #PartitioningPattern(name="avgpool2d_fp16",pattern=avgpool2d,additional_checks=only_out_fp16),
-            
+
+            PartitioningPattern(name="pulpd_batch_matmul_fp16",pattern=batch_matmul,additional_checks=pulpd_batch_matmul_fp16_check),
+
             # int8
             
             #PartitioningPattern(name="dense_out",pattern=dense_pt_out),

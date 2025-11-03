@@ -77,6 +77,10 @@ void kernel_wrapper(MatchCtx* ctx)
         case pulpd_dense_bias_fp16: pulp_fp16_dense_wrapper(ctx); break;
     #endif
 
+    #ifdef pulpd_batch_matmul_fp16
+        case pulpd_batch_matmul_fp16: pulp_fp16_batch_matmul_wrapper(ctx); break;
+    #endif
+
     #ifdef pulpd_avgpool2d_fp16
         case pulpd_avgpool2d_fp16: pulp_fp16_avgpool2d_wrapper(ctx); break;
     #endif
@@ -346,9 +350,9 @@ void pulp_fp16_dense_wrapper(MatchCtx* ctx) {
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
-    int batch_size = tensors[0].tiles[MEM_L1_PULPD*2+0].size;
-    int inp_ch = tensors[0].tiles[MEM_L1_PULPD*2+1].size;
-    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*2+1].size;
+    int batch_size = tensors[0].tiles[MEM_L1_PULPD*tensors[0].num_dims+0].size;
+    int inp_ch = tensors[0].tiles[MEM_L1_PULPD*tensors[0].num_dims+1].size;
+    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_PULPD*tensors[num_tensors-1].num_dims+1].size;
 
     // TODO improve this - use RedMulE when supported
     if (inp_ch == 64 && out_ch == 10 && batch_size == 1) {
@@ -387,6 +391,34 @@ void pulp_fp16_dense_wrapper(MatchCtx* ctx) {
             num_tensors > 3 ? tensors[2].pt : NULL,                    // Bias ptr
             inp_ch,                                                    // Input Neurons
             out_ch                                                     // Output Neurons
+        );
+    }
+}
+
+
+void pulp_fp16_batch_matmul_wrapper(MatchCtx* ctx) {
+    MatchTensor* tensors = ctx->tensors->tensors;
+    int num_ops = ctx->ops->num_ops;
+    int num_tensors = ctx->tensors->num_tensors;
+    int dim_b = tensors[0].tiles[MEM_L1_PULPD*tensors[0].num_dims+0].size;
+    int dim_m = tensors[0].tiles[MEM_L1_PULPD*tensors[0].num_dims+1].size;
+    int dim_n = tensors[0].tiles[MEM_L1_PULPD*tensors[0].num_dims+2].size;
+    int dim_k = tensors[1].tiles[MEM_L1_PULPD*tensors[1].num_dims+2].size;
+
+    for (int b = 0; b < dim_b; b++) {
+        #if DEBUG_CLUSTER_LIB
+            smp_printf("[PULP][KER] batch_matmul via pulp_fp16_gemm (batch %d/%d): ", b+1, dim_b);
+            smp_printf("Inp. tile (%d, %d) | ", dim_m, dim_n);
+            smp_printf("Out. tile (%d, %d)\r\n", dim_n, dim_k);
+        #endif
+        pulp_fp16_gemm(
+            (void*)((uint16_t*)tensors[0].pt + b * dim_m * dim_n),               // input a pt
+            (void*)((uint16_t*)tensors[1].pt + b * dim_n * dim_k),               // input b pt
+            NULL,                                                                // bias pt
+            (void*)((uint16_t*)tensors[num_tensors-1].pt + b * dim_m * dim_k),   // output pt
+            dim_m,                                                               // M
+            dim_n,                                                               // N
+            dim_k                                                                // K
         );
     }
 }

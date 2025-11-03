@@ -20,6 +20,7 @@ class MatchRelayParser(MatchTVMParser):
             "add": self.visit_add,
             "multiply": self.visit_multiply,
             "nn.relu": self.visit_relu,
+            "nn.batch_matmul": self.visit_batch_matmul,
         }
     
     def visit_relu(self, call, attrs, name):
@@ -507,5 +508,46 @@ class MatchRelayParser(MatchTVMParser):
             data_layout= attrs.data_layout,
             kernel_layout= attrs.kernel_layout,
             out_dtype= np.dtype(attrs.out_dtype) if attrs.out_dtype!="" else np.dtype(odtype),
+        )
+        self.update_match_node(op=op,call=call,name=name)
+        
+        
+    def visit_batch_matmul(self, call, attrs, name):
+        x1_shape = [int(v) for v in call.args[0].checked_type.shape]
+        x2_shape = [int(v) for v in call.args[1].checked_type.shape]
+
+        dim_b = x1_shape[0]
+        dim_m = x1_shape[1]
+        dim_n = x2_shape[2]
+        dim_k = x1_shape[2]
+        
+        if x2_shape[1] != dim_k or x1_shape[0] != x2_shape[0]:
+            raise NotImplementedError(f"[RELAY PARSER]: batch_matmul shapes mismatch {x1_shape} and {x2_shape}.")
+        
+        out_dtype = call.checked_type.dtype
+        
+        x1_name, x1_tensor, x1_type = self.get_name_and_tensor_of_arg(call, call.args[0], 0)
+        self.update_if_intermediate_tensor(tensor=x1_tensor, name=x1_name)
+        
+        x2_name, x2_tensor, x2_type = self.get_name_and_tensor_of_arg(call, call.args[1], 1)
+        self.update_if_intermediate_tensor(tensor=x2_tensor, name=x2_name)
+        
+        x1_tensor.layout = "BMN"
+        x2_tensor.layout = "BNK" if not attrs.transpose_b else "BKN"
+        
+        # update_all_dim_names_occurrences_with 
+        
+        out_dims = [*x1_tensor.dims[:-1], x2_tensor.dims[-1]]
+        out_tensor = MatchTensor(name=name,dims=out_dims,dtype=np.dtype(out_dtype),tensor_type="output", layout=x1_tensor.layout)
+        self.calls_tensors[name]=out_tensor
+        op = ops.MatchOpBatchMatMul(
+            out_arr=[out_tensor],
+            var_arr=[x1_tensor, x2_tensor],
+            const_arr=[],
+            dim_b=dim_b,
+            dim_m=dim_m,
+            dim_n=dim_n,
+            dim_k=dim_k,
+            out_dtype=np.dtype(out_dtype),
         )
         self.update_match_node(op=op,call=call,name=name)
