@@ -56,6 +56,10 @@ void kernel_wrapper(MatchCtx* ctx)
         case spatz_dense_bias_fp16: spatz_fp16_dense_wrapper(ctx); break;
     #endif
 
+    #ifdef spatz_batch_matmul_fp16
+        case spatz_batch_matmul_fp16: spatz_fp16_batch_matmul_wrapper(ctx); break;
+    #endif
+
         default: wtf_wrapper(ctx); break;
     }
     
@@ -176,9 +180,9 @@ void spatz_fp16_dense_wrapper(MatchCtx* ctx) {
     MatchTensor* tensors = ctx->tensors->tensors;
     int num_ops = ctx->ops->num_ops;
     int num_tensors = ctx->tensors->num_tensors;
-    int batch_size = tensors[0].tiles[MEM_L1_SPATZ*2+0].size;
-    int inp_ch = tensors[0].tiles[MEM_L1_SPATZ*2+1].size;
-    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_SPATZ*2+1].size;
+    int batch_size = tensors[0].tiles[MEM_L1_SPATZ*tensors[0].num_dims+0].size;
+    int inp_ch = tensors[0].tiles[MEM_L1_SPATZ*tensors[0].num_dims+1].size;
+    int out_ch = tensors[num_tensors-1].tiles[MEM_L1_SPATZ*tensors[num_tensors-1].num_dims+1].size;
 
 #if DEBUG_SPATZ_LIB
     smp_printf("[SPATZ][KER] spatz_fp16_gemm: ");
@@ -196,5 +200,34 @@ void spatz_fp16_dense_wrapper(MatchCtx* ctx) {
         out_ch                     // Output Neurons
     );
 }
+
+
+void spatz_fp16_batch_matmul_wrapper(MatchCtx* ctx) {
+    MatchTensor* tensors = ctx->tensors->tensors;
+    int num_ops = ctx->ops->num_ops;
+    int num_tensors = ctx->tensors->num_tensors;
+    int dim_b = tensors[0].tiles[MEM_L1_SPATZ*tensors[0].num_dims+0].size;
+    int dim_m = tensors[0].tiles[MEM_L1_SPATZ*tensors[0].num_dims+1].size;
+    int dim_n = tensors[0].tiles[MEM_L1_SPATZ*tensors[0].num_dims+2].size;
+    int dim_k = tensors[1].tiles[MEM_L1_SPATZ*tensors[1].num_dims+2].size;
+
+    for (int b = 0; b < dim_b; b++) {
+        #if DEBUG_SPATZ_LIB
+            smp_printf("[SPATZ][KER] batch_matmul via spatz_fp16_gemm (batch %d/%d): ", b+1, dim_b);
+            smp_printf("Inp. tile (%d, %d) | ", dim_m, dim_n);
+            smp_printf("Out. tile (%d, %d)\r\n", dim_n, dim_k);
+        #endif
+        spatz_fp16_gemm(
+            (void*)((uint16_t*)tensors[0].pt + b * dim_m * dim_n),               // input a pt
+            (void*)((uint16_t*)tensors[1].pt + b * dim_n * dim_k),               // input b pt
+            NULL,                                                                // bias pt
+            (void*)((uint16_t*)tensors[num_tensors-1].pt + b * dim_m * dim_k),   // output pt
+            dim_m,                                                               // M
+            dim_n,                                                               // N
+            dim_k                                                                // K
+        );
+    }
+}
+
 
 #endif // __spatz__

@@ -31,7 +31,7 @@ class Tensor:
             
     @property
     def chunks(self) -> int:
-        return self.shape[self.tiling_dim] if self.tiling_dim else 1
+        return self.shape[self.tiling_dim] if self.tiling_dim is not None else 1
     
 
 @dataclass

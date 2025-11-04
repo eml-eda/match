@@ -79,6 +79,8 @@ class Spatz(ExecModule):
         elif "dense" in pattern_name:
             # TODO: K 8 C 4
             return [("K", 8)]
+        elif "batch_matmul" in pattern_name:
+            return [("K", 8)]
         else:
             # DEFAULT LIKE CONV2D
             return [("OY", 8), ("OX", 2), ("K", 4)]
@@ -224,6 +226,12 @@ class Spatz(ExecModule):
         def spatz_dense_check(node):
             return check_fp16_out(node) and check_linear_even_out_channels(node)
         
+        def spatz_batch_matmul_fp16_check(node):
+            matmul_node = add_checks_get_first_op(node, "nn.batch_matmul")
+            valid = check_fp16_out(node)
+            valid = valid and not matmul_node.attrs.transpose_b
+            return valid
+        
         def conv2d():
             conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
             return conv2d
@@ -249,6 +257,10 @@ class Spatz(ExecModule):
             dense_add = is_op("add")(dense, wildcard()) | is_op("add")(wildcard(), dense)
             return dense_add
         
+        def batch_matmul():
+            bmatmul = is_op("nn.batch_matmul")(wildcard(), wildcard()) 
+            return bmatmul
+        
         return [
             PartitioningPattern(name="spatz_conv2d_fp16", pattern=conv2d, additional_checks=spatz_conv2d_check),
             PartitioningPattern(name="spatz_conv2d_bias_fp16", pattern=conv2d_bias, additional_checks=spatz_conv2d_check),
@@ -260,4 +272,6 @@ class Spatz(ExecModule):
             
             PartitioningPattern(name="spatz_dense_fp16", pattern=dense, additional_checks=spatz_dense_check),
             PartitioningPattern(name="spatz_dense_bias_fp16", pattern=dense_bias, additional_checks=spatz_dense_check),
+            
+            PartitioningPattern(name="spatz_batch_matmul_fp16", pattern=batch_matmul, additional_checks=spatz_batch_matmul_fp16_check),
         ]

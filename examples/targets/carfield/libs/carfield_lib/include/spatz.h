@@ -78,6 +78,7 @@ void kernel_wrapper(MatchCtx* ctx);
 void spatz_fp16_conv2d_wrapper(MatchCtx* ctx);
 void spatz_fp16_conv2d_grouped_wrapper(MatchCtx* ctx);
 void spatz_fp16_dense_wrapper(MatchCtx* ctx);
+void spatz_fp16_batch_matmul_wrapper(MatchCtx* ctx);
 
 // Debug Flags
 

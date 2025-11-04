@@ -55,6 +55,17 @@ class Graph():
         # nid = node (layer) id
         # sid = super-node id
         
+        # Map main node op type to tensor tiling dim
+        self.main_node_op_to_tiling_dim = {
+            "nn.conv2d": 2, # H
+            "nn.dense": 1, # out_neurons
+            "nn.batch_matmul": 0 # batch_size
+        }
+        
+        
+        print(mod)
+        
+        # TODO move this to exec_module or target
         self.device_speeds = [0.5, 8, 6] # remove hardcoded device speeds
         self.mod = mod
         self.patterns = patterns
@@ -149,12 +160,8 @@ class Graph():
                 nid = len(nodes)
                 gid_to_nid[gid] = nid 
                 nid_to_gid[nid] = gid
-            
+
                 out_tid = self.gid_to_tid[gid]
-                if len(self.tensors[out_tid].shape) == 4:
-                    self.tensors[out_tid].tiling_dim = 2 # H
-                else:
-                    self.tensors[out_tid].tiling_dim = 1 # K
                 
                 nodes.append(Node(
                     id=nid,
@@ -163,7 +170,7 @@ class Graph():
                     children_nids=list(self.graph.successors(gid)),
                     duration=int(node['num_ops']),
                     device_id=0,
-                    chunks = self.tensors[out_tid].chunks,
+                    chunks = 1,
                 ))
                 
         for i in range(len(nodes)):
@@ -185,6 +192,15 @@ class Graph():
             for mat_id, match in enumerate(collector.matches):
                 #print(f"Match: {[self.gid_to_nid[self.relay_to_gid[node]] for node in match]}")
                 
+                # Find main_node of the match to determine tiling_dim of all sub_nids and out tensorss
+                main_node_op = None
+                for node in match:
+                    if isinstance(node, relay.Call) and node.op.name in self.main_node_op_to_tiling_dim:
+                        main_node_op = node
+                        break
+                assert main_node_op is not None, "Pattern match must contain a main node with known op type."
+                tiling_dim = self.main_node_op_to_tiling_dim[main_node_op.op.name]
+                
                 super_node_id = len(self.super_nodes) + len(self.nodes)
                 
                 matched_gids, matched_nids = [], []
@@ -205,13 +221,21 @@ class Graph():
                 
                 inp_tids = list(set(inp_id for nid in matched_nids for inp_id in self.nodes[nid].inp_tids if self.tensors[inp_id].type != TensorType.INTERMEDIATE or nid in first_nids))
                 out_tids = list(set(out_id for nid in matched_nids for out_id in self.nodes[nid].out_tids if nid in last_nids))
+                
                 children_nids = []
                 for gid in matched_gids:
                     if gid in self.gid_to_nid:
                         nid = self.gid_to_nid[gid]
                         if nid in last_nids:
                             children_nids.extend(self.nodes[nid].children_nids)
+                        for sub_nid_out_tid in self.nodes[nid].out_tids:
+                            self.tensors[sub_nid_out_tid].tiling_dim = tiling_dim
+                            # should have one output
+                            self.nodes[nid].chunks = self.tensors[sub_nid_out_tid].chunks
+                            
                 duration = int(int(sum(self.nodes[nid].duration for nid in matched_nids)) / self.device_speeds[pattern.exec_module.id + 1])
+                
+                self.tensors[out_tids[0]].tiling_dim = tiling_dim
                 
                 self.super_nodes.append(SuperNode(
                     id = super_node_id,
@@ -220,7 +244,7 @@ class Graph():
                     children_nids = children_nids,
                     duration = duration,
                     device_id = pattern.exec_module.id + 1,
-                     chunks = self.tensors[out_tids[0]].chunks,
+                    chunks = self.tensors[out_tids[0]].chunks,
                     pattern_id = pat_id,
                     match_id = mat_id,
                     sub_nids = list(nid for nid in matched_nids),
@@ -275,9 +299,15 @@ class Graph():
             return ops
         elif op_name in ["nn.dense"]:
             # Extract info for dense
-            batch, out_dim = [int(i) for i in call.checked_type.shape]
-            in_dim = int(call.args[1].checked_type.shape[1])
-            ops = batch * in_dim * out_dim
+            batch, dim_out = [int(i) for i in call.checked_type.shape]
+            dim_inp = int(call.args[1].checked_type.shape[1])
+            ops = batch * dim_inp * dim_out
+            return ops
+        elif op_name in ["nn.batch_matmul"]:
+            # Extract info for batch_matmul
+            dim_b, dim_m, dim_k = [int(i) for i in call.checked_type.shape]
+            dim_n = int(call.args[0].checked_type.shape[2])
+            ops = dim_b * dim_m * dim_n * dim_k
             return ops
         elif op_name in ["nn.relu", "reshape", "nn.bias_add", "multiply", "add", "transpose"]:
             # Assume one op for each tensor element
