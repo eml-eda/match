@@ -30,3 +30,10 @@ cd output; make build-host
 
 This should generate an `host.elf` that you can load and run.
 
+## Known Issues
+
+- [x] Add support for `batch_size` in `nn.dense` effectively supporting matmul
+- [x] Add support for `nn.batch_matmul`
+- [ ] Fix tensors duplication on graph partitioning TVM transformation 
+- [ ] Add code generation for L3-L2 tensor transfers scheduled by optimizer
+- [ ] Consider TVM dynamically allocated buffers in memory planning
