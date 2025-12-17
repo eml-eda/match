@@ -44,7 +44,7 @@ If you use MATCH, please acknowledge our paper:
 The easiest way to use MATCH is through a Ubuntu22.04 docker container, which ensures all dependencies (especially for TVM) are met. This can be achieved with:
 ```
 $ docker build -t match -f docker/Dockerfile .
-$ docker start -it --rm match
+$ docker run -it --rm match
 ```
 
 # Local Installation
@@ -82,8 +82,15 @@ To use MATCH directly, the end user can execute the run.py script, setting the t
 Considering an ONNX network the user that should be compiled for a pulp platform, the user shall execute the following command
 
 ```
-$ python3 test/test.py --model onnx image_classification --executor graph
+$ python3 test/test.py --model image_classification --executor graph
+$ python3 test/test.py --model drone_vfe --executor graph --target GAP9
 ```
+
+--model: specify the model name in the folder models
+--executor: can be graph or aot. 
+graph: modified runtime of match. tvm generate a json with final graph and then you do the memory plan, etc... it is necessary to use the graph if you need external memory (the memory planner is modified). Graph also allows to track performance layer by layer.
+aot: runtime of baseline tvm;
+--target: GAP9, pulp_open, etc.. (check for supported models)
 
 <!--Additionally there are 2 predefined networks, that can be used to test a newly built target, that can be accessed from MATCH directly.
 The first command issues a 2d requantized convolution with a bias add operation, while the second does an addition between 2 2d convolutions as the previous ones.-->

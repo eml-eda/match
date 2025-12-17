@@ -119,7 +119,8 @@ def run_model(target_name: str="pulp_platform", model: str="keyword_spotting", o
                                              min_input_val=min_input_val, max_input_val=max_input_val),
            golden_cpu_model=golden_cpu_model,
            handle_out_fn=handle_out_fn,
-           debug=True
+           debug=True,
+           profile=True
         ),
         target=target,
         output_path=output_path
