@@ -34,7 +34,7 @@ def save_model_and_params(mod,params):
     with open(str(Path(os.path.dirname(__file__)+"/models/last_model/model_params.txt").absolute()),"wb") as par_file:
         par_file.write(relay.save_param_dict(params=params))
 
-def run_nodes_of_network(target_name: str="default", network: str="conv", output_path: str="./builds/last_build", executor: str="aot",
+def run_nodes_of_network(target_name: str="default", network: str="conv", output_path: str="./builds/curr_build", executor: str="aot",
                         golden_cpu_model: bool=False, input_files: List[str]=[], min_input_val=None, max_input_val=None, handle_out_fn=""):
     single_node_mod_params = get_network_single_nodes(network)
     #define HW Target inside match
@@ -65,7 +65,7 @@ def run_nodes_of_network(target_name: str="default", network: str="conv", output
             idx_inp_file += len(default_inputs)
 
 
-def run_microbench(target_name: str="default", microbench: str="conv", output_path: str="./builds/last_build", executor: str="aot",
+def run_microbench(target_name: str="default", microbench: str="conv", output_path: str="./builds/curr_build", executor: str="aot",
                    golden_cpu_model: bool=False, input_files: List[str]=[], min_input_val=None, max_input_val=None, handle_out_fn=""):
     mod,params = get_microbench_mod(microbench)
     save_model_and_params(mod=mod,params=params)
@@ -88,15 +88,22 @@ def run_microbench(target_name: str="default", microbench: str="conv", output_pa
         output_path=output_path
     )
 
-def run_model(target_name: str="pulp_platform", model: str="keyword_spotting", output_path: str="./builds/last_build", executor: str="aot",
-              golden_cpu_model: bool=False, input_files: List[str]=[], min_input_val=None, max_input_val=None, handle_out_fn=""):
+def run_model(
+    target_name: str="pulp_platform",
+    model: str="keyword_spotting", model_path: str="",
+    output_path: str="./builds/curr_build", executor: str="aot",
+    golden_cpu_model: bool=False, input_files: List[str]=[],
+    min_input_val=None, max_input_val=None,
+    handle_out_fn=""
+):
     #define HW Target inside match
     if target_name not in TEST_TARGET:
         raise Exception(f"{target_name} target is not available, the targets available are {[k for k in TEST_TARGET.keys()]}")
     target = TEST_TARGET[target_name]()
     onnx_model_filepath = model
-    if Path(model).exists():
-        model = Path(model).stem
+    if Path(model_path).exists() and model_path!="":
+        onnx_model_filepath = model_path
+        model = Path(onnx_model_filepath).stem
     else:
         onnx_model_filepath = os.path.dirname(__file__)+"/models/"+model+".onnx"
         if not Path(onnx_model_filepath).exists():
@@ -119,14 +126,17 @@ def run_model(target_name: str="pulp_platform", model: str="keyword_spotting", o
                                              min_input_val=min_input_val, max_input_val=max_input_val),
            golden_cpu_model=golden_cpu_model,
            handle_out_fn=handle_out_fn,
-           debug=True
+           debug=True,
+           debug_fallback=True,
+           profile=True,
+            profile_fallback=True
         ),
         target=target,
         output_path=output_path
     )
 
 def run_relay_saved_model_at(target_name: str="pulp_platform", mod_filename: str="./models/last_model/model_graph.relay",
-                             params_filename: str="./models/last_model/model_params.txt", output_path: str="./builds/last_build",
+                             params_filename: str="./models/last_model/model_params.txt", output_path: str="./builds/curr_build",
                              executor: str="graph", golden_cpu_model: bool=False, input_files: List[str]=[],
                              min_input_val=None, max_input_val=None, handle_out_fn=""):
     #define HW Target inside match
@@ -267,7 +277,7 @@ if __name__=="__main__":
             target_name=args.target,
             mod_filename=str(Path(os.path.dirname(__file__)+"/models/last_model/model_graph.relay").absolute()),
             params_filename=str(Path(os.path.dirname(__file__)+"/models/last_model/model_params.txt").absolute()),
-            output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+            output_path=str(Path(os.path.dirname(__file__)+"/builds/curr_build").absolute()),
             input_files=args.input_files,
             executor=args.executor,
             golden_cpu_model=args.golden,
@@ -276,11 +286,12 @@ if __name__=="__main__":
             handle_out_fn=args.handle_out_fn
         )
     else:
-        if args.model!="":
+        if args.model!="" or args.model_path!="":
             run_model(
                 target_name=args.target,
                 model=args.model,
-                output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+                model_path=args.model_path,
+                output_path=str(Path(os.path.dirname(__file__)+"/builds/curr_build").absolute()),
                 executor=args.executor,
                 golden_cpu_model=args.golden,
                 input_files=args.input_files,
@@ -292,7 +303,7 @@ if __name__=="__main__":
             run_model(
                 target_name=args.target,
                 model=args.model_path,
-                output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+                output_path=str(Path(os.path.dirname(__file__)+"/builds/curr_build").absolute()),
                 executor=args.executor,
                 golden_cpu_model=args.golden,
                 input_files=args.input_files,
@@ -304,7 +315,7 @@ if __name__=="__main__":
             run_nodes_of_network(
                 target_name=args.target,
                 network=args.network,
-                output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+                output_path=str(Path(os.path.dirname(__file__)+"/builds/curr_build").absolute()),
                 executor=args.executor,
                 golden_cpu_model=args.golden,
                 input_files=args.input_files,
@@ -316,7 +327,7 @@ if __name__=="__main__":
             run_microbench(
                 target_name=args.target,
                 microbench=args.microbench,
-                output_path=str(Path(os.path.dirname(__file__)+"/builds/last_build").absolute()),
+                output_path=str(Path(os.path.dirname(__file__)+"/builds/curr_build").absolute()),
                 executor=args.executor,
                 golden_cpu_model=args.golden,
                 input_files=args.input_files,

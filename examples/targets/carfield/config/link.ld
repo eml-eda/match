@@ -40,6 +40,9 @@ SECTIONS {
   __base_plic     = 0x04000000;
   __base_spm      = ORIGIN(spm);
   __base_dram     = ORIGIN(dram);
+  __base_dram_io = ORIGIN(dram);
+  __base_dram_constants = 0x80810000;
+  __base_dram_match_mem = 0x80110000;
   __base_l2       = ORIGIN(l2);
 
   __stack_pointer$  = ORIGIN(l2) + LENGTH(l2) - 8;
@@ -94,5 +97,28 @@ SECTIONS {
   .offload : ALIGN(32) {
     *(.offload)
     *(.offload.*)
+  } > dram
+  .dram_match_mem __base_dram_match_mem (NOLOAD) : {
+    __dram_match_mem_start = .;
+    KEEP(*(.dram_match_mem))
+    KEEP(*(.dram_match_mem.*))
+    . = ALIGN(32);
+    __dram_match_mem_end = .;
+  } > dram
+
+  .dram_constants __base_dram_constants : {
+    __dram_constants_start = .;
+    KEEP(*(.dram_constants))
+    KEEP(*(.dram_constants.*))
+    . = ALIGN(32);
+    __dram_constants_end = .;
+  } > dram
+
+  .dram_io __base_dram_io (NOLOAD) : {
+    __dram_io_start = .;
+    KEEP(*(.dram_io))
+    KEEP(*(.dram_io.*))
+    . = ALIGN(32);
+    __dram_io_end = .;
   } > dram
 }

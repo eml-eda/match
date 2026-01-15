@@ -63,8 +63,8 @@ execute_pulp_open_test() {
 # Define test parameters
 models=("kws" "vww" "imcls")
 targets=("GAP9")
-directions=("bw")
-NAME_BASE_DIR="convbw_test"
+directions=("fw" "bw")
+NAME_BASE_DIR="odl_accelerated_singlecore"
 # Map target names to directory names
 declare -A target_dirs
 target_dirs["pulp_open"]="popen"

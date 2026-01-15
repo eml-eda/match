@@ -11,6 +11,10 @@ void match_set_match_mem_pt(void* match_mem_pt){
     match_mem = match_mem_pt;
 }
 
+void* match_get_match_mem_pt(void){
+    return (void*)match_mem;
+}
+
 void match_alloc_workspace(int offset, int size){
     match_workspaces_offsets[match_num_workspaces] = offset;
     match_workspaces_sizes[match_num_workspaces] = size;

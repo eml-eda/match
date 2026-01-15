@@ -56,7 +56,7 @@ def match_tvmc_compile_wrapper(model: TVMCModel, target: str = "match, c",
     #if static_mem_plan:
     pass_context_configs.append(f"tir.usmp.algorithm={static_mem_plan_algorithm}")
     #pass_context_configs.append("tir.disable_storage_rewrite=1")
-    #pass_context_configs.append("tir.usmp.use_workspace_io=1")
+    # pass_context_configs.append("tir.usmp.use_workspace_io=1")
     #pass_context_configs.append("tir.InjectDoubleBuffer=1")
     #pass_context_configs.append("relay.backend.disable_memory_plan=1")
     if not fuse_layers:

@@ -36,6 +36,19 @@ def conv_pt_requant():
     cast = is_op("cast")(clip)
     return cast
 
+def conv1d_pt_requant():
+    #Create pattern for a 1D Conv block, with bias and ReLU.
+    conv1d = is_op("nn.conv1d")(
+        wildcard(), wildcard()
+    )
+    conv1d = is_op("cast")(conv1d) | conv1d
+    bias_add = is_op("nn.bias_add")(conv1d, wildcard()) | is_op("add")(conv1d, wildcard())
+    scale = is_op("multiply")(conv1d, wildcard()) | is_op("multiply")(wildcard(), conv1d)
+    bias = is_op("add")(scale, wildcard()) | is_op("add")(wildcard(), scale)
+    right_shift = is_op("right_shift")(bias_add | bias, is_constant())
+    clip = is_op("clip")(right_shift)
+    cast = is_op("cast")(clip)
+    return cast
 
 def dense_pt_requant():
     """Create pattern for conv2D with optional fused relu."""
@@ -127,12 +140,13 @@ def fw_instance_norm_tail_pt():
     return reshape
 
 def only_out_uint8(node):
+    # return False
     cast_node = node if node.op.name == "cast" else None
     if cast_node is not None:
         return cast_node.attrs.dtype=="uint8"
     if hasattr(node, 'checked_type') and hasattr(node.checked_type, 'dtype'):
         return node.checked_type.dtype=="uint8"
-    return False
+    return True
 
 def only_out_int32(node):
     cast_node = node if node.op.name == "cast" else None
@@ -152,6 +166,20 @@ def only_std_convs(node):
     if conv.attrs.groups!=1:
         return False
     if conv.attrs.data_layout!="NHWC":
+        return False
+    return True
+
+def only_std_conv1d(node):
+    conv = add_checks_get_first_op(node, "nn.conv1d")
+    if not only_out_uint8(node):
+        return False
+    # theres a pointwise specific pattern
+    if tuple([int(i) for i in conv.attrs.kernel_size]) == (1,1):
+        return False
+    if conv.attrs.groups!=1:
+        return False
+    breakpoint()
+    if conv.attrs.data_layout!="NWC":
         return False
     return True
 

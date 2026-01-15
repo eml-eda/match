@@ -294,7 +294,7 @@ class MatchNodeToZigZagParser:
             
             if error_dim:
                 print(f"[ZIGZAG ENGINE] Error during dimension parsing, trying to get {name} from dims {[dim.name for dim in tensor.dims]} in tensor {tensor.name}")
-                breakpoint()
+                # breakpoint()
         return found_dim
     
     def get_operands(self):
@@ -354,10 +354,10 @@ class MatchNodeToZigZagParser:
     def visit_conv1d(self):
         # get data
         conv1d_node: MatchOpConv1D = self.match_node.ops["conv1d"]
-        self.strides = conv1d_node.strides + (1,)
-        self.dilations = conv1d_node.dilation + (1,)
+        self.strides = conv1d_node.strides + [1]
+        self.dilations = conv1d_node.dilation + [1]
         self.padding = conv1d_node.padding
-        self.kernel_size = conv1d_node.kernel_size + (1,)
+        self.kernel_size = (conv1d_node.kernel_size, 1)
         # as if it was height only
         self.padding = (self.padding[0], 0, self.padding[1], 0)
         self.workload_dimensions_relations = [
@@ -372,19 +372,22 @@ class MatchNodeToZigZagParser:
         o_n, o_c, o_h = [self.get_dim_name_by_name(key).size for key in ["B","K","OY"]]
         i_h = self.get_dim_name_by_name("IY").size
         w_cin = self.get_dim_name_by_name("C").size
-        
-        self.equation = "O[b][k][oy][ox]+=W[k][c][fy]*I[b][c][iy]"
+
+        self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]"
         self.loop_dim_size["B"] = o_n
         self.loop_dim_size["K"] = o_c
         self.loop_dim_size["C"] = w_cin
         self.loop_dim_size["OY"] = o_h
+        self.loop_dim_size["OX"] = 1
         self.loop_dim_size["FY"] = self.kernel_size[0]
+        self.loop_dim_size["FX"] = self.kernel_size[1]
         # dependencies dims
         self.pr_loop_dim_size["IY"] = i_h
+        self.pr_loop_dim_size["IX"] = 1
         if conv1d_node.depthwise:
             self.loop_dim_size["C"] = 1
             self.operand_source_dimension_mapping["I"]["C"]="K"
-            self.equation = "O[b][k][oy][ox]+=W[k][c][fy]*I[b][k][iy]"
+            self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"
     
     def visit_conv2d(self):
         # get conv attrs

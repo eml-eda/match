@@ -5,12 +5,15 @@ static DmaTransfer dma_transfer_;
 void offload_to_pulp_cluster(MatchCtx* ctx, void (inner_function)(unsigned int* args_inner_function),
                                 unsigned int* args){
     #ifndef GAP_SDK
-    set_pulp_open_l1_pt(pmsis_l1_malloc(L1_SCRATCHPAD_SIZE));
+    void *l1_pt__ = pmsis_l1_malloc(L1_SCRATCHPAD_SIZE);
+    // printf("PULP Open Setting L1 scratchpad memory at pt 0x%x\n", l1_pt__);
+    set_pulp_open_l1_pt(l1_pt__);
     #endif
     pi_cluster_task(&cluster_task,inner_function,args);
     pi_cluster_send_task_to_cl(&cluster_dev, &cluster_task);
     #ifndef GAP_SDK
-    pmsis_l1_malloc_free( get_pulp_open_l1_pt(), L1_SCRATCHPAD_SIZE);
+    // printf("PULP Open Freeing L1 scratchpad memory at pt 0x%x\n", l1_pt__);
+    pmsis_l1_malloc_free(l1_pt__, L1_SCRATCHPAD_SIZE);
     #endif
 }
 
@@ -142,9 +145,9 @@ void wait_l1_dma_transfers(MatchCtx* ctx){
 }
 
 void wait_pulp_nn_computation(MatchCtx* ctx){
-//    #ifdef GAP_SDK
-//    pi_team_offload_wait();
-//    #endif
+    #ifdef GAP_SDK
+    pi_team_offload_wait();
+    #endif
 }
 /*
     Main Wrapper Function

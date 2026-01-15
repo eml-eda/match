@@ -199,11 +199,11 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
                 
                 TRANS_CYCLES = 0
                 if operand in self.input_operands and operand!="W":
-                    IN_HEIGHT_L1 = self.size_per_mem_level[operand]["IY"][0]
-                    IN_HEIGHT_L2 = self.size_per_mem_level[operand]["IY"][1]
+                    IN_HEIGHT_L1 = self.size_per_mem_level[operand]['IY' if 'IY' in self.size_per_mem_level[operand] else 'OY'][0]
+                    IN_HEIGHT_L2 = self.size_per_mem_level[operand]['IY' if 'IY' in self.size_per_mem_level[operand] else 'OY'][1]
 
-                    IN_WIDTH_L1 = self.size_per_mem_level[operand]["IX"][0]
-                    IN_WIDTH_L2 = self.size_per_mem_level[operand]["IX"][1]
+                    IN_WIDTH_L1 = self.size_per_mem_level[operand]['IX' if 'IX' in self.size_per_mem_level[operand] else 'OX'][0]
+                    IN_WIDTH_L2 = self.size_per_mem_level[operand]['IX' if 'IX' in self.size_per_mem_level[operand] else 'OX'][1]
 
                     IN_CHANNELS_L1 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
                     IN_CHANNELS_L2 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][1]

@@ -24,6 +24,15 @@ def get_results(name_exp, targets, base_dir, directions, models, results_file):
         "constants_off_chip"
     ]
     nodes_headers = ["name_node", "cycles"]
+    match_nodes_headers = ["name_node", "total_cycles", "compute_cycles", "load_cycles", "store_cycles", "load_bytes", "store_bytes"]
+    match_nodes_headers_map = {
+        "total_cycles": 1,
+        "compute_cycles": 2,
+        "load_cycles": 3,
+        "store_cycles": 4,
+        "load_bytes": 5,
+        "store_bytes": 6
+    }
     mem_transfer_headers = ["name_transfer", "transfer_type", "bytes", "cycles"]
     compilation_headers = ["memory_name", "used", "total", "used_percentage"]
     for idx, header in enumerate(main_sheet_headers):
@@ -57,14 +66,24 @@ def get_results(name_exp, targets, base_dir, directions, models, results_file):
                             compilation_metadata[code_size_mem_name]["used_percentage"] = float(splitted[5].strip('%'))
                         if "Memory region" in line:
                             reading_memory = True
-                run_metadata = {}
-                run_metadata["nodes"] = []
-                run_metadata["mem_transfers"] = {}
+                run_metadata = dict()
+                run_metadata["nodes"] = list()
+                run_metadata["match_nodes"] = dict()
+                run_metadata["mem_transfers"] = dict()
                 run_metadata["max_on_chip_memory"] = 0
                 with open(run_log, 'r') as f:
                     reading_nodes = False
                     reading_mem_transfer = False
+                    reading_node_name = ""
                     for line in f:
+                        if reading_node_name!="":
+                            splitted = line.strip().split()
+                            attr_name = "_".join(splitted[:-1])
+                            attr_value = int(splitted[-1])
+                            run_metadata["match_nodes"][reading_node_name][attr_name] = attr_value
+                            if attr_name == "store_bytes":
+                                reading_node_name = ""
+                                continue
                         if reading_nodes:
                             splitted = line.strip().split()
                             if len(splitted) != 2:
@@ -86,6 +105,10 @@ def get_results(name_exp, targets, base_dir, directions, models, results_file):
                             reading_nodes = True
                         if "Profiling Mem Transfers Performance" in line:
                             reading_mem_transfer = True
+                        if "[HOST] Node" in line:
+                            splitted = line.strip().split()
+                            reading_node_name = splitted[2]
+                            run_metadata["match_nodes"][reading_node_name] = dict()
                         if "Peak dynamic memory allocated" in line:
                             run_metadata["peak_dynamic_on_chip"] = int(line.strip().split()[-2])
                             break
@@ -105,8 +128,21 @@ def get_results(name_exp, targets, base_dir, directions, models, results_file):
                 json.dump(result_entry, open(json_file, "w"), indent=4)
                 on_chip_off_chip_metadata_path = model_dir / "models/test_bp_tvm/metadata/memory_plan_on_off_chip_summary.json"
                 on_chip_off_chip_metadata = dict()
-                with open(on_chip_off_chip_metadata_path,"r") as mod_file:
-                    on_chip_off_chip_metadata = json.load(mod_file)
+                try:
+                    with open(on_chip_off_chip_metadata_path,"r") as mod_file:
+                        on_chip_off_chip_metadata = json.load(mod_file)
+                except Exception as e:
+                    on_chip_off_chip_metadata["total_on_chip"] = 0
+                    on_chip_off_chip_metadata["static_on_chip"] = 0
+                    on_chip_off_chip_metadata["constants_on_chip"] = 0
+                    on_chip_off_chip_metadata["io_on_chip"] = 0
+                    on_chip_off_chip_metadata["dynamic_on_chip"] = 0
+                    on_chip_off_chip_metadata["tvm_buffers_extra_dynamic"] = 0
+                    on_chip_off_chip_metadata["total_off_chip"] = 0
+                    on_chip_off_chip_metadata["dynamic_off_chip"] = 0
+                    on_chip_off_chip_metadata["io_off_chip"] = 0
+                    on_chip_off_chip_metadata["inp_off_chip_files"] = 0
+                    on_chip_off_chip_metadata["constants_off_chip"] = 0
                 # Flatten the result_entry for DataFrame
                 flat_entry = {
                     "name_exp": name_exp,
@@ -141,6 +177,15 @@ def get_results(name_exp, targets, base_dir, directions, models, results_file):
                 for idx, (node_name, node_cycles) in enumerate(run_metadata["nodes"]):
                     nodes_sheet.write(idx + 1, 0, node_name)
                     nodes_sheet.write(idx + 1, 1, node_cycles)
+                match_nodes_sheet_name = f"{model}_{direction}_{target}_match_nodes"
+                match_nodes_sheet = workbook.add_worksheet(match_nodes_sheet_name)
+                for idx, header in enumerate(match_nodes_headers):
+                    match_nodes_sheet.write(0, idx, header)
+                for idx, (match_node_name, match_node) in enumerate(run_metadata["match_nodes"].items()):
+                    match_nodes_sheet.write(idx + 1, 0, match_node_name)
+                    for match_node_attr, match_node_value in match_node.items():
+                        if match_node_attr in match_nodes_headers_map:
+                            match_nodes_sheet.write(idx + 1, match_nodes_headers_map[match_node_attr], match_node_value)
                 mem_transfer_sheet_name = f"{model}_{direction}_{target}_mem_transfers"
                 mem_transfer_sheet = workbook.add_worksheet(mem_transfer_sheet_name)
                 for idx, header in enumerate(mem_transfer_headers):

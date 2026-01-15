@@ -37,7 +37,7 @@
             "justMyCode": false
         },
         {
-            "name": "GAP9 TRAIN VWW BW",
+            "name": "GAP9 TRAIN VWW FW",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/test/test_odl.py",
@@ -47,7 +47,7 @@
                 , "--target"
                 , "GAP9"
                 , "--relay_model"
-                , "${workspaceFolder}/test/models/odl/vww/model_graph_bw.relay"
+                , "${workspaceFolder}/test/models/odl/vww/model_graph_fw.relay"
                 , "--relay_params_filename"
                 , "${workspaceFolder}/test/models/odl/vww/model_params.txt"
             ],
@@ -61,7 +61,7 @@
             "program": "${workspaceFolder}/test/test_odl.py",
             "args": [
                 "--executor"
-                , "graph"
+                , "aot"
                 , "--target"
                 , "GAP9"
                 , "--relay_model"
@@ -109,7 +109,7 @@
             "justMyCode": false
         },
         {
-            "name": "PULP-OPEN TRAIN KWS FW",
+            "name": "GAP9 TRAIN KWS FW",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/test/test_odl.py",
@@ -117,7 +117,7 @@
                 "--executor"
                 , "graph"
                 , "--target"
-                , "pulp_open"
+                , "GAP9"
                 , "--relay_model"
                 , "${workspaceFolder}/test/models/odl/kws/model_graph_fw.relay"
                 , "--relay_params_filename"
@@ -144,6 +144,25 @@
             "console": "integratedTerminal",
             "justMyCode": false
         }
-        
+        ,{
+            "name": "YOLO PULP_OPEN",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test.py",
+            "args": [
+                "--executor"
+                , "graph"
+                , "--target"
+                , "pulp_open"
+                , "--model_path"
+                , "/home/moyne/phd/aicomp/match/test/models/yolo_scaled_int.onnx"
+                , "--handle_out_fn"
+                , "handle_yolo_output"
+                , "--input_files"
+                , "/home/moyne/phd/aicomp/match/test/models/yolo_scaled_input.txt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
     ]
 }

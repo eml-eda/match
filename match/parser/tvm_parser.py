@@ -309,7 +309,7 @@ class MatchTVMParser:
     def get_dim_arr_from_layout_and_nchw_arr(self,layout,nchw_arr):
         if layout=="NHWC":
             return [nchw_arr[0],nchw_arr[2],nchw_arr[3],nchw_arr[1]]
-        elif layout=="NCHW":
+        elif layout in ("NCHW","NCW", "NCH"):
             return nchw_arr
         else:
             print(f"[PARSER]: Warning, layout {layout} not recognized, interpreting as NCHW")

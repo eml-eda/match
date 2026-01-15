@@ -27,6 +27,8 @@ class NE16Accelerator(ExecModule):
         self.L2_SHARED_MEM_KB_SIZE = l2_kb_size
         self.L3_FLASH_KB_SIZE = l3_kb_size
         self.ASYNC_DMA = async_dma
+        self.timer_start_fn = "start_perf_counter"
+        self.timer_stop_fn = "stop_perf_counter"
     
     def include_list(self):
         return [
@@ -42,17 +44,20 @@ class NE16Accelerator(ExecModule):
     
     def update_constants(self, match_node = None, pattern_name = "conv2d"):
         for w_tensor in match_node.const_tensors.values():
-            if "dense" in w_tensor.name:
+            if w_tensor.name != "const_0":
+                continue
+            if "dense" in pattern_name:
                 w_tensor.data = w_tensor.data.reshape((w_tensor.dims[0].size, w_tensor.dims[1].size) + (1, 1))
                 w_tensor.layout = "NCHW"
                 w_tensor.dims = [w_tensor.dims[0], w_tensor.dims[1], match_node.default_dim, match_node.default_dim]
-            elif "conv2d" in w_tensor.name:
+            elif "conv2d" in pattern_name:
                 if w_tensor.layout=="HWIO":
                     w_tensor.data = w_tensor.data.transpose(3,2,0,1)
                     w_tensor.dims = [w_tensor.dims[3], w_tensor.dims[2], w_tensor.dims[0], w_tensor.dims[1]]
                 w_tensor.layout = "NCHW"
-            if "dense" in w_tensor.name or "conv2d" in w_tensor.name:
-                depthwise = "conv2d" in w_tensor.name and match_node.ops["conv2d"].depthwise
+                match_node.ops["conv2d"].data_layout = "NCHW"
+            if "dense" in pattern_name or "conv2d" in pattern_name:
+                depthwise = "conv2d" in pattern_name and match_node.ops["conv2d"].depthwise
                 w_tensor.data = NE16_transform_weights(weight=w_tensor.data, bits=w_tensor.bits,
                                                        depthwise=depthwise)
                 if depthwise:
@@ -60,6 +65,8 @@ class NE16Accelerator(ExecModule):
                 else:
                     w_tensor.dims = [w_tensor.dims[0], w_tensor.dims[1], w_tensor.dims[2], w_tensor.dims[3], w_tensor.dims[1]]
                 w_tensor.layout = "NCHWc16"
+                if "conv2ddw" in pattern_name:
+                    match_node.ops["conv2d"].kernel_layout = "NCHWc16"
                 
 
     def zigzag_optimal_spatial_mapping_def(self, match_node = None, pattern_name = "conv2d"):
@@ -109,7 +116,8 @@ class NE16Accelerator(ExecModule):
             return cast
 
         def only_out_uint8(node):
-            return add_checks_get_first_op(node, "cast").attrs.dtype=="uint8"
+            return False
+            # return add_checks_get_first_op(node, "cast").attrs.dtype=="uint8"
 
         def only_std_convs(node):
             conv = add_checks_get_first_op(node, "nn.conv2d")
@@ -129,6 +137,9 @@ class NE16Accelerator(ExecModule):
                 return False
             # only even output channels are allowed in 2x2 strides convs
             if out_chs%2 and strides[0]==2:
+                return False
+            # output channels must be multiple of 16
+            if out_chs%16!=0:
                 return False
             if conv.attrs.data_layout!="NHWC":
                 return False
@@ -171,7 +182,7 @@ class NE16Accelerator(ExecModule):
     def mem_apis_def(self, memory_apis: MemoryApis=None, pattern_name="conv2d"):
         memory_apis.mem_transfer = "handle_dma_transfer"
         memory_apis.init_memory["L1_SCRATCHPAD"] = "init_l1_scratchpad_memory"
-        memory_apis.free_memory["L1_SCRATCHPAD"] = "free_l1_scrachpad_memory"
+        memory_apis.free_memory["L1_SCRATCHPAD"] = "free_l1_scratchpad_memory"
         return memory_apis
     
     def sync_apis_def(self, sync_apis: SyncApis=None, pattern_name: str="conv2d"):

@@ -170,7 +170,7 @@ def partition(mod, params, dpu, opts):
     # this doesnt happen with conv(outdtype="int32") -> biasadd
     # now this pass does this --> conv() --> cast(outdtype="int32") -> multiply() -> add() 
     # to -->conv(outdtype="int32") --> cast(outdtype="int32") --> multiply() -> add()
-#    pipeline.append(MatchRemoveFakeOutDtypeCasts())
+    pipeline.append(MatchRemoveFakeOutDtypeCasts())
     pipeline.append(transform.InferType())
     pipeline.append(MatchSaveRelay("removed_fake_casts"))
 

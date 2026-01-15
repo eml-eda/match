@@ -847,9 +847,9 @@ void pulp_nn_wrapper(MatchCtx* ctx){
         case conv2d:
             pulp_nn_hoparallel_conv2d_wrapper(ctx);
             break;
-        case dense_out:
-           pulp_nn_dense_out_int_wrapper(ctx);
-           break;
+        // case dense_out:
+        //    pulp_nn_dense_out_int_wrapper(ctx);
+        //    break;
         // case pulp_nn_dw_conv2d_less_4_pattern:
         //     pi_team_offload_preset(pulp_nn_dw_conv2d_less_4_wrapper, ctx);
         //     break;

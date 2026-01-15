@@ -29,7 +29,7 @@ def save_memory_allocation_graph(
 
     def abbreviate_name(name):
         """Abbreviates tensor names for simplicity."""
-        return "".join([part[0].upper() for part in name.split("_")])
+        return "".join(["_" if len(part) == 0 else part[0].upper() for part in name.split("_")])
 
     # Create a mapping of abbreviated names to full names
     name_mapping = {abbreviate_name(tensor.name): tensor.name for tensor in mem_tensors}

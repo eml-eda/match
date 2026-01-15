@@ -128,3 +128,38 @@ class MatchMergePadConv2d:
 
     def __call__(self, mod):
         return self.transform_module(mod)
+
+@tvm.relay.transform.function_pass(opt_level=0)
+class Conv1DLifter(relay.ExprMutator):
+    def transform_function(self, func, mod, ctx):
+        return self.visit(func)
+
+    def visit_call(self, call):
+        # Recursively visit inputs first to ensure bottom-up transformation
+        new_op = self.visit(call.op)
+        new_args = [self.visit(a) for a in call.args]
+        
+        if call.op.name == "nn.conv1d":
+            # Check if the desired layout is NWC
+            data = new_args[0]
+            weight = new_args[1]
+            attrs = dict(call.attrs)
+            # 1. Expand dimensions of data and weight (add Height dim at axis 1)
+            data_2d = relay.expand_dims(data, axis=-1) # NCW -> NCHW
+            weight_2d = relay.expand_dims(weight, axis=-1) # OIW -> OHIW (or OWI -> OHWI)
+            # Update attributes for 2D convolution
+            attrs["data_layout"] = "NCHW" 
+            attrs["kernel_layout"] = "OIHW"
+            attrs["kernel_size"] = [attrs["kernel_size"][0], 1]
+            attrs["strides"] = [attrs["strides"][0], 1]
+            attrs["dilation"] = [attrs["dilation"][0], 1]
+            attrs["padding"] = [attrs["padding"][0], attrs["padding"][1], 0, 0] # Assuming symmetric padding
+            # If using asymmetric padding, handle attrs["padding"] list carefully    
+            # 2. Call nn.conv2d
+            conv_2d = relay.nn.conv2d(data_2d, weight_2d, **attrs)
+            # 3. Squeeze the dummy dimension back
+            output_1d = relay.squeeze(conv_2d, axis=-1) # NCHW -> NWC
+            return output_1d
+            # return conv_2d
+        
+        return relay.Call(new_op, new_args, call.attrs, call.type_args, call.span)

@@ -29,7 +29,7 @@ class ZigZagEngine(ScheduleEngine):
                  ):
         super(ZigZagEngine, self).__init__(target=target, exec_module=exec_module,
                                            pattern_name=pattern_name, match_node=match_node)
-        self.lpf_limit=11
+        self.lpf_limit=9
         self.zigzag_temporal_mapping=dict()
         self.zigzag_parser = MatchNodeToZigZagParser(match_node=self.match_node, pattern_name=self.pattern_name)
         self.workload = dict()
@@ -148,7 +148,7 @@ class ZigZagEngine(ScheduleEngine):
             self.latency=-1
             self.cme=None
             print(f"[ZIGZAG_ENGINE] No valid loop ordering found: {exc}")
-            # breakpoint()
+            breakpoint()
             raise Exception(f"[ZIGZAG_ENGINE] No valid loop ordering found: {exc}")
         self.zigzag_temporal_mapping = self.cme.temporal_mapping.mapping_dic_stationary
         if DEBUG_MODE_MATCH:

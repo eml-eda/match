@@ -1,6 +1,7 @@
 import os
 from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
+from match.transform.conv import Conv1DLifter
 from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM
 from match.transform.requant import MatchRequantRewriter
 from match.transform.conv_pw_strided import MatchConv2dPWStrided
@@ -83,7 +84,8 @@ class GAP9(MatchTarget):
         return [
 #            ("test", GAPopCount()),
             ("requant", MatchRequantRewriter()),
-            # ("layout", MatchLayoutNCHWtoNHWCTVM),
+            ("to2d", Conv1DLifter()),
+            ("layout", MatchLayoutNCHWtoNHWCTVM),
             ("remove_conv2dpw_with_stride", MatchConv2dPWStrided()),
         ]
 

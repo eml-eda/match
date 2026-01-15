@@ -35,6 +35,12 @@ int ${mem_tensor.name}_cp_from_ext_mem_cyc;
 int ${mem_tensor.name}_cp_to_ext_mem_cyc;
 % endfor
 #endif
+
+% if mem_needed_bytes>0 and (target.alloc_fn=="" or target.free_fn==""):
+// static memory allocation if no alloc/free functions are provided
+uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
+% endif
+
 // GPIO variables
 #ifdef USE_GPIO 
     pi_gpio_e gpio_test_0, gpio_test_1, gpio_test_2;
@@ -119,7 +125,11 @@ int match_${model_name}_run_graph(
     void* match_ext_mem = NULL;
     % endif
     % if mem_needed_bytes>0:
-    void* match_mem = ${target.alloc_fn}(${mem_needed_bytes});
+    % if target.alloc_fn!="" and target.free_fn!="":
+    void* match_mem = ${target.alloc_fn}(__MATCH_MEM_SIZE__);
+    % else:
+    void* match_mem = match_static_malloc_mem;
+    % endif
     if (!match_mem) {
         printf("Error: match_mem allocation failed\n");
         return -1;
@@ -294,7 +304,7 @@ int match_${model_name}_run_graph(
     match_${model_name}_graph_profile_summary();
     #endif
     // final cleanup
-    % if mem_needed_bytes>0:
+    % if mem_needed_bytes>0 and target.free_fn != "" and target.alloc_fn != "":
     ${target.free_fn}(match_mem);
 % endif
 % if ext_mem_needed_bytes>0:

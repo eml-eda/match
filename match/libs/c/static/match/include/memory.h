@@ -5,6 +5,8 @@
 
 void match_set_match_mem_pt(void* match_mem_pt);
 
+void* match_get_match_mem_pt(void);
+
 void match_alloc_workspace(int offset, int size);
 
 void match_free_workspace(void);

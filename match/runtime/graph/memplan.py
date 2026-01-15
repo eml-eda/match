@@ -156,11 +156,13 @@ class MatchMemoryPlanner:
 
         for tensor in sorted_mem_tensors:
             if (tensor.is_input or tensor.is_output) and len(tensor.load_from_ext_mem_at)==0 and tensor.name not in tensor_fixed_to_ext_mem:
-                if self.available_soc_bytes - tensor.num_bytes >= on_chip_mem_needed_w_io_and_consts_off_chip:
+                # if self.available_soc_bytes - tensor.num_bytes >= on_chip_mem_needed_w_io_and_consts_off_chip:
+                if tensor.is_input:
                     self.available_soc_bytes -= tensor.num_bytes
-                    real_constant_tensors.append(tensor.name)
-                    self.on_chip_io.append(tensor)
-                    set_io_lifetime_as_inf(tensor)
+                real_constant_tensors.append(tensor.name)
+                self.on_chip_io.append(tensor)
+                set_io_lifetime_as_inf(tensor)
+                print(f"[MEM PLANNER] Input/Output tensor {tensor.name} will be stored in on-chip memory")
             
         sorted_mem_tensors = [m_t for m_t in sorted_mem_tensors if m_t.name not in real_constant_tensors]
         tensors_allocated_at_time = {key:[] for key in self.calls_idxs}
@@ -242,11 +244,10 @@ class MatchMemoryPlanner:
         try:
             if self.algorithm=="match":
                 return self.match_mem_planner_impl(
-                    tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if\
-                                             tensor.is_output\
-                                                or tensor.is_input\
-                                                    or tensor.is_constant
-                    ]
+                    # tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if\
+                    #                          tensor.is_output\
+                    #                             or tensor.is_input
+                    # ]
                 )
             else:
                 raise Exception(f"[MEM PLANNER] Algorithm {self.algorithm} not implemented")

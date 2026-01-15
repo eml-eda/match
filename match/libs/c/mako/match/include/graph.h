@@ -3,6 +3,15 @@
 
 #define nan 0.0
 
+#include <match/types.h>
+
+#define __MATCH_MEM_SIZE__ ${mem_needed_bytes}
+
+% if mem_needed_bytes>0 and (target.alloc_fn=="" or target.free_fn==""):
+// static memory allocation if no alloc/free functions are provided
+extern uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
+% endif
+
 % for include in target.include_list:
     #include <${include}.h>
 % endfor

@@ -2,7 +2,7 @@ PROJECT_DIR ?= $(abspath ../..)
 BUILD_DIR  	?= $(abspath .)
 SRC_DIR  	?= $(BUILD_DIR)/src
 
-CAR_ROOT    ?= /home/fpgauser/git/astral
+CAR_ROOT    ?= $(ASTRAL_PATH)
 BENDER      = bender -d $(CAR_ROOT)
 PYTHON	    ?= python
 
@@ -93,7 +93,7 @@ HOST_LDFLAGS ?= $(CHS_SW_LDFLAGS) -L$(CAR_LD_DIR)
 #HOST_LD_SCRIPT  ?= $(CAR_SW_DIR)/link/l2.ld
 HOST_LD_SCRIPT  ?= link.ld
 
-HOST_INCLUDES    = -I$(CAR_SW_DIR)/include -I$(CHS_SW_DIR)/include $(CHS_SW_DEPS_INCS)
+HOST_INCLUDES    = -I$(CAR_SW_DIR)/include -I$(CHS_SW_DIR)/include $(CHS_SW_DEPS_INCS) -Wno-implicit-function-declaration -Wno-int-conversion -Wno-implicit-int -Wno-incompatible-pointer-types -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-maybe-uninitialized -Wno-sign-compare -Wno-missing-field-initializers
 HOST_LIB_SRCS_S  = $(wildcard $(CAR_SW_DIR)/lib/*.S $(CAR_SW_DIR)/lib/**/*.S)
 HOST_LIB_SRCS_C  = $(wildcard $(CAR_SW_DIR)/lib/*.c $(CAR_SW_DIR)/lib/**/*.c)
 HOST_LIB_SRCS_O  = $(CAR_SW_DEPS_SRCS:.c=.car.o) $(HOST_LIB_SRCS_S:.S=.car.o) $(HOST_LIB_SRCS_C:.c=.car.o)
