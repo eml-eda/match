@@ -1,0 +1,95 @@
+diff --git a/bender-sim.mk b/bender-sim.mk
+index a7d63e7..ca1cb02 100644
+--- a/bender-sim.mk
++++ b/bender-sim.mk
+@@ -9,4 +9,4 @@
+ sim_targs += -t sim
+ sim_targs += -t test
+ sim_targs += -t simulation
+-sim_targs += -t hyper_test
++#sim_targs += -t hyper_test
+diff --git a/carfield.mk b/carfield.mk
+index dddfab0..3bfe5c9 100644
+--- a/carfield.mk
++++ b/carfield.mk
+@@ -65,11 +65,12 @@ CAR_NONFREE_COMMIT ?= e7cfa03
+ ## folder cloned from a remote location, whose access is restricted. If you do not have access, this
+ ## step will be skipped and the usage of the repository will **not** be compromised.
+ car-nonfree-init:
+-	git clone $(CAR_NONFREE_REMOTE) $(CAR_ROOT)/nonfree
+-	cd nonfree && git checkout $(CAR_NONFREE_COMMIT)
+-	cd nonfree/intel16 && icdesign intel16 -update all -nogui
++	ls
++#	git clone $(CAR_NONFREE_REMOTE) $(CAR_ROOT)/nonfree
++#	cd nonfree && git checkout $(CAR_NONFREE_COMMIT)
++#	cd nonfree/intel16 && icdesign intel16 -update all -nogui
+ 
+--include nonfree/nonfree.mk
++#-include nonfree/nonfree.mk
+ 
+ #####################################
+ # Islands' variables initialization #
+diff --git a/hw/carfield_pkg.sv b/hw/carfield_pkg.sv
+index 9fd14db..c2a9e3c 100644
+--- a/hw/carfield_pkg.sv
++++ b/hw/carfield_pkg.sv
+@@ -776,10 +776,8 @@ function automatic pulp_cluster_package::pulp_cluster_cfg_t gen_int_cluster_cfg(
+   ret.TcdmSize                                 = 256*1024;
+   ret.TcdmNumBank                              = 16;
+   ret.HwpePresent                              = 1;
+-  ret.HwpeCfg                                  = '{NumHwpes: 3,
+-             HwpeList: {pulp_cluster_package::SOFTEX,
+-                        pulp_cluster_package::NEUREKA,
+-                        pulp_cluster_package::REDMULE}
++  ret.HwpeCfg                                  = '{NumHwpes: 1,
++             HwpeList: {pulp_cluster_package::REDMULE}
+             };
+   ret.HwpeNumPorts = 9;
+   ret.HMRPresent = 1;
+diff --git a/hw/configs/carfield_l2dual_pulp_periph.sv b/hw/configs/carfield_l2dual_pulp_periph.sv
+index e60d547..6190e39 100644
+--- a/hw/configs/carfield_l2dual_pulp_periph.sv
++++ b/hw/configs/carfield_l2dual_pulp_periph.sv
+@@ -31,7 +31,7 @@ localparam bit     PeriphEnable = 1;
+ localparam doub_bt PeriphBase = 'h20001000;
+ localparam doub_bt PeriphSize = 'h00009000;
+ // Spatz cluster
+-localparam bit     SpatzClusterEnable = 0;
++localparam bit     SpatzClusterEnable = 1;
+ localparam doub_bt SpatzClusterBase = 'h51000000;
+ localparam doub_bt SpatzClusterSize = 'h00800000;
+ // PULP cluster
+diff --git a/target/sim/sim.mk b/target/sim/sim.mk
+index dabd492..9bf4aaa 100644
+--- a/target/sim/sim.mk
++++ b/target/sim/sim.mk
+@@ -13,18 +13,20 @@ TBENCH ?= tb_carfield_soc
+ # Forward relevant Hyperbus targets
+ $(HYP_ROOT)/models/s27ks0641/s27ks0641.v:
+ 	@echo "[PULP] Fetch Hyperbus model"
+-	@$(MAKE) -C $(HYP_ROOT) models/s27ks0641 > /dev/null
++	touch $@
++#	@$(MAKE) -C $(HYP_ROOT) models/s27ks0641 > /dev/null
+ 
+ $(CAR_TGT_DIR)/sim/models/s27ks0641.sdf: $(HYP_ROOT)/models/s27ks0641/s27ks0641.v
+ 	mkdir -p $(dir $@)
+-	cp $(HYP_ROOT)/models/s27ks0641/s27ks0641.sdf $@
+-	sed -i "s|(INSTANCE dut)|(INSTANCE i_hyper)|g" $@
+-	sed -i "s|(INSTANCE dut/|(INSTANCE |g" $@
+-
+-CAR_SIM_ALL += $(CHS_ROOT)/target/sim/models/s25fs512s.v
+-CAR_SIM_ALL += $(CHS_ROOT)/target/sim/models/24FC1025.v
+-CAR_SIM_ALL += $(HYP_ROOT)/models/s27ks0641/s27ks0641.v
+-CAR_SIM_ALL += $(CAR_TGT_DIR)/sim/models/s27ks0641.sdf
++#	cp $(HYP_ROOT)/models/s27ks0641/s27ks0641.sdf $@
++	touch $@
++#	sed -i "s|(INSTANCE dut)|(INSTANCE i_hyper)|g" $@
++#	sed -i "s|(INSTANCE dut/|(INSTANCE |g" $@
++
++#CAR_SIM_ALL += $(CHS_ROOT)/target/sim/models/s25fs512s.v
++#CAR_SIM_ALL += $(CHS_ROOT)/target/sim/models/24FC1025.v
++#CAR_SIM_ALL += $(HYP_ROOT)/models/s27ks0641/s27ks0641.v
++#CAR_SIM_ALL += $(CAR_TGT_DIR)/sim/models/s27ks0641.sdf
+ 
+ # Defines for hyperram model preload at time 0
+ HYP_USER_PRELOAD      ?= 0

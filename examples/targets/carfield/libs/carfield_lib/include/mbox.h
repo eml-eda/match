@@ -50,6 +50,10 @@ inline void mailbox_clear(uint32_t id) {
 #define HOST_TO_CLUSTER_MBOX    6
 #define CLUSTER_TO_HOST_MBOX    15
 
+#define HOST_TO_SPATZ_C0_MBOX   0
+#define HOST_TO_SPATZ_C1_MBOX   1
+#define SPATZ_TO_HOST_MBOX      15
+
 #define CLUSTER_MBOX_EVT        22
 #define HOST_MBOX_IRQ           58
 

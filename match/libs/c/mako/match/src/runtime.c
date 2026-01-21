@@ -2,68 +2,109 @@
 #include <${match_model.model_name}/runtime.h>
 
 % for model_name in all_model_names:
-% if executors[model_name]=="aot":
-struct tvmgen_${model_name}_inputs model_inps_${model_name.upper()};
-struct tvmgen_${model_name}_outputs model_outs_${model_name.upper()};
-% endif
+    % if executors[model_name]=="aot":
+        struct tvmgen_${model_name}_inputs model_inps_${model_name.upper()};
+        struct tvmgen_${model_name}_outputs model_outs_${model_name.upper()};
+    % endif
 % endfor
 
-% if match_model.benchmark_model:
+
 % for model_name in all_model_names:
-double benchmark_${model_name}_model(int iterations){
-    int status = 0;
-    int fails = 0;
-    % if executors[model_name]=="graph":
-    #ifndef __MATCH_${model_name}_DEFAULT_INPUTS_H__
+void match_${model_name}_runtime(
     % for inp_name,inp in inputs.items():
-    ${inp["c_type"]}* ${inp_name}_bench_pt = ${target.alloc_fn}(sizeof(${inp["c_type"]}) * ${inp["prod_shape"]});
+        ${inp["c_type"]}* ${inp_name}_pt,
     % endfor
-    #else
-    % for inp_name,inp in inputs.items():
-    ${inp["c_type"]}* ${inp_name}_bench_pt = ${inp_name}_default;
-    % endfor
-    #endif
     % for out_name,out in outputs.items():
-    ${out["c_type"]}* ${out_name}_bench_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+        ${out["c_type"]}* ${out_name}_pt,
     % endfor
-    % endif
-    ${target.timestamp_type} start,end;
-    start = ${target.start_get_timestamp_api}();
-    for(int i=0;i<iterations;i++){
-        % if executors[model_name]=="aot":
-        status = tvmgen_${model_name}_run(&model_inps_${model_name.upper()},&model_outs_${model_name.upper()});
-        % elif executors[model_name]=="graph":
-        status = match_${model_name}_run_graph(
+    match_runtime_ctx* match_ctx){
+
+    % if executors[model_name] == "aot":
+        model_inps_${model_name.upper()} = (struct tvmgen_${model_name}_inputs){
+            % for inp_name in inputs.keys():
+            .${inp_name} = ${inp_name}_pt,
+            % endfor
+        };
+        model_outs_${model_name.upper()} = (struct tvmgen_${model_name}_outputs){
+            % for out_name in outputs.keys():
+            .${out_name} = ${out_name}_pt,
+            % endfor
+        };
+        match_ctx->status = tvmgen_${model_name}_run(&model_inps_${model_name.upper()},&model_outs_${model_name.upper()});
+
+    % elif executors[model_name] == "graph":
+        match_ctx->status = match_${model_name}_run_graph_async(
             % for inp_name,inp in inputs.items():
-            ${inp_name}_bench_pt,
+                ${inp_name}_pt,
             % endfor
             % for out_idx,(out_name,out) in enumerate(outputs.items()):
-            ${"" if out_idx==0 else ","} ${out_name}_bench_pt
+                ${"" if out_idx==0 else ","} ${out_name}_pt
             % endfor
         );
-        % endif
-        if(status) fails++;
-    }
-    end = ${target.end_get_timestamp_api}();
-
-    double time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
-    printf("[MATCH RUNTIME] [${model_name}_BENCH] time %fms; time per iterations %fms; fails %d\n",
-        time_elapsed_ms, time_elapsed_ms/iterations, fails);
-    
-    % if executors[model_name]=="graph":
-    // free up tensors
-    #ifndef __MATCH_${model_name}_DEFAULT_INPUTS_H__
-    % for inp_name,inp in inputs.items():
-    ${target.free_fn}(${inp_name}_bench_pt);
-    % endfor
-    #endif
-    % for out_name,out in outputs.items():
-    ${target.free_fn}(${out_name}_bench_pt);
-    % endfor
     % endif
-    return time_elapsed_ms/iterations;
+
+    return;
 }
 % endfor
+
+
+
+% if match_model.benchmark_model:
+    % for model_name in all_model_names:
+    double benchmark_${model_name}_model(int iterations){
+        int status = 0;
+        int fails = 0;
+        % if executors[model_name]=="graph":
+        #ifndef __MATCH_${model_name}_DEFAULT_INPUTS_H__
+        % for inp_name,inp in inputs.items():
+        ${inp["c_type"]}* ${inp_name}_bench_pt = ${target.alloc_fn}(sizeof(${inp["c_type"]}) * ${inp["prod_shape"]});
+        % endfor
+        #else
+        % for inp_name,inp in inputs.items():
+        ${inp["c_type"]}* ${inp_name}_bench_pt = ${inp_name}_default;
+        % endfor
+        #endif
+        % for out_name,out in outputs.items():
+        ${out["c_type"]}* ${out_name}_bench_pt = ${target.alloc_fn}(sizeof(${out["c_type"]}) * ${out["prod_shape"]});
+        % endfor
+        % endif
+        ${target.timestamp_type} start,end;
+        start = ${target.start_get_timestamp_api}();
+        for(int i=0; i < iterations; i++) {
+            % if executors[model_name]=="aot":
+            status = tvmgen_${model_name}_run(&model_inps_${model_name.upper()},&model_outs_${model_name.upper()});
+            % elif executors[model_name]=="graph":
+            status = match_${model_name}_run_graph(
+                % for inp_name,inp in inputs.items():
+                ${inp_name}_bench_pt,
+                % endfor
+                % for out_idx,(out_name,out) in enumerate(outputs.items()):
+                ${"" if out_idx==0 else ","} ${out_name}_bench_pt
+                % endfor
+            );
+            % endif
+            if(status) fails++;
+        }
+        end = ${target.end_get_timestamp_api}();
+
+        double time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
+        printf("[MATCH RUNTIME] [${model_name}_BENCH] time %fms; time per iterations %fms; fails %d\n",
+            time_elapsed_ms, time_elapsed_ms/iterations, fails);
+        
+        % if executors[model_name]=="graph":
+            // free up tensors
+            #ifndef __MATCH_${model_name}_DEFAULT_INPUTS_H__
+            % for inp_name,inp in inputs.items():
+                ${target.free_fn}(${inp_name}_bench_pt);
+            % endfor
+            #endif
+            % for out_name,out in outputs.items():
+                ${target.free_fn}(${out_name}_bench_pt);
+            % endfor
+        % endif
+        return time_elapsed_ms/iterations;
+    }
+    % endfor
 % endif
 
 % if match_model.golden_cpu_model:
@@ -169,38 +210,3 @@ void match_golden_check_${model_name}_runtime(
 }
 % endfor
 % endif
-
-% for model_name in all_model_names:
-void match_${model_name}_runtime(
-    % for inp_name,inp in inputs.items():
-    ${inp["c_type"]}* ${inp_name}_pt,
-    % endfor
-    % for out_name,out in outputs.items():
-    ${out["c_type"]}* ${out_name}_pt,
-    % endfor
-    match_runtime_ctx* match_ctx){
-    % if executors[model_name]=="aot":
-    model_inps_${model_name.upper()} = (struct tvmgen_${model_name}_inputs){
-        % for inp_name in inputs.keys():
-        .${inp_name} = ${inp_name}_pt,
-        % endfor
-    };
-    model_outs_${model_name.upper()} = (struct tvmgen_${model_name}_outputs){
-        % for out_name in outputs.keys():
-        .${out_name} = ${out_name}_pt,
-        % endfor
-    };
-    match_ctx->status = tvmgen_${model_name}_run(&model_inps_${model_name.upper()},&model_outs_${model_name.upper()});
-    % elif executors[model_name]=="graph":
-    match_ctx->status = match_${model_name}_run_graph(
-        % for inp_name,inp in inputs.items():
-        ${inp_name}_pt,
-        % endfor
-        % for out_idx,(out_name,out) in enumerate(outputs.items()):
-        ${"" if out_idx==0 else ","} ${out_name}_pt
-        % endfor
-    );
-    % endif
-    return;
-}
-% endfor

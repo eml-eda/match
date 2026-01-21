@@ -18,10 +18,16 @@ extern uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
 #include <tvm/runtime/c_runtime_api.h>
 #include <${model_name}_params_data.h>
 
-// TVM signature
-// void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handle
-// MATCH signature
-// type* inp_A, ..., type* inp_Z, type* out_A, ..., type* out_N
+/* 
+ * TVM node function signature
+ * void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handle
+ */
+
+/* 
+ * MATCH node function signature
+ * type* inp_A, ..., type* inp_Z, type* out_A, ..., type* out_N
+ */
+
 % for mem_tensor in mem_tensors:
 % if mem_tensor.is_input or mem_tensor.is_output:
 #define __${model_name}_GRAPH_${mem_tensor.name}_FROM_EXTERNAL_MEM__ ${int(mem_tensor.stored_in_external_memory)}
@@ -30,11 +36,14 @@ extern uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
 % endif
 % endif
 % endfor
+
 #define __${model_name}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__ ${sum([mem_tensor.num_bytes for mem_tensor in mem_tensors if (mem_tensor.is_input or mem_tensor.is_output) and mem_tensor.stored_in_external_memory])}
-// profiling flags
+
+// Profiling Flags
 #define __${model_name}_GRAPH_PROFILE__ ${int(profile)}
 #define __${model_name}_FALLBACK_GRAPH_PROFILE__ ${int(profile_fallback)}
-// debugging flags
+
+// Debugging flags
 #define __${model_name}_GRAPH_DEBUG__ ${int(debug)}
 #define __${model_name}_FALLBACK_GRAPH_DEBUG__ ${int(debug_fallback)}
 //gap measuriments flags
@@ -54,13 +63,16 @@ extern uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
 % endfor
 #endif
 
+// Define node functions
 % for node in nodes:
     #ifndef __MATCH_${model_name}_RUN_GRAPH_${node.fn_name}__
+    // TVM Node function
     % if node.fallback:
         #ifdef __cplusplus
         extern "C"
         #endif
         TVM_DLL int32_t ${node.fn_name}(void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handle);
+    // MATCH Node function
     % else:
         ${node.fn_name}(
             % for inp_idx,node_in in enumerate([inp__ for inp__ in node.inputs if not inp__.is_constant]):
@@ -88,4 +100,31 @@ int match_${model_name}_run_graph(
     ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_${"ext_" if rt_o.stored_in_external_memory else ""}pt
 % endfor
 );
+
+// Define async graph runtime function
+int match_${model_name}_run_graph_async(
+% for rt_i in rt_inputs:
+    ${rt_i.c_type}* ${rt_i.name}_${"ext_" if rt_i.stored_in_external_memory else ""}pt,
+% endfor
+% for rt_o_idx,rt_o in enumerate(rt_outputs):
+    ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_${"ext_" if rt_o.stored_in_external_memory else ""}pt
+% endfor
+);
+
+// Model graph info
+extern const int match_${model_name}_num_nodes;
+
+// Keep track of the number of remaining parents to be executed for each node
+extern int match_${model_name}_num_remaining_parents[${len(nodes)}];
+
+// Keep track of device busy status - TODO for multi-model support this should not-be per mode
+extern int match_${model_name}_device_is_busy[${target.num_devices}];
+
+// Node execution complete callback - TODO for multi-model support this should not-be per model
+void match_${model_name}_runtime_eoc_callback(int node_id);
+
+// Graph execution finished flag
+extern volatile int match_${model_name}_graph_execution_finished;
+
+
 #endif

@@ -85,6 +85,7 @@ class PlatformApis:
         # API used to pass from the host to the exec module controller
         # if needed, certain programming modes require this
         self.init_platform=""
+        self.startup_fn = ""
         # API used to differentiate between each parallel
         # head of the exec module, used if the parallel mode
         # is enabled with parallelize task
@@ -167,6 +168,7 @@ class ExecModule(ABC):
                  name: str="default_module",
                  libs_required: Dict[str, ModuleLib] = {},
                  **kwargs):
+        self.id = 0
         self.name = name
         self.FULL_DIM = sys.maxsize
         self.zigzag_optimal_spatial_mapping = None

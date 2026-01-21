@@ -22,6 +22,7 @@ typedef enum {
     MATCH_OP_INSTANCE_NORM = 17,
     MATCH_OP_SUBTRACT = 18,
     MATCH_OP_RSQRT = 19,
+    MATCH_OP_BATCH_MATMUL = 20,
 } MATCH_OPS_CODE;
 
 // Attributes
@@ -160,5 +161,14 @@ typedef struct {
     float epsilon;
     float momentum;
 } MatchInstanceNormAttrs;
+
+typedef struct {
+    // (B, M, N) @ (B, N, K) = (B, M, K)
+    int idx;
+    int dim_b; 
+    int dim_m;
+    int dim_n;
+    int dim_k;
+} MatchBatchMatMulAttrs;
 
 #endif

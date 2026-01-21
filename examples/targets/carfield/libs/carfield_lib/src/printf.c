@@ -243,6 +243,13 @@ int printf(const char *fmt, ...) {
 }
 
 
+void mini_vprintf(const char *fmt, va_list args) {
+    char buf[128];
+    size_t len = mini_vsnprintf(buf, sizeof(buf), fmt, args);
+    car_uart_print_str(buf);
+}
+
+
 void mini_printf(const char *fmt, ...) {
     char buf[128];
     va_list args;

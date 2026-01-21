@@ -399,6 +399,7 @@ class MatchTVMGraphRuntime:
         
         # template data for code generation
         template_data = {
+            "async": False,
             "target": self.target,
             "mem_tensors": mem_tensors,
             "ext_mem_needed_bytes": self.ext_mem_needed_bytes,

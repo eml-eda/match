@@ -20,6 +20,9 @@
 #include "carfield_lib/uart.h"
 #include "carfield_lib/mbox.h"
 
+// TODO - make it general
+#include "model_graph.h"
+
 
 #define VERIFY_DMA 0
 
@@ -27,19 +30,29 @@
 void carfield_init() {
     // Initialize the Carfield SoC
     car_enable_domain(CAR_PULP_RST);
+    car_enable_domain(CAR_SPATZ_RST);
     // Initialize the UART
     carfield_init_uart();
     // If mailboxes are used initialize the PLIC
     carfield_init_plic();
+    // Start system timer
+    carfield_timer_start();
 
     mini_printf("Hi, there. I'm Carfield 🐱\r\n\n");
 }
 
 void carfield_shutdown() {
+    carfield_timer_stop();
     car_disable_domain(CAR_PULP_RST);
     mini_printf("\r\nBye.\r\n");
 }
 
+void carfield_wait_eoc() {
+    asm volatile("wfi":::"memory");
+    asm volatile("fence rw,rw":::"memory"); // important
+}
+
+/* PULP CLUSTER */
 
 void pulp_cluster_reset() {
     volatile uint32_t *booten_addr = (uint32_t*)(CAR_INT_CLUSTER_BOOTEN_ADDR(car_soc_ctrl));
@@ -105,6 +118,86 @@ int pulp_cluster_wait_end_of_task_mbox(volatile uint32_t* args, uint32_t task_id
     return last_task_error_code;
 }
 
+/* SPATZ */
+
+
+void spatz_reset() {
+    writew(0, CAR_MBOX_BASE_ADDR +  MBOX_INT_SND_SET_OFFSET + 0*0x100);
+    writew(0, CAR_MBOX_BASE_ADDR +  MBOX_INT_SND_SET_OFFSET + 1*0x100);
+
+    writew(0, CAR_MBOX_BASE_ADDR +  MBOX_INT_SND_EN_OFFSET + 0*0x100);
+    writew(0, CAR_MBOX_BASE_ADDR +  MBOX_INT_SND_EN_OFFSET + 1*0x100);
+    
+    writew(0, CAR_FP_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_REG_ADDR(car_spatz_cluster));
+
+    car_reset_domain(CAR_SPATZ_RST);
+}
+
+
+void spatz_offload_async(void* boot_addr)
+{
+    mini_printf("Starting SPATZ cluster...\r\n");
+    spatz_reset();
+
+    writew(boot_addr, CAR_FP_CLUSTER_PERIPHERAL_CLUSTER_BOOT_CONTROL_REG_ADDR(car_spatz_cluster));
+    
+    writew(1, CAR_MBOX_BASE_ADDR + MBOX_INT_SND_SET_OFFSET + 0*0x100);
+    writew(1, CAR_MBOX_BASE_ADDR + MBOX_INT_SND_SET_OFFSET + 1*0x100);
+
+    writew(1, CAR_MBOX_BASE_ADDR + MBOX_INT_SND_EN_OFFSET + 0*0x100);
+    writew(1, CAR_MBOX_BASE_ADDR + MBOX_INT_SND_EN_OFFSET + 1*0x100);
+    mini_printf("SPATZ started...\r\n");
+    for (volatile int i = 0; i < 10000; i++) {
+        asm volatile("fence rw,rw":::"memory");
+    }
+}
+
+
+void spatz_offload_blk(void* boot_addr)
+{
+    spatz_offload_async(boot_addr);
+    
+    volatile uint32_t spatzd_corestatus;
+    volatile uintptr_t *spatzd_corestatus_addr = (uintptr_t*)CAR_FP_CLUSTER_PERIPHERAL_CORESTATUS_REG_ADDR(car_spatz_cluster);
+
+    while (!(uint32_t)readw(spatzd_corestatus_addr)) {
+    	asm volatile("fence rw,rw":::"memory");
+    }
+    spatzd_corestatus = (uint32_t)readw(spatzd_corestatus_addr);
+
+    mini_printf("> Spatz finished.\r\n");
+}
+
+
+void spatz_send_task_poll(volatile uint32_t* args, uint32_t task_id) {
+    asm volatile("fence rw,rw":::"memory");
+    args[0] = task_id;
+    asm volatile("fence rw,rw":::"memory");
+}
+
+int spatz_wait_end_of_task_poll(volatile uint32_t* args, uint32_t task_id) {
+    while (args[0] != 0xFFFFFFF0) {
+        asm volatile("fence r,rw" ::: "memory");
+    }
+    return 0;
+}
+
+
+void spatz_send_task_mbox(volatile uint32_t* args, uint32_t task_id) {
+    asm volatile("fence rw,rw" ::: "memory");
+    mailbox_send(HOST_TO_SPATZ_C0_MBOX, args+1, task_id);
+    asm volatile("fence rw,rw" ::: "memory");
+}
+
+int spatz_wait_end_of_task_mbox(volatile uint32_t* args, uint32_t task_id) {
+    while (last_completed_node_id != task_id) {
+        asm volatile("fence rw,rw" ::: "memory");
+        asm volatile("wfi":::"memory");
+        asm volatile("fence rw,rw" ::: "memory");
+    }
+    return last_task_error_code;
+}
+
 
 // Host interrupt related things
 
@@ -155,6 +248,7 @@ void trap_vector(void) {
     dif_rv_plic_irq_claim(&plic0, 0, &claim_irq);
     if (claim_irq == HOST_MBOX_IRQ) {
         handle_interrupt_pulp_cluster_mbox();
+        match_model_runtime_eoc_callback(last_completed_node_id); // TODO make it general
         dif_rv_plic_irq_complete(&plic0, 0, claim_irq);
     }
 }
@@ -201,13 +295,24 @@ void carfield_init_uart() {
 
 void carfield_timer_start() {
     writed(1, CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_RESET_LO_OFFSET);
+    *(volatile uint32_t*)(CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_CFG_LO_OFFSET) |= (1 << TIMER_CFG_LO_CCFG_BIT);
     writed(1, CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_START_LO_OFFSET);
 }
     
-uint64_t carfield_timer_stop() {
+void carfield_timer_stop() {
     writed(0, CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_CFG_LO_OFFSET);
-    volatile uint64_t time = readd(CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_CNT_LO_OFFSET);
-    return time;
+}
+
+uint64_t carfield_timer_read() {
+    asm volatile("" ::: "memory");
+    volatile uint64_t counter = readd(CAR_SYSTEM_TIMER_BASE_ADDR + TIMER_CNT_LO_OFFSET);
+    asm volatile("" ::: "memory");
+    return counter;
+}
+
+float carfield_timer_to_ms_factor() {
+    uint32_t rtc_freq = *reg32(&__base_regs, CHESHIRE_RTC_FREQ_REG_OFFSET);
+    return 1000.0f / (float)(rtc_freq);
 }
 
 // External memory management

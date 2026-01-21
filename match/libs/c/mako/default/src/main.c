@@ -1,3 +1,5 @@
+#include <stdint.h>
+
 #include <${default_model}/default_inputs.h>
 #include <${default_model}/runtime.h>
 
@@ -10,6 +12,8 @@
     % if exec_module.separate_build:
         #include "${default_model}_${exec_module.name}_runtime_payload.h"
     % endif
+
+    volatile uint32_t ${exec_module.name}_args[16];
 % endfor
 
 % if golden_cpu_model:

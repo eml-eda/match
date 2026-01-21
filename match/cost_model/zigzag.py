@@ -5,9 +5,10 @@ from zigzag.classes.cost_model.cost_model import CostModelEvaluation
 from zigzag.classes.mapping.temporal.temporal_mapping import TemporalMapping
 from zigzag.classes.opt.temporal.loma.engine import NoValidLoopOrderingFoundException
 
+
 class ZigZagMatchCostModel(CostModelEvaluation):
-    """MATCH implementation of the cost model that will be used by ZigZag
-    """
+    """MATCH implementation of the cost model that will be used by ZigZag"""
+
     def __init__(
         self,
         *,
@@ -19,9 +20,9 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         compute_constants_allocation=True,
         has_any_additional_buffer=False,
     ):
-        #MATCH cost model params
-        self.MATCH_ITERATION_LATENCY = 300 # TODO: profile MATCH latency
-        self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY = 200 # default value
+        # MATCH cost model params
+        self.MATCH_ITERATION_LATENCY = 300  # TODO: profile MATCH latency
+        self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY = 200  # default value
         self.COMPUTE_CONSTANTS_ALLOCATION = compute_constants_allocation
         self.HAS_ANY_ADDITIONAL_BUFFER = has_any_additional_buffer
         self.allocated_buffers = []
@@ -59,11 +60,11 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         if self.COMPUTE_CONSTANTS_ALLOCATION:
             self.final_cleanup()
 
-    def is_temporal_mapping_valid(self,temporal_mapping_dict,unordered_loops):
-        loops_at_outer_level=[lp[0] for lp in temporal_mapping_dict["O"][1]]
-        return sum([lp in loops_at_outer_level for lp in unordered_loops])==0
+    def is_temporal_mapping_valid(self, temporal_mapping_dict, unordered_loops):
+        loops_at_outer_level = [lp[0] for lp in temporal_mapping_dict["O"][1]]
+        return sum([lp in loops_at_outer_level for lp in unordered_loops]) == 0
 
-    def adjust_temporal_mapping(self,temporal_mapping_dict,operand_list,layer):
+    def adjust_temporal_mapping(self, temporal_mapping_dict, operand_list, layer):
         """Fix the temporal mapping of a schedule to match the requirements of the platform, the default implementation will
         move loops of the output to permit the computation to happen as soon as the output has been allocated
 
@@ -74,22 +75,28 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         Returns:
             Dict[List[List[Tuple]]]: the new temporal mapping satisfying each constraint
         """
-        min_innermost_loops=min([len(temporal_mapping_dict[operand][0]) for operand in operand_list])
-        temporal_mapping_dict["O"][1]=temporal_mapping_dict["O"][0][min_innermost_loops:]+temporal_mapping_dict["O"][1]
-        temporal_mapping_dict["O"][0]=temporal_mapping_dict["O"][0][:min_innermost_loops]
-        return temporal_mapping_dict,self.is_temporal_mapping_valid(temporal_mapping_dict,layer.layer_attrs["unordered_loops"])
+        min_innermost_loops = min([len(temporal_mapping_dict[operand][0]) for operand in operand_list])
+        temporal_mapping_dict["O"][1] = temporal_mapping_dict["O"][0][min_innermost_loops:] + temporal_mapping_dict["O"][1]
+        temporal_mapping_dict["O"][0] = temporal_mapping_dict["O"][0][:min_innermost_loops]
+        return temporal_mapping_dict, self.is_temporal_mapping_valid(
+            temporal_mapping_dict, layer.layer_attrs["unordered_loops"]
+        )
 
     def set_match_params(self):
         self.temp_mapping = self.temporal_mapping.mapping_dic_origin
         self.loop_sizes = self.layer.loop_dim_size
         self.partial_relevant_loop_sizes = self.layer.pr_loop_dim_size
         self.operands = self.temporal_mapping.operand_list
-        self.input_operands = [op for op in self.operands if op!="O"]
+        self.input_operands = [op for op in self.operands if op != "O"]
         self.operand_loops = self.layer.operand_loop_dim
         self.spatial_sizes = self.spatial_mapping.spatial_loop_dim_size
         self.pattern_name = self.layer.layer_attrs["operator_type"]
         self.match_node = self.layer.layer_attrs["match_node"]
-        self.precision = {key if "final" not in key else key.split("_")[0]:val for key, val in self.layer.operand_precision.items() if key+"_final" not in self.layer.operand_precision}
+        self.precision = {
+            key if "final" not in key else key.split("_")[0]: val
+            for key, val in self.layer.operand_precision.items()
+            if key + "_final" not in self.layer.operand_precision
+        }
 
     def def_innermost_loops_cost(self):
         """This function computes the cost of each single iteration of the kernel
@@ -100,8 +107,8 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         return prod([self.loop_iters_per_mem_level[operand][0] for operand in self.operands])
 
     def calc_innermost_loops_cost(self):
-        self.innermost_loops_cost_per_it=self.def_innermost_loops_cost()
-        self.computational_cost=self.innermost_loops_cost_per_it*self.computational_iters
+        self.innermost_loops_cost_per_it = self.def_innermost_loops_cost()
+        self.computational_cost = self.innermost_loops_cost_per_it * self.computational_iters
 
     def calc_loop_iters_per_mem_level(self):
         self.loop_iters_per_mem_level = {
@@ -109,8 +116,12 @@ class ZigZagMatchCostModel(CostModelEvaluation):
             for (operand, val) in self.temp_mapping.items()
         }
         self.outermost_loop_iters = {
-            operand: prod([self.loop_iters_per_mem_level[operand][idx+1] 
-                           for idx in range(len(self.loop_iters_per_mem_level[operand])-1)])
+            operand: prod(
+                [
+                    self.loop_iters_per_mem_level[operand][idx + 1]
+                    for idx in range(len(self.loop_iters_per_mem_level[operand]) - 1)
+                ]
+            )
             for operand in self.operands
         }
         self.sorted_multiplicities=sorted(set([self.outermost_loop_iters[operand] for operand in self.operands]))
@@ -178,7 +189,9 @@ class ZigZagMatchCostModel(CostModelEvaluation):
             Dict[Str,Number]: Cost of transfer per each iteration for every single operand
         """
         return {
-            operand:sum(self.input_transfer_costs[operand]) if operand in self.input_operands else sum(self.output_transfer_costs)
+            operand: sum(self.input_transfer_costs[operand])
+            if operand in self.input_operands
+            else sum(self.output_transfer_costs)
             for operand in self.operands
         }
 
@@ -196,25 +209,47 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         # self.match_overall_latency+=self.computational_cost
     
     def overall_latency_sync(self):
-        input_overall_transfers = sum([self.transfer_costs[operand] * self.outermost_loop_iters[operand] for operand in self.operands if operand!='O'])
+        input_overall_transfers = sum(
+            [self.transfer_costs[operand] * self.outermost_loop_iters[operand] for operand in self.operands if operand != "O"]
+        )
         output_overall_transfers = self.transfer_costs["O"] * self.computational_iters
 
-        self.match_overall_latency=self.computational_iters * (self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY + self.MATCH_ITERATION_LATENCY)
-        self.match_overall_latency+=input_overall_transfers + output_overall_transfers
-        self.match_overall_latency+=self.computational_cost
-    
+        self.match_overall_latency = self.computational_iters * (
+            self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY + self.MATCH_ITERATION_LATENCY
+        )
+        self.match_overall_latency += input_overall_transfers + output_overall_transfers
+        self.match_overall_latency += self.computational_cost
+
     def overall_latency_async(self):
-        cycles=0
-        prev_mult_=0
-        #print(f"Cost model multiplicities {sorted_multiplicities}")
-        for idx,mult_ in enumerate(self.sorted_multiplicities):
-            cycles+=(mult_-prev_mult_)*(self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY + self.MATCH_ITERATION_LATENCY)
-            if idx==0:
-                cycles+=max([0]+[self.transfer_costs[operand] for operand in self.operands if operand!='O' and self.outermost_loop_iters[operand]>=mult_])
-                prev_mult_=1
-            cycles+=(mult_-prev_mult_)*max([self.innermost_loops_cost_per_it,max([self.transfer_costs[operand] for operand in self.operands if self.outermost_loop_iters[operand]>=mult_])])
-            prev_mult_=mult_
-        self.match_overall_latency=cycles+self.innermost_loops_cost_per_it+self.transfer_costs["O"]
+        cycles = 0
+        prev_mult_ = 0
+        # print(f"Cost model multiplicities {sorted_multiplicities}")
+        for idx, mult_ in enumerate(self.sorted_multiplicities):
+            cycles += (mult_ - prev_mult_) * (self.MATCH_EXECUTIONAL_MODEL_ITERATION_LATENCY + self.MATCH_ITERATION_LATENCY)
+            if idx == 0:
+                cycles += max(
+                    [0]
+                    + [
+                        self.transfer_costs[operand]
+                        for operand in self.operands
+                        if operand != "O" and self.outermost_loop_iters[operand] >= mult_
+                    ]
+                )
+                prev_mult_ = 1
+            cycles += (mult_ - prev_mult_) * max(
+                [
+                    self.innermost_loops_cost_per_it,
+                    max(
+                        [
+                            self.transfer_costs[operand]
+                            for operand in self.operands
+                            if self.outermost_loop_iters[operand] >= mult_
+                        ]
+                    ),
+                ]
+            )
+            prev_mult_ = mult_
+        self.match_overall_latency = cycles + self.innermost_loops_cost_per_it + self.transfer_costs["O"]
 
     def def_overall_execution(self):
         self.overall_latency_async()
@@ -233,33 +268,31 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         if constant_mem_key not in self.mem_hierarchy_dict:
             constant_mem_key = "I1"
         lowest_const_mem = self.mem_hierarchy_dict[constant_mem_key][0]
-        mem_bytes = lowest_const_mem.memory_instance.size//8
+        mem_bytes = lowest_const_mem.memory_instance.size // 8
         sizes_per_mem_level = self.size_per_mem_level
         
         for operand in self.operands:
             if self.layer.memory_operand_links[operand] in lowest_const_mem.operands:
-                mem_bytes-=prod([val[0] for val in sizes_per_mem_level[operand].values()])*self.precision[operand]//8
-        
+                mem_bytes -= prod([val[0] for val in sizes_per_mem_level[operand].values()]) * self.precision[operand] // 8
+
         for w_tensor in self.match_node.const_tensors.values():
-            if self.layer.layer_attrs["w_tensor"] is not None and w_tensor!=self.layer.layer_attrs["w_tensor"]:
-                mem_bytes-=w_tensor.prod_shape_int*w_tensor.dtype.itemsize
-        
-        if mem_bytes<0:
+            if self.layer.layer_attrs["w_tensor"] is not None and w_tensor != self.layer.layer_attrs["w_tensor"]:
+                mem_bytes -= w_tensor.prod_shape_int * w_tensor.dtype.itemsize
+
+        if mem_bytes < 0:
             return False
-        
+
         var_mem_key = "I1"
         lowest_var_mem = self.mem_hierarchy_dict[var_mem_key][0]
-        var_mem_bytes = lowest_var_mem.memory_instance.size//8
-        if lowest_const_mem==lowest_var_mem:
-            var_mem_bytes=mem_bytes
+        var_mem_bytes = lowest_var_mem.memory_instance.size // 8
+        if lowest_const_mem == lowest_var_mem:
+            var_mem_bytes = mem_bytes
 
         if self.HAS_ANY_ADDITIONAL_BUFFER:
             schedule = self.layer.layer_attrs["get_match_schedule"](self)
             schedule.buffers = []
-            self.layer.layer_attrs["exec_module"].set_buffers_for_schedule(match_node=self.match_node,
-                schedule=schedule,
-                pattern_name=self.pattern_name,
-                engine="ZigZag"
+            self.layer.layer_attrs["exec_module"].set_buffers_for_schedule(
+                match_node=self.match_node, schedule=schedule, pattern_name=self.pattern_name, engine="ZigZag"
             )
             new_buffers = []
             if not self.set_max_num_buffers:
@@ -283,7 +316,7 @@ class ZigZagMatchCostModel(CostModelEvaluation):
         
         if var_mem_bytes<0:
             return False
-        
+
         return True
 
     def final_cleanup(self):
@@ -322,10 +355,13 @@ class ZigZagMatchNoTilingCostModel(ZigZagMatchCostModel):
         temporal_mapping,
         access_same_data_considered_as_no_access=True,
     ):
-        super(ZigZagMatchNoTilingCostModel,self).__init__(
-            accelerator=accelerator,layer=layer,spatial_mapping=spatial_mapping,
+        super(ZigZagMatchNoTilingCostModel, self).__init__(
+            accelerator=accelerator,
+            layer=layer,
+            spatial_mapping=spatial_mapping,
             temporal_mapping=temporal_mapping,
-            access_same_data_considered_as_no_access=access_same_data_considered_as_no_access)
+            access_same_data_considered_as_no_access=access_same_data_considered_as_no_access,
+        )
         # we consider no cost at all for no tiling schedules
         self.match_overall_latency = 0
         self.energy_total = 0
@@ -334,6 +370,6 @@ class ZigZagMatchNoTilingCostModel(ZigZagMatchCostModel):
         self.latency_total2 = 0
         self.latency_total1 = 0
         self.latency_total0 = 0
-        
+
     def adjust_temporal_mapping(self, temporal_mapping_dict, operand_list, layer):
-        return temporal_mapping_dict,True
+        return temporal_mapping_dict, True

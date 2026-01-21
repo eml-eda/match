@@ -3,12 +3,8 @@
 
 #include <stdint.h>
 
-#ifdef __pulp_cluster__
-#include "pulp.h"
-#endif
-
-#define DMA_DIR_L2_TO_L1 0
-#define DMA_DIR_L1_TO_L2 1
+#define DMA_DIR_L1_TO_L2 0
+#define DMA_DIR_L2_TO_L1 1
 
 typedef struct dma_transfer_cfg {
   uint32_t ext;

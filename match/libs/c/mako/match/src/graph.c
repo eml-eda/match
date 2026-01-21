@@ -98,6 +98,8 @@ int match_${model_name}_run_graph(
     ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_${"ext_" if rt_o.stored_in_external_memory else ""}pt
 % endfor
 ){
+
+
 #if __${model_name}_GRAPH_PROFILE__ || __${model_name}_FALLBACK_GRAPH_PROFILE__
     ${target.timestamp_type} start,end;
     double time_elapsed_ms = 0.0f;
@@ -159,11 +161,12 @@ int match_${model_name}_run_graph(
     % if node.fallback:
         #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
-    ${target.print_fn}("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}\r\n");
+    ${target.print_fn}("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}: '${node.fn_name}'\r\n");
     % if node.fallback:
         #endif
     % endif
     #endif
+
     % for mem_tensor in mem_tensors:
     % if node.node_id in mem_tensor.move_temp_to_ext_mem:
     #if __${model_name}_GRAPH_PROFILE__
@@ -206,8 +209,6 @@ int match_${model_name}_run_graph(
     % endif
     % endfor
 
-    ## NODES in TVM Graph Runtime are called with
-    ## void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handle
     % if node.fallback:
     ## SET V_HANDLE OF TENSORS
     // set correct pointers for node
@@ -260,6 +261,15 @@ int match_${model_name}_run_graph(
     // printf("[${model_name} GRAPH] MATCH node ${node.name} done, took %fms\n", time_elapsed_ms);
     #endif
     % endif
+
+    // Print profiling info
+    #if __${model_name}_GRAPH_PROFILE__
+    end = ${target.end_get_timestamp_api}();
+    time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
+    printf("[${model_name} GRAPH] ${"TVM" if node.fallback else "MATCH"} node ${node.name} done, took %fms\n", time_elapsed_ms);
+    #endif
+
+    // Check debug checksum
     #if __${model_name}_GRAPH_DEBUG__
     % if node.fallback:
         #if __${model_name}_FALLBACK_GRAPH_DEBUG__
@@ -307,7 +317,9 @@ int match_${model_name}_run_graph(
     % if mem_needed_bytes>0 and target.free_fn != "" and target.alloc_fn != "":
     ${target.free_fn}(match_mem);
 % endif
-% if ext_mem_needed_bytes>0:
+
+// Free external L3 memory pool
+% if ext_mem_needed_bytes > 0:
     ${target.free_external_mem}(match_ext_mem, ${ext_mem_needed_bytes});
 % endif
 

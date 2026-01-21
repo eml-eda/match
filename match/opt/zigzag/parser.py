@@ -7,6 +7,7 @@ from match.ops.conv2d import MatchOpConv2D
 from match.ops.conv2d_transpose import MatchOpConv2DTranspose
 from match.ops.conv3d import MatchOpConv3D
 from match.ops.dense import MatchOpDense
+from match.ops.batch_matmul import MatchOpBatchMatMul
 from match.tensor.tensor import MatchTensor
 
 CONV2D_TRANSPOSE_INPUT_IS_DEPENDENT = True
@@ -22,6 +23,7 @@ class MatchNodeToZigZagParser:
             "dense": self.visit_dense,
             "maxpool2d": self.visit_maxpool2d,
             "add": self.visit_add,
+            "batch_matmul": self.visit_batch_matmul,
         }
         self.W_TENSOR_NEEDED_FOR_OPS = (
             "conv3d",
@@ -223,6 +225,13 @@ class MatchNodeToZigZagParser:
                 n = dims[0]
                 c = dims[1]
                 spat = dims[2]
+                if layout == "BMN":
+                    if key == "B":
+                        return dims[0]
+                    if key == "M":
+                        return dims[1]
+                    if key == "N":
+                        return dims[2]
                 if tensor.tensor_type=="const":
                     if key=="C":
                         return c
@@ -337,6 +346,8 @@ class MatchNodeToZigZagParser:
             self.ACCELERATED_OP = "maxpool2d"
         elif "add" in self.match_node.ops_occurrences:
             self.ACCELERATED_OP = "add"
+        elif "batch_matmul" in self.match_node.ops_occurrences:
+            self.ACCELERATED_OP = "batch_matmul"
         else:
             print("[ZIGZAG PARSER] Warning, no operator found to tile, not supported by our ZigZag parser currently!")
 
@@ -547,7 +558,7 @@ class MatchNodeToZigZagParser:
 
     def visit_dense(self):
         dense_node: MatchOpDense = self.match_node.ops["dense"]
-
+        self.loop_dim_size["B"] = dense_node.outs[0].dims[0].size
         self.loop_dim_size["C"] = dense_node.inp_features
         self.loop_dim_size["K"] = dense_node.out_features
         self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"
@@ -567,3 +578,23 @@ class MatchNodeToZigZagParser:
         self.operand_source_dimension_mapping = dict()
         self.workload_dimensions_relations = list()
         self.spatially_unrolled_dimensions = list()
+        
+    def visit_batch_matmul(self):
+        bmatmul_node: MatchOpBatchMatMul = self.match_node.ops["batch_matmul"]
+        dim_b = bmatmul_node.outs[0].dims[0].size
+        dim_m = bmatmul_node.outs[0].dims[1].size
+        dim_n = bmatmul_node.vars[0].dims[2].size
+        dim_k = bmatmul_node.outs[0].dims[2].size
+    
+        self.equation = "O[b][m][n]+=X[b][m][k]*Y[b][k][n]"
+        self.loop_dim_size = {"B": dim_b, "M": dim_m, "N": dim_n, "K": dim_k}
+        self.operand_source_dimension_mapping = {
+            "X": {"B":"B", "M":"M", "N":"K"},
+            "Y": {"B":"B", "N":"M", "K":"K"},
+        }
+        self.spatially_unrolled_dimensions = ["N"]
+        
+        self.workload_dimensions_relations = list()
+        self.operand_source_dimension_mapping = dict()
+        self.padding = []
+        self.strides = []

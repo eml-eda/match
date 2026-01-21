@@ -1,19 +1,31 @@
-#ifdef CLUSTER_COMPILATION
+#ifdef __spatz__
 
 #include <carfield_lib/dma.h>
 
-dma_transfer_id_t dma_transfer_create() { return plp_dma_counter_alloc(); }
+#include "snrt.h"
+
+
+// plp_dma_getCmd(int ext2loc, unsigned int size, int is2D, int trigEvt, int trigIrq, int broadcast);
+
+// snrt_dma_start_2d(void *dst, const void *src, size_t size, size_t dst_stride, size_t src_stride, size_t repeat)
+
+// snrt_dma_start_1d(void *dst, const void *src, size_t size);
+
+// plp_dma_cmd_push_2d(unsigned int cmd, unsigned int locAddr, mchan_ext_t extAddr, unsigned int stride, unsigned int length);
+
+
+dma_transfer_id_t dma_transfer_create() { return 0; }
 
 void dma_transfer_free(dma_transfer_id_t transfer) {
-  plp_dma_counter_free(transfer);
+  ;
 }
 
 void dma_transfer_wait(dma_transfer_id_t transfer) {
-  plp_dma_wait(transfer);
-  // free in plp_dma_wait
+  snrt_dma_wait_all();
 }
 
 void dma_transfer_hwc_to_chw(dma_transfer_cfg_t conf) {
+
   int start_fm_channel = 0, end_fm_channel = conf.length_1d_copy;
   void *loc = conf.loc + conf.number_of_1d_copies * conf.number_of_2d_copies *
                              start_fm_channel;
@@ -21,24 +33,32 @@ void dma_transfer_hwc_to_chw(dma_transfer_cfg_t conf) {
   const int size_2d = conf.number_of_1d_copies * conf.number_of_2d_copies;
 
   for (int i = start_fm_channel; i < end_fm_channel; i++) {
-    unsigned int dma_cmd = plp_dma_getCmd(conf.dir, size_2d, 1, 1, 1, 1);
-    plp_dma_cmd_push_2d(dma_cmd, loc, ext, conf.stride_1d, 1);
-    ext += 1; // next channel
+
+    if (conf.dir == DMA_DIR_L2_TO_L1) {
+      snrt_dma_start_2d(loc, ext, size_2d, conf.stride_1d, 1, 1);
+    } else {
+      snrt_dma_start_2d(ext, loc, size_2d, conf.stride_1d, 1, 1);
+    }
+
+    ext += 1; // next channel  TODOOOOO this is probably not ok if sizeof(type) != 1
     loc += conf.number_of_1d_copies * conf.number_of_2d_copies;
   }
 }
 
 void dma_transfer_1d_async(dma_transfer_cfg_t conf) {
-  unsigned int dma_cmd =
-      plp_dma_getCmd(conf.dir, conf.length_1d_copy, 0, 1, 1, 1);
-  plp_dma_cmd_push(dma_cmd, conf.loc, conf.ext);
+  if (conf.dir == DMA_DIR_L2_TO_L1) {
+    snrt_dma_start_1d(conf.loc, conf.ext, conf.length_1d_copy);
+  } else {
+    snrt_dma_start_1d(conf.ext, conf.loc, conf.length_1d_copy);
+  }
 }
 
 void dma_transfer_2d_async(dma_transfer_cfg_t conf) {
-  const int size_2d = conf.number_of_1d_copies * conf.length_1d_copy;
-  unsigned int dma_cmd = plp_dma_getCmd(conf.dir, size_2d, 1, 1, 1, 1);
-  plp_dma_cmd_push_2d(dma_cmd, conf.loc, conf.ext, conf.stride_1d,
-                      conf.length_1d_copy);
+  if (conf.dir == DMA_DIR_L2_TO_L1) {
+    snrt_dma_start_2d(conf.loc, conf.ext, conf.length_1d_copy, conf.length_1d_copy, conf.stride_1d, conf.number_of_1d_copies);
+  } else {
+    snrt_dma_start_2d(conf.ext, conf.loc, conf.length_1d_copy, conf.length_1d_copy, conf.stride_1d, conf.number_of_1d_copies);
+  }
 }
 
 void dma_transfer_3d_async(dma_transfer_cfg_t conf) {
@@ -63,18 +83,5 @@ void dma_transfer_async(dma_transfer_cfg_t conf) {
   }
 }
 
-static uint32_t dma_mutex;
 
-void dma_mutex_init() {
-  dma_mutex = eu_mutex_addr(0);
-}
-
-void dma_mutex_lock() {
-  eu_mutex_lock(dma_mutex);
-}
-
-void dma_mutex_unlock() {
-  eu_mutex_unlock(dma_mutex);
-}
-
-#endif
+#endif // __spatz__
