@@ -28,20 +28,26 @@
 </%def>
 
 <%def name="profile_region_begin()">
-    %if exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+    % if not exec_module.separate_build and exec_module.timer_start_fn != "":
+        ${exec_module.timer_start_fn}();
+    %elif exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
         ${exec_module.timer_start_fn}();
     % endif
 </%def>
 
 <%def name="profile_region_end(label)">
-    %if exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
-        real_args[8 + ${label}] += ${exec_module.timer_stop_fn}();
+    % if not exec_module.separate_build and exec_module.timer_stop_fn != "":
+        ${name}_stats.${label}_cycles += ${exec_module.timer_stop_fn}();
+    % elif exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+        real_args[8 + ${"0" if label=="compute" else "1" if label=="load" else "2"}] += ${exec_module.timer_stop_fn}();
     % endif
 </%def>
 
 <%def name="profile_var(label)">
-    %if exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
-        real_args[8 + ${label}] +=
+    % if not exec_module.separate_build and exec_module.timer_start_fn != "":
+        ${name}_stats.${label} += 
+    % elif exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+        real_args[8 + ${"3" if label=="load_bytes" else "4"}] +=
     % endif
 </%def>
 
@@ -117,8 +123,6 @@
 
     <%self:smp_primary_core_region_end/>
 
-    #ifndef __MATCH_TEST_NODE_WITH_HELPER__
-
     <%self:smp_primary_core_region_begin/>
 
         // Intermediate Tensors
@@ -172,9 +176,14 @@
                 % for mem_transfer in lp.mem_transfers:
                     // compute the offset from the top level memory to obtain the correct tile for the transfer
                     % for t_dim_idx, t_dim in enumerate(mem_transfer.tensor.dims):
-                        % if t_dim in match_node.dependent_dims and len(set([schedule.tensor_tiles[mem_transfer.tensor.name][idx].tiled_dims[t_dim_idx].size for idx in range(len(schedule.tensor_tiles[mem_transfer.tensor.name]))]))!=1:
+                        ## TODO: add additional check for dependent dims to update only if one of its dependencies has changed
+                        % if t_dim in match_node.dependent_dims:
+                        ## and len(set([schedule.tensor_tiles[mem_transfer.tensor.name][idx].tiled_dims[t_dim_idx].size for idx in range(len(schedule.tensor_tiles[mem_transfer.tensor.name]))]))!=1:
                             ${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].size = ${name}_${t_dim.name}->curr_size; // this dim is not independent
                             ${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].max_size = ${name}_${t_dim.name}->curr_max_size; // this dim is not independent
+                            % if t_dim.dim_dependency is not None and t_dim.dim_dependency.is_idx_floating:
+                            ${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].idx_remainder = ${name}_${t_dim.name}->idx_remainder; // this dim is not independent and has floating dependencies
+                            % endif
                             ${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].start_idx = ${name}_${t_dim.name}->global_idx;
                             ${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].curr_idx = ${name}_${mem_transfer.tensor.name}_tiles_[${mem_transfer.mem}*${mem_transfer.tensor.num_dims}+${t_dim_idx}].start_idx;
                         % endif
@@ -197,10 +206,10 @@
                     ${mem_transfer.mem}_curr_pt_offset += ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
                     % if mem_transfer.tensor.tensor_type != "output":
                         // call API for ${exec_module.name}-specific memory transfer handling
-                        <%self:profile_var label="3"/> ${mem_apis.mem_transfer}(
+                        <%self:profile_var label="load_bytes"/> ${mem_apis.mem_transfer}(
                             ctx,${name}_${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)},
                             ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
-                            MATCH_SW_LOAD_TENSOR,MATCH_${"CONST" if mem_transfer.tensor.tensor_type=="const" else "VAR"}_TENSOR,
+                            MATCH_SW_LOAD_TENSOR,
                             ${mem_transfer.top_mem},${mem_transfer.mem}
                         );
                         % if sync_apis.must_sync_after_load:
@@ -212,7 +221,7 @@
                     % endif
                     <% add_tile_to_tensor_at_block_and_loop(mem_transfer.tensor.name, block_idx, loop_idx, mem_transfer.mem)%>
                 % endfor
-            <%self:profile_region_end label="1"/>
+            <%self:profile_region_end label="load"/>
             <%self:smp_primary_core_region_end/>
             ## finished sw controlled loads and stores
             % if exec_module.backend_constraints_check(match_node,schedule,block,lp,loop_idx) and block.loop_idx_end_sw_controlled_loads>=loop_idx:
@@ -242,7 +251,7 @@
                 % for tensor in [tens for tens in schedule.tensors.values() if last_transfer_of_tensor_block[(tens.name, block_idx)][0]!=loop_idx]:
                     <% tensor_need_update = False %>
                     % for t_dim_idx, t_dim in enumerate(tensor.dims):
-                        % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependencies for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]] or any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
+                        % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependent_on_dims for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]] or any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
                             <% tensor_need_update = True %>
                             <% break %>
                         % endif
@@ -255,13 +264,13 @@
                         % endif
                         ${name}_${tensor.name}->pt = ${name}_${tensor.name}->pts[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}] + (tile_mem_offset>0?tile_mem_offset:0);
                         % for t_dim_idx, t_dim in enumerate(tensor.dims):
-                            % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependencies for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]] or any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
+                            % if t_dim in match_node.dependent_dims and [lp.dim in t_dim.dim_dependency.dependent_on_dims for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]] or any([lp.dim==t_dim for lp in block.loops[last_transfer_of_tensor_block[(tensor.name, block_idx)][0]:loop_idx]]):
                                 ${name}_${tensor.name}_tiles_[${last_transfer_of_tensor_block[(tensor.name, block_idx)][1]}*${tensor.num_dims}+${t_dim_idx}].curr_idx = ${name}_${t_dim.name}->global_idx;
                             % endif
                         % endfor
                     % endif
                 % endfor
-            <%self:profile_region_end label="1"/>
+            <%self:profile_region_end label="load"/>
         <%self:smp_primary_core_region_end/>
         
         <%self:smp_barrier/>
@@ -302,7 +311,7 @@
         <%self:smp_barrier/>
         
         <%self:smp_primary_core_region_begin/>
-            <%self:profile_region_end label="0"/>
+            <%self:profile_region_end label="compute"/>
         <%self:smp_primary_core_region_end/>
         
         ## close braces and save output
@@ -325,10 +334,10 @@
                         <% free_transfer_unique_tile(mem_transfer.tensor.name) %>
                         % if mem_transfer.tensor.tensor_type == "output":
                             // call API for ${exec_module.name}-specific memory transfer handling
-                            <%self:profile_var label="4"/> ${mem_apis.mem_transfer}(
+                            <%self:profile_var label="store_bytes"/> ${mem_apis.mem_transfer}(
                                 ctx,${name}_${mem_transfer.tensor.name},${mem_transfer.tensor.name}_${mem_transfer.top_mem}_tile_pt${c_unique_num_tile(mem_transfer.tensor.name)},
                                 ${name}_${mem_transfer.tensor.name}->pts[${mem_transfer.mem}],
-                                MATCH_SW_STORE_TENSOR,MATCH_OUT_TENSOR,
+                                MATCH_SW_STORE_TENSOR,
                                 ${mem_transfer.top_mem},${mem_transfer.mem}
                             );
                             % if sync_apis.must_sync_after_store:
@@ -343,7 +352,7 @@
                                 ${mem_transfer.mem}_curr_pt_offset -= ${mem_transfer.tensor.name}_${mem_transfer.mem}_tile_size${c_unique_num_tile(mem_transfer.tensor.name)};
                         % endif
                     % endfor
-                <%self:profile_region_end label="2"/>
+                <%self:profile_region_end label="store"/>
             <%self:smp_primary_core_region_end/>
         % endfor
 
@@ -367,10 +376,6 @@
             ${platform_apis.free_module}(ctx);
         % endif
     <%self:smp_primary_core_region_end/>
-    #endif
-    #ifdef __MATCH_TEST_NODE_WITH_HELPER__
-    run_node_schedule_nn(ctx);
-    #endif
 
     <%self:smp_barrier/>
 

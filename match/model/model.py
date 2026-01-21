@@ -166,7 +166,9 @@ class MatchModel:
             MatchModel.save_model_logs()
             MatchModel.gen_model_runtime_and_move_model(target=target, out_path=out_path,
                                                         model_name=self.model_name+"_golden_cpu", executor=get_executor(),
-                                                        match_inputs=match_inputs, debug=self.debug)
+                                                        match_inputs=match_inputs, debug=self.debug,
+                                                            debug_fallback=self.debug_fallback,
+                                                            profile=self.profile, profile_fallback=self.profile_fallback)
             target.disabled_exec_modules = target_disabled_modules
 
         # compile the model
@@ -181,7 +183,9 @@ class MatchModel:
         MatchModel.save_model_logs()
         MatchModel.gen_model_runtime_and_move_model(target=target, out_path=out_path,
                                                     model_name=self.model_name, executor=self.executor,
-                                                    match_inputs=match_inputs, debug=self.debug)
+                                                    match_inputs=match_inputs, debug=self.debug,
+                                                            debug_fallback=self.debug_fallback,
+                                                            profile=self.profile, profile_fallback=self.profile_fallback)
         self.model_runtime(target=target,out_path=out_path)
     
     def model_runtime(self, target=None, out_path:str="/build"):
@@ -262,8 +266,7 @@ class MatchModel:
                 host_module=host_module,
             )
             subprocess.getoutput(f"rm {host_only_lib_path}")
-            
-            # Generate host graph runtime
+            graph_runtime.parse_host_lib_for_extra_dynamic_mem(host_lib_path=f"{build_dir}/codegen/host/src/lib1.c")
             graph_runtime_template_data = graph_runtime.generate()
             graph_runtime_template_data["debug"] = debug
             graph_runtime_template_data["debug_fallback"] = debug_fallback

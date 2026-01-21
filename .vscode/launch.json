@@ -5,19 +5,161 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "MATCH",
+            "name": "fp_conv",
             "type": "debugpy",
             "request": "launch",
             "program": "${workspaceFolder}/test/test.py",
             "args": [
                 "--executor"
                 , "graph"
-                , "--model"
-                , "yolo_pruned"
-                // , "--microbench"
-                // , "dense"
+                , "--microbench"
+                , "fp_conv"
+                , "--target"
+                , "GAP9"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "fp_conv_transpose",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test.py",
+            "args": [
+                "--executor"
+                , "graph"
+                , "--microbench"
+                , "fp_conv_transpose"
+                , "--target"
+                , "GAP9"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "GAP9 TRAIN VWW FW",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_odl.py",
+            "args": [
+                "--executor"
+                , "graph"
+                , "--target"
+                , "GAP9"
+                , "--relay_model"
+                , "${workspaceFolder}/test/models/odl/vww/model_graph_fw.relay"
+                , "--relay_params_filename"
+                , "${workspaceFolder}/test/models/odl/vww/model_params.txt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "GAP9 TRAIN IMCLS FW",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_odl.py",
+            "args": [
+                "--executor"
+                , "aot"
+                , "--target"
+                , "GAP9"
+                , "--relay_model"
+                , "${workspaceFolder}/test/models/odl/imcls/model_graph_fw.relay"
+                , "--relay_params_filename"
+                , "${workspaceFolder}/test/models/odl/imcls/model_params.txt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "GAP9 TRAIN IMCLS BW",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_odl.py",
+            "args": [
+                "--executor"
+                , "graph"
+                , "--target"
+                , "GAP9"
+                , "--relay_model"
+                , "${workspaceFolder}/test/models/odl/imcls/model_graph_bw.relay"
+                , "--relay_params_filename"
+                , "${workspaceFolder}/test/models/odl/imcls/model_params.txt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "GAP9 TRAIN KWS BW",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_odl.py",
+            "args": [
+                "--executor"
+                , "graph"
+                , "--target"
+                , "GAP9"
+                , "--relay_model"
+                , "${workspaceFolder}/test/models/odl/kws/model_graph_bw.relay"
+                , "--relay_params_filename"
+                , "${workspaceFolder}/test/models/odl/kws/model_params.txt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "GAP9 TRAIN KWS FW",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_odl.py",
+            "args": [
+                "--executor"
+                , "graph"
+                , "--target"
+                , "GAP9"
+                , "--relay_model"
+                , "${workspaceFolder}/test/models/odl/kws/model_graph_fw.relay"
+                , "--relay_params_filename"
+                , "${workspaceFolder}/test/models/odl/kws/model_params.txt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        },
+        {
+            "name": "DEFAULT IMCLS FW",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test_odl.py",
+            "args": [
+                "--executor"
+                , "graph"
+                , "--target"
+                , "default"
+                , "--relay_model"
+                , "${workspaceFolder}/test/models/odl/vww/model_graph_fw.relay"
+                , "--relay_params_filename"
+                , "${workspaceFolder}/test/models/odl/vww/model_params.txt"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": false
+        }
+        ,{
+            "name": "YOLO PULP_OPEN",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/test/test.py",
+            "args": [
+                "--executor"
+                , "graph"
                 , "--target"
                 , "pulp_open"
+                , "--model_path"
+                , "/home/moyne/phd/aicomp/match/test/models/yolo_scaled_int.onnx"
+                , "--handle_out_fn"
+                , "handle_yolo_output"
+                , "--input_files"
+                , "/home/moyne/phd/aicomp/match/test/models/yolo_scaled_input.txt"
             ],
             "console": "integratedTerminal",
             "justMyCode": false

@@ -1,8 +1,11 @@
 import os
 from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
+from match.transform.conv import Conv1DLifter
 from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM
 from match.transform.requant import MatchRequantRewriter
+from match.transform.conv_pw_strided import MatchConv2dPWStrided
+from match.transform.op_count import GAPopCount
 from .modules.ne16_accelerator.accelerator import NE16Accelerator
 from .modules.pulp_cluster.pulp_cluster import PulpCluster
 from tvm import relay
@@ -10,7 +13,8 @@ from tvm import relay
 # pulp config
 PULP_CORES = 8
 L1_SCRATCHPAD_KB_SIZE = 101
-L2_SHARED_MEM_KB_SIZE = 1496
+MAX_CODE_SIZE_KB = 350
+L2_SHARED_MEM_KB_SIZE = 1536 - MAX_CODE_SIZE_KB
 L3_FLASH_KB_SIZE = 89128
 ASYNC_DMA = False
 
@@ -38,6 +42,7 @@ class GAP9(MatchTarget):
 
     def set_target_host(self):
         self.cpu_type = "riscv_cpu"
+        self.static_mem_plan = True
 
     def set_paths(self):
         self.makefile_path = os.path.dirname(__file__)+"/pulp_config_lib/Makefile.GAP9"
@@ -52,6 +57,9 @@ class GAP9(MatchTarget):
             "pulp_cluster/cluster",
             "pulp_mem/ram",
         ]
+        self.other_files_to_copy =  [ os.path.dirname(__file__)+"/pulp_config_lib/CMakeLists.txt", 
+                                      os.path.dirname(__file__)+"/pulp_config_lib/sdk.config" ]
+
 
     def set_apis(self):
         # profiling ones
@@ -60,7 +68,7 @@ class GAP9(MatchTarget):
         self.timestamp_to_ms = ""
         self.timestamp_type = "int"
         # initialization and cleaning
-        self.init_funcs = ["pulp_cluster_init"]
+        self.init_funcs = ["pulp_open_init", "pulp_cluster_init"]
         self.clean_funcs = ["pulp_cluster_close"]
         # memory management ones
         self.alloc_fn = "malloc_wrapper"
@@ -74,10 +82,13 @@ class GAP9(MatchTarget):
 
     def network_transformations(self, opts):
         return [
+#            ("test", GAPopCount()),
             ("requant", MatchRequantRewriter()),
+            ("to2d", Conv1DLifter()),
             ("layout", MatchLayoutNCHWtoNHWCTVM),
+            ("remove_conv2dpw_with_stride", MatchConv2dPWStrided()),
         ]
-    
+
     def host_memories(self):
         return [
             MemoryInst(name="L2_SHARED_MEM",k_bytes=L2_SHARED_MEM_KB_SIZE),

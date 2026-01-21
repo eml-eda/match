@@ -23,4 +23,6 @@ int32_t __attribute__((noinline, optimize("O0"))) stop_match_perf_counter();
 
 int32_t __attribute__((noinline, optimize("O0"))) get_match_acc_perf_counter();
 
+int32_t __attribute__((noinline, optimize("O0"))) reset_match_perf_counter();
+
 #endif // PULP_RT_PROFILER_WRAPPER_H

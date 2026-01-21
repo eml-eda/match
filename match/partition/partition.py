@@ -1,4 +1,3 @@
-
 # distributed with this work for additional information
 # regarding copyright ownership.  The ASF licenses this file
 # to you under the Apache License, Version 2.0 (the
@@ -18,6 +17,7 @@ Operations to support a MATCH Target with one or more ExecModule.
 """
 from match.transform.cast import MatchRemoveFakeOutDtypeCasts
 from match.transform.dead import MatchRemoveIdentityBYOC
+from match.transform.instnorm import MatchDecomposeInstanceNorm
 from match.transform.naming import MatchRenameIO
 from match.transform.save import MatchSaveModule, MatchSaveRelay
 from match.utils.utils import get_model_name
@@ -33,9 +33,99 @@ from tvm.relay.build_module import bind_params_by_name
 import tvm.relay.backend.contrib.match
 
 from match.target import get_target,MatchTarget,DefaultMatchTarget
+import tvm.relay as relay  # added for relay-specific classes
 
 
 logger = logging.getLogger("match")
+
+# --- Custom passes to outline primitive local functions and ensure global symbols ---
+
+def add_global_symbols_pass():
+    """Assign a global_symbol attr equal to the GlobalVar name for candidate primitive/composite functions lacking it."""
+    @tvm.ir.transform.module_pass(opt_level=0)
+    def _pass(mod, ctx):  # ctx unused
+        outlined = 0
+        for gv, func in list(mod.functions.items()):
+            if isinstance(func, relay.Function):
+                attrs = func.attrs
+                is_candidate = False
+                if attrs is None:
+                    is_candidate = True
+                else:
+                    # Accept primitive (cast IntImm), or composite / pattern matched functions
+                    if hasattr(attrs, "Primitive") and int(attrs.Primitive) == 1:
+                        is_candidate = True
+                    elif getattr(attrs, "Composite", None) or getattr(attrs, "PartitionedFromPattern", None):
+                        is_candidate = True
+                if is_candidate:
+                    if not (attrs and getattr(attrs, "global_symbol", None)):
+                        func = func.with_attr("global_symbol", gv.name_hint)
+                        mod.update_func(gv, func)
+                        outlined += 1
+        if outlined:
+            logger.debug(f"[add_global_symbols_pass] Added global_symbol to {outlined} functions")
+        return mod
+    return _pass
+
+def outline_primitive_functions_pass():
+    """Lift (outline) local let-bound primitive or composite Relay functions into top-level globals.
+
+    Criteria: Function has attrs Primitive=1 OR has Composite / PartitionedFromPattern attr OR no attrs.
+    Names assigned as outlined_<idx>.
+    """
+    @tvm.ir.transform.module_pass(opt_level=1)
+    def _pass(mod, ctx):  # ctx unused
+        class LocalPrimitiveOutliner(relay.ExprMutator):
+            def __init__(self, mod):
+                super().__init__()
+                self.mod = mod
+                self.replacements = {}  # Var -> GlobalVar
+                self.counter = 0
+                self.lifted = 0
+            def _is_candidate(self, fn):
+                if not isinstance(fn, relay.Function):
+                    return False
+                attrs = fn.attrs
+                if attrs is None:
+                    return True
+                if hasattr(attrs, "Primitive"):
+                    try:
+                        if int(attrs.Primitive) == 1:
+                            return True
+                    except Exception:
+                        pass
+                if getattr(attrs, "Composite", None) or getattr(attrs, "PartitionedFromPattern", None):
+                    return True
+                return False
+            def visit_var(self, var):
+                if var in self.replacements:
+                    return self.replacements[var]
+                return super().visit_var(var)
+            def visit_let(self, let):
+                new_value = self.visit(let.value)
+                new_body = self.visit(let.body)
+                if self._is_candidate(new_value):
+                    name = f"outlined_{self.counter}"
+                    self.counter += 1
+                    gv = tvm.ir.GlobalVar(name)
+                    attrs = new_value.attrs
+                    if not (attrs and getattr(attrs, "global_symbol", None)):
+                        new_value = new_value.with_attr("global_symbol", name)
+                    self.mod[gv] = new_value
+                    self.replacements[let.var] = gv
+                    self.lifted += 1
+                    return new_body  # remove let
+                return relay.Let(let.var, new_value, new_body)
+        main_gv = mod.get_global_var("main")
+        main_func = mod[main_gv]
+        mut = LocalPrimitiveOutliner(mod)
+        new_body = mut.visit(main_func.body)
+        if mut.lifted:
+            logger.debug(f"[outline_primitive_functions_pass] Lifted {mut.lifted} local functions")
+        new_main = relay.Function(main_func.params, new_body, main_func.ret_type, main_func.type_params, main_func.attrs)
+        mod.update_func(main_gv, new_main)
+        return mod
+    return _pass
 
 def pattern_table(target:MatchTarget=DefaultMatchTarget()):
     """
@@ -84,6 +174,10 @@ def partition(mod, params, dpu, opts):
     pipeline.append(transform.InferType())
     pipeline.append(MatchSaveRelay("removed_fake_casts"))
 
+    pipeline.append(MatchDecomposeInstanceNorm())
+    pipeline.append(transform.InferType())
+    pipeline.append(MatchSaveRelay("decomposed_instnorm"))
+    
     pipeline.append(transform.InferType())
     for net_transform_name, net_transform in target.transform_before_partitioning(opts):
         pipeline.append(net_transform)
@@ -113,6 +207,18 @@ def partition(mod, params, dpu, opts):
     pipeline.append(transform.RemoveUnusedFunctions())
     pipeline.append(MatchSaveRelay("cleaned"))
     
+    # pipeline.append(transform.FuseOps())
+    # pipeline.append(transform.InferType())
+    # pipeline.append(MatchSaveRelay("fused"))
+    # # Custom outlining (instead of unavailable transform.Outline)
+    # pipeline.append(outline_primitive_functions_pass())
+    # pipeline.append(transform.InferType())
+    # pipeline.append(MatchSaveRelay("outlined"))
+    # pipeline.append(add_global_symbols_pass())
+    # pipeline.append(transform.InferType())
+    # pipeline.append(MatchSaveRelay("symbolized"))
+
+
     pipeline.append(MatchSaveModule())
     seq = tvm.transform.Sequential(pipeline)
     with tvm.transform.PassContext(opt_level=3):

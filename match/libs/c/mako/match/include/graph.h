@@ -1,6 +1,17 @@
 #ifndef __MATCH_${model_name}_RUN_GRAPH_H__
 #define __MATCH_${model_name}_RUN_GRAPH_H__
 
+#define nan 0.0
+
+#include <match/types.h>
+
+#define __MATCH_MEM_SIZE__ ${mem_needed_bytes}
+
+% if mem_needed_bytes>0 and (target.alloc_fn=="" or target.free_fn==""):
+// static memory allocation if no alloc/free functions are provided
+extern uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
+% endif
+
 % for include in target.include_list:
     #include <${include}.h>
 % endfor
@@ -12,9 +23,12 @@
 // MATCH signature
 // type* inp_A, ..., type* inp_Z, type* out_A, ..., type* out_N
 % for mem_tensor in mem_tensors:
-    % if mem_tensor.is_input or mem_tensor.is_output:
-        #define __${model_name}_GRAPH_${mem_tensor.name}_FROM_EXTERNAL_MEM__ ${int(mem_tensor.stored_in_external_memory)}
-    % endif
+% if mem_tensor.is_input or mem_tensor.is_output:
+#define __${model_name}_GRAPH_${mem_tensor.name}_FROM_EXTERNAL_MEM__ ${int(mem_tensor.stored_in_external_memory)}
+% if len(mem_tensor.used_at)==0:
+#define __${model_name}_GRAPH_${mem_tensor.name}_UNUSED__ 1
+% endif
+% endif
 % endfor
 #define __${model_name}_GRAPH_INPUTS_OUTPUTS_EXT_MEM__ ${sum([mem_tensor.num_bytes for mem_tensor in mem_tensors if (mem_tensor.is_input or mem_tensor.is_output) and mem_tensor.stored_in_external_memory])}
 // profiling flags
@@ -23,6 +37,8 @@
 // debugging flags
 #define __${model_name}_GRAPH_DEBUG__ ${int(debug)}
 #define __${model_name}_FALLBACK_GRAPH_DEBUG__ ${int(debug_fallback)}
+//gap measuriments flags
+//#define USE_GPIO
 #if __${model_name}_GRAPH_DEBUG__
 % for activation_name, activation_checksum in checksums.items():
     % if map_names[activation_name][2] in nodes_map:
@@ -57,6 +73,12 @@
     % endif
     #endif
 % endfor
+
+void match_${model_name}_graph_load_files(void* match_mem, void* match_ext_mem);
+
+#if __${model_name}_FALLBACK_GRAPH_PROFILE__
+void match_${model_name}_graph_profile_summary(void);
+#endif
 
 int match_${model_name}_run_graph(
 % for rt_i in rt_inputs:

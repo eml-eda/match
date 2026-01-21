@@ -9,19 +9,23 @@ class MatchMemoryTensor:
     def __init__(
             self, name: str="p1", is_intermediate: bool=False,
             is_constant: bool=False, is_output: bool=False,
-            is_input: bool=False,
+            is_input: bool=False, is_extra_dynamic: bool=False,
+            extra_dynamic_buffer_id: int=0,
             constant_val: npt.ArrayLike=np.array([1]),
             original_constant_val: npt.ArrayLike=np.array(1),
             shape: Tuple[int]=(1,),
             dtype: npt.DTypeLike=np.dtype("uint8"),
             node_id: int=0,
-            node_info={}
+            node_info={},
+            tvm_memplan_storage_id: int=0
         ):
         self.name=name
         self.is_intermediate=is_intermediate
         self.is_constant=is_constant
         self.is_output=is_output
         self.is_input=is_input
+        self.is_extra_dynamic = is_extra_dynamic
+        self.extra_dynamic_buffer_id = extra_dynamic_buffer_id
         # Note: This has been removed since a tensor can be a combination of the single types, e.g. an input and an output at the same time
         # if sum([self.is_intermediate,self.is_constant,self.is_output,self.is_input])!=1:
             # raise Exception(f"Match Memory Tensor can only be one option between(intermediate,constant,output,input)")
@@ -31,6 +35,7 @@ class MatchMemoryTensor:
         self.dtype=dtype
         self.node_id=node_id
         self.last_usage=node_id
+        self.tvm_memplan_storage_id = tvm_memplan_storage_id
         self.mem_offset = -1
         self.stored_in_external_memory = False
         self.move_temp_to_ext_mem = list()
@@ -43,6 +48,31 @@ class MatchMemoryTensor:
         self.used_at = list()
         self.mem_offset_at = dict()
         self.used_by_tvm = False
+        self.ext_mem_offset = -1
+
+    @property
+    def get_pt(self):
+        if (self.is_input or self.is_output) and not self.stored_in_external_memory:
+            return f"{self.name}_pt"
+        elif self.is_constant and not self.stored_in_external_memory:
+            return f"{self.name}_data_"
+        else:
+            return f"match_mem + {self.mem_offset}"
+    
+    def get_new_mem_offset(self, ext_mem_offset: int=0):
+        if (len(self.load_from_ext_mem_at)>0 and (not self.is_input and not self.is_output)) or (self.is_constant and self.stored_in_external_memory):
+            self.ext_mem_offset = ext_mem_offset 
+            return ext_mem_offset + (self.elems * self.dtype.itemsize)
+        else:
+            self.ext_mem_offset = -1
+            return ext_mem_offset
+
+    @property
+    def get_ext_pt(self):
+        if (self.is_input or self.is_output) and self.stored_in_external_memory:
+            return f"{self.name}_ext_pt"
+        else:
+            return f"match_ext_mem + {self.ext_mem_offset}"
 
     @property
     def lifetime(self):
@@ -65,3 +95,9 @@ class MatchMemoryTensor:
             self.start_usage=new_ending_idx
         self.used_at.append(new_ending_idx)
         self.last_usage=new_ending_idx
+
+    def reset(self):
+        self.mem_offset_at = dict()
+        self.stored_in_external_memory = False
+        self.move_temp_to_ext_mem = list()
+        self.load_from_ext_mem_at = list()

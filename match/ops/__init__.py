@@ -10,4 +10,12 @@ from .cast import MatchOpCast
 from .clip import MatchOpClip
 from .right_shift import MatchOpRightShift
 from .multiply import MatchOpMultiply
-from .add import MatchOpAdd
+from .conv2d_transpose import MatchOpConv2DTranspose
+from .sqrt import MatchOpSqrt
+from .divide import MatchOpDivide
+from .repeat import MatchOpRepeat
+from .reshape import MatchOpReshape
+from .sum import MatchOpSum
+from .instance_norm import MatchOpInstanceNorm
+from .subtract import MatchOpSubtract
+from .rsqrt import MatchOpRsqrt

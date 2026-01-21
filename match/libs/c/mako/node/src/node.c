@@ -23,9 +23,6 @@
 
     // include params file
     #include "nodes/${model_name}/${name}_params.h"
-    #ifdef __MATCH_TEST_NODE_WITH_HELPER__
-    #include <${target.name}/node_helper_nn.h>
-    #endif
 
     % for block_idx,block in enumerate(schedule.blocks):
         % if block.backend == "MATCH":
@@ -49,6 +46,18 @@
             args[${tensor_idx}] = ${"var_" if tensor.tensor_type=="var" else "out_"}${tensor.name}_pt;
             % endfor	
             ${platform_apis.init_platform}(${name}_ctx, ${node_fullname}_inner, args);
+            % if exec_module.timer_start_fn != "" and exec_module.timer_stop_fn != "":
+            ${name}_stats.total_cycles = ${name}_stats.compute_cycles + ${name}_stats.load_cycles + ${name}_stats.store_cycles;
+            % if target.print_fn != "":
+            ${target.print_fn}("[HOST] Node ${node_fullname} execution with pattern ${pattern_name} finished by ${exec_module.name}, with stats\r\n");
+            ${target.print_fn}("       total cycles %d\r\n", ${name}_stats.total_cycles);
+            ${target.print_fn}("       compute cycles %d\r\n", ${name}_stats.compute_cycles);
+            ${target.print_fn}("       load cycles %d\r\n", ${name}_stats.load_cycles);
+            ${target.print_fn}("       store cycles %d\r\n", ${name}_stats.store_cycles);
+            ${target.print_fn}("       load bytes %d\r\n", ${name}_stats.load_bytes);
+            ${target.print_fn}("       store bytes %d\r\n", ${name}_stats.store_bytes);
+            % endif
+            % endif
             return 0;
         }
     % endif
@@ -61,9 +70,6 @@
     ## Node exec_module code
 
     #include <nodes/${model_name}/${name}_params.h>
-    #ifdef __MATCH_TEST_NODE_WITH_HELPER__
-    #include <${target.name}/node_helper_nn.h>
-    #endif
 
     % for block_idx,block in enumerate(schedule.blocks):
         % if block.backend == "MATCH":

@@ -26,7 +26,36 @@ int match_byte_checksum_check(const char* data, int size, int checksum) {
     return sum - checksum;
 }
 
-void handle_int_classifier(int* output_pt, int classes, int runtime_status) {
+float match_float_checksum_check(void* data, int size, double checksum) {
+    // Calculate checksum
+    double sum = 0.0;
+    int size_f = size / sizeof(float);
+    /*
+    if(print_value){
+        // Print array data for debugging
+        printf("[LAYER OUTPUT] Values:\n");
+        for (int i = 0; i < size_f; ++i) {
+            printf("%f, ", data[i]);
+        }
+        printf("\n");
+    }
+    */
+
+    // compute and return the checksum
+    for (int i = 0; i < size_f; ++i) {        
+        sum += ((float*)data)[i];
+    } 
+    /*  
+    if(print_value){
+        printf("[LAYER OUTPUT] Computed Checksum: %f\n", sum);
+    }
+    */
+    // printf("[LAYER OUTPUT] Computed Checksum: %f expected one %f size %d\n", sum, checksum_f, size_f);
+    // Compute the relative error (1e-20 gives numerical stability)
+    return sum - checksum;
+}
+
+void handle_int_classifier(int* output_pt, int classes, int runtime_status){
     int max_idx = 0;
     int max_val = output_pt[0];
     printf("[MATCH OUTPUT] Values:\r\n%d, ", max_val);

@@ -2,6 +2,10 @@
 
 static int ram_initialized = 0;
 
+int pulp_is_ram_initialized(void) {
+  return ram_initialized;
+}
+
 void* pulp_alloc_ram(int size){
     if(!ram_initialized){
         mem_init();

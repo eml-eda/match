@@ -2,10 +2,9 @@ PROJECT_DIR ?= $(abspath ../..)
 BUILD_DIR  	?= $(abspath .)
 SRC_DIR  	?= $(BUILD_DIR)/src
 
-CAR_ROOT    ?= $(PROJECT_DIR)/carfield
-BENDER      ?= bender -d $(CAR_ROOT)
+CAR_ROOT    ?= $(ASTRAL_PATH)
+BENDER      = bender -d $(CAR_ROOT)
 PYTHON	    ?= python
-
 
 
 
@@ -35,7 +34,8 @@ MATCH_pulp_cluster_OFFLOAD_SRC = $(filter %.pulp_cluster.c, $(MATCH_ALL_SRCS))
 # Compile runtime payload
 
 PULPD_ROOT      ?= $(shell $(BENDER) path pulp_cluster)
-PULPD_RISCV		?= /usr/pack/pulpsdk-1.0-kgf/artifactory/pulp-sdk-release/pkg/pulp_riscv_gcc/1.0.16/bin/riscv32-unknown-elf
+# PULPD_RISCV		?= /usr/pack/pulpsdk-1.0-kgf/artifactory/pulp-sdk-release/pkg/pulp_riscv_gcc/1.0.16/bin/riscv32-unknown-elf
+PULPD_RISCV = riscv32-unknown-elf
 
 export PULPRT_TARGET	= carfield-cluster
 export PULPRUN_TARGET	= carfield-cluster
@@ -58,10 +58,10 @@ PULP_TARGETS = $(TARGETS)
 build-offload: 
 	@echo "Building pulp_cluster runtime..."
 	$(MAKE) PULP_LDFLAGS="$(PULP_LDFLAGS) -Tlink_pulpd.ld" CONFIG_LIBC_MINIMAL=0 $(PULP_TARGETS)
-	$(PULPD_RISCV)-objcopy $(PULPD_ELF_REMOVE_SECTIONS) $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime;
+	/home/fpgauser/pulp_toolchain/bin/riscv32-unknown-elf-objcopy $(PULPD_ELF_REMOVE_SECTIONS) $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime;
 
 	@echo "Generating objdump..."
-	$(PULPD_RISCV)-objdump -drwCS $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime > $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime.dump;
+	/home/fpgauser/pulp_toolchain/bin/riscv32-unknown-elf-objdump -drwCS $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime > $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime.dump;
 
 	@echo "Runtime offload build done."
 
@@ -74,7 +74,8 @@ build-offload:
 CAR_SW_DIR  := $(CAR_ROOT)/sw
 CHS_ROOT 	?= $(shell $(BENDER) path cheshire)
 
-CHS_SW_GCC_BINROOT  ?= /usr/pack/riscv-1.0-kgf/riscv64-gcc-14.2.0/bin
+# CHS_SW_GCC_BINROOT  ?= /usr/pack/riscv-1.0-kgf/riscv64-gcc-14.2.0/bin
+CHS_SW_GCC_BINROOT = /home/fpgauser/astral_toolchain/bin
 
 -include $(CHS_ROOT)/cheshire.mk
 CHS_BOOTMODE ?= 0 # default passive bootmode
@@ -92,7 +93,7 @@ HOST_LDFLAGS ?= $(CHS_SW_LDFLAGS) -L$(CAR_LD_DIR)
 #HOST_LD_SCRIPT  ?= $(CAR_SW_DIR)/link/l2.ld
 HOST_LD_SCRIPT  ?= link.ld
 
-HOST_INCLUDES    = -I$(CAR_SW_DIR)/include -I$(CHS_SW_DIR)/include $(CHS_SW_DEPS_INCS)
+HOST_INCLUDES    = -I$(CAR_SW_DIR)/include -I$(CHS_SW_DIR)/include $(CHS_SW_DEPS_INCS) -Wno-implicit-function-declaration -Wno-int-conversion -Wno-implicit-int -Wno-incompatible-pointer-types -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-maybe-uninitialized -Wno-sign-compare -Wno-missing-field-initializers
 HOST_LIB_SRCS_S  = $(wildcard $(CAR_SW_DIR)/lib/*.S $(CAR_SW_DIR)/lib/**/*.S)
 HOST_LIB_SRCS_C  = $(wildcard $(CAR_SW_DIR)/lib/*.c $(CAR_SW_DIR)/lib/**/*.c)
 HOST_LIB_SRCS_O  = $(CAR_SW_DEPS_SRCS:.c=.car.o) $(HOST_LIB_SRCS_S:.S=.car.o) $(HOST_LIB_SRCS_C:.c=.car.o)

@@ -4,15 +4,35 @@ from match.dim.dim import MatchDim
 from match.node.node import MatchNode
 from match.ops.conv1d import MatchOpConv1D
 from match.ops.conv2d import MatchOpConv2D
+from match.ops.conv2d_transpose import MatchOpConv2DTranspose
 from match.ops.conv3d import MatchOpConv3D
 from match.ops.dense import MatchOpDense
 from match.tensor.tensor import MatchTensor
 
+CONV2D_TRANSPOSE_INPUT_IS_DEPENDENT = True
 
 class MatchNodeToZigZagParser:
     def __init__(self, match_node: MatchNode=None, pattern_name: str="conv2d"):
+        self.ACCELERATED_OP = ""
+        self.ACCELERATED_OP_VISIT_MAP = {
+            "conv3d": self.visit_conv3d,
+            "conv2d_transpose": self.visit_conv2d_transpose_inp_dependent if CONV2D_TRANSPOSE_INPUT_IS_DEPENDENT else self.visit_conv2d_transpose_out_dependent,
+            "conv2d": self.visit_conv2d,
+            "conv1d": self.visit_conv1d,
+            "dense": self.visit_dense,
+            "maxpool2d": self.visit_maxpool2d,
+            "add": self.visit_add,
+        }
+        self.W_TENSOR_NEEDED_FOR_OPS = (
+            "conv3d",
+            "conv2d_transpose",
+            "conv2d",
+            "conv1d",
+            "dense",
+        )
         self.match_node = match_node
         self.pattern_name = pattern_name
+        self.set_accelerated_supported_op()
         # prec
         self.o_intermediate_prec = 32
         self.o_prec = 8
@@ -47,6 +67,10 @@ class MatchNodeToZigZagParser:
         self.o_tensor = self.outs[0]
         self.w_tensor = None if self.num_vars>1 or self.num_consts==0 else self.consts[0]
 
+        if self.w_tensor is None and self.y_tensor is not None and self.ACCELERATED_OP in self.W_TENSOR_NEEDED_FOR_OPS:
+            self.w_tensor = self.y_tensor
+            self.num_vars = 1
+            self.y_tensor = None
         self.workload_dimensions_relations = [
             f"ix=1*ox+1*fx",
             f"iy=1*oy+1*fy",
@@ -221,30 +245,36 @@ class MatchNodeToZigZagParser:
                     if key=="IY":
                         return spat
             elif len(dims)==2:
-                if key=="N":
+                if key=="B":
                     return dims[0]
                 if key in ["C","K"]:
                     return dims[1]
             elif len(dims)==1:
-                if key=="N":
+                if key=="B":
                     return dims[0]
             return self.match_node.default_dim
         
         tensor = self.o_tensor
         if name=="C":
             tensor = self.i_tensor
-        if name=="FY":
-            tensor = self.w_tensor
-        if name=="FX":
-            tensor = self.w_tensor
-        if name=="FD":
-            tensor = self.w_tensor
         if name=="IY":
             tensor = self.i_tensor
         if name=="IX":
             tensor = self.i_tensor
         if name=="ID":
             tensor = self.i_tensor
+        if name=="FY":
+            tensor = self.w_tensor
+            if tensor.tensor_type == "var":
+                name = "IY"
+        if name=="FX":
+            tensor = self.w_tensor
+            if tensor.tensor_type == "var":
+                name = "IX"
+        if name=="FD":
+            tensor = self.w_tensor
+            if tensor.tensor_type == "var":
+                name = "ID"
         if tensor is None:
             return self.match_node.default_dim
         
@@ -264,6 +294,7 @@ class MatchNodeToZigZagParser:
             
             if error_dim:
                 print(f"[ZIGZAG ENGINE] Error during dimension parsing, trying to get {name} from dims {[dim.name for dim in tensor.dims]} in tensor {tensor.name}")
+                # breakpoint()
         return found_dim
     
     def get_operands(self):
@@ -290,22 +321,32 @@ class MatchNodeToZigZagParser:
             }
         }
     
-    def parse(self):
+    def set_accelerated_supported_op(self):
         # TODO: currently its a sort of priority queue of operations, should be done better
         if "conv3d" in self.match_node.ops_occurrences:
-            self.visit_conv3d()
+            self.ACCELERATED_OP = "conv3d"
+        elif "conv2d_transpose" in self.match_node.ops_occurrences:
+            self.ACCELERATED_OP = "conv2d_transpose"
         elif "conv2d" in self.match_node.ops_occurrences:
-            self.visit_conv2d()
+            self.ACCELERATED_OP = "conv2d"
         elif "conv1d" in self.match_node.ops_occurrences:
-            self.visit_conv1d()
+            self.ACCELERATED_OP = "conv1d"
         elif "dense" in self.match_node.ops_occurrences:
-            self.visit_dense()
+            self.ACCELERATED_OP = "dense"
         elif "maxpool2d" in self.match_node.ops_occurrences:
-            self.visit_maxpool2d()
+            self.ACCELERATED_OP = "maxpool2d"
         elif "add" in self.match_node.ops_occurrences:
-            self.visit_add()
+            self.ACCELERATED_OP = "add"
         else:
-            print("[ZIGZAG PARSER] Warning, no operator found to tile, continuing with default workload")
+            print("[ZIGZAG PARSER] Warning, no operator found to tile, not supported by our ZigZag parser currently!")
+
+    def parse(self):
+        if self.ACCELERATED_OP not in self.ACCELERATED_OP_VISIT_MAP:
+            print(f"[ZIGZAG PARSER] Warning, no operator found to tile, not supported by our ZigZag parser currently! {self.ACCELERATED_OP}")
+            return
+        else:
+            print(f"[ZIGZAG PARSER] Parsing {self.ACCELERATED_OP} operator")
+            self.ACCELERATED_OP_VISIT_MAP[self.ACCELERATED_OP]()
 
     def visit_maxpool2d(self):
         pass
@@ -313,10 +354,10 @@ class MatchNodeToZigZagParser:
     def visit_conv1d(self):
         # get data
         conv1d_node: MatchOpConv1D = self.match_node.ops["conv1d"]
-        self.strides = conv1d_node.strides + (1,)
-        self.dilations = conv1d_node.dilation + (1,)
+        self.strides = conv1d_node.strides + [1]
+        self.dilations = conv1d_node.dilation + [1]
         self.padding = conv1d_node.padding
-        self.kernel_size = conv1d_node.kernel_size + (1,)
+        self.kernel_size = (conv1d_node.kernel_size, 1)
         # as if it was height only
         self.padding = (self.padding[0], 0, self.padding[1], 0)
         self.workload_dimensions_relations = [
@@ -331,18 +372,22 @@ class MatchNodeToZigZagParser:
         o_n, o_c, o_h = [self.get_dim_name_by_name(key).size for key in ["B","K","OY"]]
         i_h = self.get_dim_name_by_name("IY").size
         w_cin = self.get_dim_name_by_name("C").size
-        
-        self.equation = "O[b][k][oy][ox]+=W[k][c][fy]*I[b][c][iy]"
+
+        self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]"
         self.loop_dim_size["B"] = o_n
         self.loop_dim_size["K"] = o_c
         self.loop_dim_size["C"] = w_cin
         self.loop_dim_size["OY"] = o_h
+        self.loop_dim_size["OX"] = 1
         self.loop_dim_size["FY"] = self.kernel_size[0]
+        self.loop_dim_size["FX"] = self.kernel_size[1]
         # dependencies dims
         self.pr_loop_dim_size["IY"] = i_h
+        self.pr_loop_dim_size["IX"] = 1
         if conv1d_node.depthwise:
+            self.loop_dim_size["C"] = 1
             self.operand_source_dimension_mapping["I"]["C"]="K"
-            self.equation = "O[b][k][oy][ox]+=W[k][c][fy]*I[b][k][iy]"
+            self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"
     
     def visit_conv2d(self):
         # get conv attrs
@@ -376,9 +421,89 @@ class MatchNodeToZigZagParser:
         self.pr_loop_dim_size["IY"] = i_h
         self.pr_loop_dim_size["IX"] = i_w
         if conv2d_node.depthwise:
+            self.loop_dim_size["C"] = 1
+            self.operand_source_dimension_mapping["I"]["C"]="K"
+            self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"
+
+    def visit_conv2d_transpose_inp_dependent(self):
+        # get conv attrs
+        conv2d_node: MatchOpConv2DTranspose = self.match_node.ops["conv2d_transpose"]
+        self.strides = conv2d_node.strides
+        self.dilations = conv2d_node.dilation
+        self.padding = conv2d_node.padding
+        self.kernel_size = conv2d_node.kernel_size
+        # get sizes
+        o_n, o_c, o_h, o_w = [self.get_dim_name_by_name(key).size for key in ["B","K","OY","OX"]]
+        i_h,i_w = [self.get_dim_name_by_name(key).size for key in ["IY","IX"]]
+        w_cin = self.get_dim_name_by_name("C").size
+        
+        # actual implementation should be like the out_dependent one
+        # this is just a "placeholder" because currently zigzag doesnt allow
+        # for fractional strides and dilations
+        self.workload_dimensions_relations = [
+            f"ix=1*ox+1*fx",
+            f"iy=1*oy+1*fy",
+        ]
+        self.workload_padding = {
+            "IY": (self.padding[0], self.padding[2]),
+            "IX": (self.padding[1], self.padding[3]),
+        }
+        self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]"
+        self.loop_dim_size["B"] = o_n
+        self.loop_dim_size["K"] = o_c
+        self.loop_dim_size["C"] = w_cin
+        self.loop_dim_size["OY"] = o_h
+        self.loop_dim_size["OX"] = o_w
+        self.loop_dim_size["FY"] = self.kernel_size[0]
+        self.loop_dim_size["FX"] = self.kernel_size[1]
+        # dependencies dims
+        self.pr_loop_dim_size["IY"] = i_h
+        self.pr_loop_dim_size["IX"] = i_w
+        if conv2d_node.depthwise:
+            self.loop_dim_size["C"] = 1
             self.operand_source_dimension_mapping["I"]["C"]="K"
             self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"
     
+    def visit_conv2d_transpose_out_dependent(self):
+        # get conv attrs
+        conv2d_node: MatchOpConv2DTranspose = self.match_node.ops["conv2d_transpose"]
+        self.strides = conv2d_node.strides
+        self.dilations = conv2d_node.dilation
+        self.padding = conv2d_node.padding
+        self.kernel_size = conv2d_node.kernel_size
+        output_padding = conv2d_node.output_padding
+        # get sizes
+        o_n, o_c, o_h, o_w = [self.get_dim_name_by_name(key).size for key in ["B","K","OY","OX"]]
+        i_h,i_w = [self.get_dim_name_by_name(key).size for key in ["IY","IX"]]
+        w_cin = self.get_dim_name_by_name("C").size
+
+        self.workload_dimensions_relations = [
+            f"ox={self.strides[1]}*ix+{self.dilations[1]}*fx+{output_padding[1]}",
+            f"oy={self.strides[0]}*iy+{self.dilations[0]}*fy+{output_padding[0]}",
+        ]
+        self.workload_padding = {
+            "IY": (self.padding[0], self.padding[2]),
+            "IX": (self.padding[1], self.padding[3]),
+            "OX": (output_padding[1],),
+            "OY": (output_padding[0],),
+        }
+        self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][c][iy][ix]"
+        self.loop_dim_size["B"] = o_n
+        self.loop_dim_size["K"] = o_c
+        self.loop_dim_size["C"] = w_cin
+        self.loop_dim_size["IY"] = i_h
+        self.loop_dim_size["IX"] = i_w
+        self.loop_dim_size["FY"] = self.kernel_size[0]
+        self.loop_dim_size["FX"] = self.kernel_size[1]
+        del self.loop_dim_size["OY"]
+        del self.loop_dim_size["OX"]
+        self.pr_loop_dim_size["OY"] = o_h
+        self.pr_loop_dim_size["OX"] = o_w
+        if conv2d_node.depthwise:
+            self.loop_dim_size["C"] = 1
+            self.operand_source_dimension_mapping["I"]["C"]="K"
+            self.equation = "O[b][k][oy][ox]+=W[k][c][fy][fx]*I[b][k][iy][ix]"
+
     def visit_conv3d(self):
         conv3d_node: MatchOpConv3D = self.match_node.ops["conv3d"]
         self.strides = conv3d_node.strides
@@ -436,4 +561,9 @@ class MatchNodeToZigZagParser:
         self.loop_dim_size["K"] = o_c
         self.loop_dim_size["OY"] = o_h
         self.loop_dim_size["OX"] = o_w
+        del self.loop_dim_size["FY"]
+        del self.loop_dim_size["FX"]
+        self.workload_padding = dict()
+        self.operand_source_dimension_mapping = dict()
+        self.workload_dimensions_relations = list()
         self.spatially_unrolled_dimensions = list()

@@ -29,7 +29,7 @@ class ZigZagEngine(ScheduleEngine):
                  ):
         super(ZigZagEngine, self).__init__(target=target, exec_module=exec_module,
                                            pattern_name=pattern_name, match_node=match_node)
-        self.lpf_limit=11
+        self.lpf_limit=9
         self.zigzag_temporal_mapping=dict()
         self.zigzag_parser = MatchNodeToZigZagParser(match_node=self.match_node, pattern_name=self.pattern_name)
         self.workload = dict()
@@ -102,6 +102,7 @@ class ZigZagEngine(ScheduleEngine):
         self.workload[1]["w_tensor"] = self.zigzag_operands_to_tensors["W"]
         current_spatial_mapping = self.spatial_mapping
         found_valid_temporal_mapping = False
+        temp_mapping_search_iter = 0
         while not found_valid_temporal_mapping:
             try:
                 print("Looking for temporal mapping with following spatial mapping",current_spatial_mapping)
@@ -112,9 +113,10 @@ class ZigZagEngine(ScheduleEngine):
                     opt="latency",
                     dump_filename_pattern=f"tmp/match-layer_?.json",
                     pickle_filename=f"tmp/match-saved_list_of_cmes.pickle",
-                    lpf_limit=self.lpf_limit,
+                    lpf_limit=self.lpf_limit - temp_mapping_search_iter,
                     cost_model_class= self.cost_model
                 )
+                temp_mapping_search_iter += 1
                 if hasattr(cme[0][0],"is_tm_valid"):
                     found_valid_temporal_mapping = cme[0][0].is_tm_valid
             except NoValidLoopOrderingFoundException as exc:
@@ -133,6 +135,8 @@ class ZigZagEngine(ScheduleEngine):
                         break
                 self.spatial_mapping = current_spatial_mapping
         self.cme = cme[0][0]
+        if len(self.cme.allocated_buffers) < self.cme.max_num_buffers:
+            print(f"[ZIGZAG_ENGINE] Found valid temporal mapping with {len(self.cme.allocated_buffers)} buffers, but it is less than the maximum number of buffers {self.cme.max_num_buffers}.")
 
     def generate_schedule(self): 
         self.zigzag_set_exec_module()
@@ -144,6 +148,7 @@ class ZigZagEngine(ScheduleEngine):
             self.latency=-1
             self.cme=None
             print(f"[ZIGZAG_ENGINE] No valid loop ordering found: {exc}")
+            breakpoint()
             raise Exception(f"[ZIGZAG_ENGINE] No valid loop ordering found: {exc}")
         self.zigzag_temporal_mapping = self.cme.temporal_mapping.mapping_dic_stationary
         if DEBUG_MODE_MATCH:
@@ -161,7 +166,7 @@ class ZigZagEngine(ScheduleEngine):
             zigzag_parser=self.zigzag_parser,
             cme=cme,
             zigzag_operands=self.zigzag_operands,
-            zigzag_temporal_mapping=cme.temporal_mapping.mapping_dic_stationary,
+            zigzag_temporal_mapping=cme.temporal_mapping.mapping_dic_origin,
             spatial_mapping=cme.layer.user_spatial_mapping if cme.layer is not None else self.spatial_mapping[self.pattern_name]["spatial_mapping"],
             zigzag_operands_to_tensors=self.zigzag_operands_to_tensors,
             platform_memories=self.platform_memories,
@@ -171,3 +176,7 @@ class ZigZagEngine(ScheduleEngine):
     
     def transform_schedule(self):
         return self.transform_schedule_(self.cme)
+    
+    def apply_constraints(self, schedule: MatchSchedule):
+        schedule.buffers = self.cme.allocated_buffers
+        return schedule

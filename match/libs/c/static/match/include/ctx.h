@@ -25,6 +25,7 @@ typedef struct {
     int curr_size;
     int curr_max_size;
     int global_idx;
+    float idx_remainder;
 } MatchDim;
 
 typedef struct MatchDims_t {
@@ -40,6 +41,7 @@ typedef struct MatchDims_t {
 typedef struct {
     MatchDim* dim;
     int size;
+    float idx_remainder;
     int max_size;
     int start_idx;
     int curr_idx;
@@ -51,6 +53,7 @@ typedef struct {
     unsigned int* pts;
     void* pt;
     int num_tiles;
+    int tensor_type;
     int curr_tile;
     int num_dims;
     int bits;
@@ -63,75 +66,6 @@ typedef struct MatchTensors_t {
     int (*get_tensor_idx)(struct MatchTensors_t*, const char*);
     MatchTensor* tensors;
 } MatchTensors;
-
-// Operation Attributes
-
-typedef struct {
-    int idx;
-    int strides[3];
-    int dilation[3];
-    int padding[6];
-    int kernel_size[3];
-    int depthwise;
-    int groups;
-    const char* data_layout;
-    const char* kernel_layout;
-} MatchConv3DAttrs;
-
-typedef struct {
-    int idx;
-    int strides[2];
-    int dilation[2];
-    int padding[4];
-    int kernel_size[2];
-    int depthwise;
-    int groups;
-    const char* data_layout;
-    const char* kernel_layout;
-} MatchConv2DAttrs;
-
-typedef struct {
-    int idx;
-    int inp_features;
-    int out_features;
-} MatchDenseAttrs;
-
-typedef struct {
-    int idx;
-    int right_shift;
-} MatchRightShiftAttrs;
-
-typedef struct {
-    int idx;
-    int clip_min;
-    int clip_max;
-} MatchClipAttrs;
-
-typedef struct {
-    int idx;
-} MatchCastAttrs;
-
-typedef struct {
-    int idx;
-    int axis;
-    int bias;
-}MatchBiasAddAttrs;
-
-typedef struct {
-    int idx;
-    int axis;
-    int multiplier;
-}MatchMultiplyAttrs;
-
-typedef struct {
-    int idx;
-    int axis;
-    int adder;
-}MatchAddAttrs;
-
-typedef struct {
-    int idx;
-} MatchReLUAttrs;
 
 // Operations
 
@@ -189,8 +123,12 @@ inline int match_get_pad_x_of_tile(MatchTensorTile* tile) {
 }
 
 inline int match_get_pad_y_of_tile(MatchTensorTile* tile) {
+    // TODO: check which version is correct
+    // upstream padding calculation
     int remaining = tile->dim->size - (tile->dim->curr_max_size + tile->curr_idx);
     return remaining < 0 ? -remaining : 0;
+    // odl padding calculation
+    // return tile->dim->size-(tile->max_size+tile->curr_idx)<0?-(tile->dim->size-(tile->max_size+tile->curr_idx)):0;
 }
 
 #endif

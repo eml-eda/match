@@ -1,6 +1,7 @@
 from match.cost_model.zigzag import ZigZagMatchCostModel
 from math import prod,ceil,floor
 
+FORCE_TILING = False
  
 def depthwise_generic_latency(
     input_tile_dim, 
@@ -90,6 +91,10 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
     def adjust_temporal_mapping(self, temporal_mapping_dict, operand_list, layer):
         temporal_mapping_dict,valid = super().adjust_temporal_mapping(temporal_mapping_dict, operand_list, layer)
         if valid and "I" in operand_list:
+            if FORCE_TILING and len(temporal_mapping_dict["O"][1])==0:
+                min_innermost_loops = len(temporal_mapping_dict["O"][0]) - 1
+                temporal_mapping_dict["O"][1]=temporal_mapping_dict["O"][0][min_innermost_loops:]+temporal_mapping_dict["O"][1]
+                temporal_mapping_dict["O"][0]=temporal_mapping_dict["O"][0][:min_innermost_loops]
             min_innermost_loops=min([len(temporal_mapping_dict[operand][0]) for operand in operand_list])
             new_innermost_loops=min_innermost_loops
             max_tile_found=False
@@ -115,6 +120,8 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
             return temporal_mapping_dict,valid
 
     def def_transfer_cost(self):
+        if self.pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_grad_params", "conv2d_transpose"]:
+            return super().def_transfer_cost()
         USE_SIMPLER_MODEL = False
         if USE_SIMPLER_MODEL:
             def get_stride_2_op(operand):
@@ -192,11 +199,11 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
                 
                 TRANS_CYCLES = 0
                 if operand in self.input_operands and operand!="W":
-                    IN_HEIGHT_L1 = self.size_per_mem_level[operand]["OY"][0]
-                    IN_HEIGHT_L2 = self.size_per_mem_level[operand]["OY"][1]
+                    IN_HEIGHT_L1 = self.size_per_mem_level[operand]['IY' if 'IY' in self.size_per_mem_level[operand] else 'OY'][0]
+                    IN_HEIGHT_L2 = self.size_per_mem_level[operand]['IY' if 'IY' in self.size_per_mem_level[operand] else 'OY'][1]
 
-                    IN_WIDTH_L1 = self.size_per_mem_level[operand]["OX"][0]
-                    IN_WIDTH_L2 = self.size_per_mem_level[operand]["OX"][1]
+                    IN_WIDTH_L1 = self.size_per_mem_level[operand]['IX' if 'IX' in self.size_per_mem_level[operand] else 'OX'][0]
+                    IN_WIDTH_L2 = self.size_per_mem_level[operand]['IX' if 'IX' in self.size_per_mem_level[operand] else 'OX'][1]
 
                     IN_CHANNELS_L1 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
                     IN_CHANNELS_L2 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][1]
@@ -255,8 +262,12 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         latency=0
         ch_in = self.loop_sizes["C"]
         ch_out = self.size_per_mem_level["O"]["K"][0]
-        kernel_size_x = self.loop_sizes['FX']
-        kernel_size_y = self.loop_sizes['FY']
+        kernel_size_x = 1
+        kernel_size_y = 1
+        if "FX" in self.loop_sizes:
+            kernel_size_x = self.loop_sizes['FX']
+        if "FY" in self.loop_sizes:
+            kernel_size_y = self.loop_sizes['FY']
         output_shape=[1,ch_out,self.size_per_mem_level["O"]["OY"][0],self.size_per_mem_level["O"]["OX"][0]]
         if self.pattern_name in ["conv2d","pointwise_conv2d"]:
             IS_POINTWISE = self.pattern_name=="pointwise_conv2d"
@@ -316,3 +327,10 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         else:
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)
         return latency
+    
+    def def_overall_execution(self):
+        # training patterns
+        if self.pattern_name in ["conv2d_train", "conv2ddw_train", "conv2d_grad_params", "conv2d_transpose"]:
+            self.overall_latency_single_buffer_match_no_comp()
+        else:
+            self.overall_latency_async()

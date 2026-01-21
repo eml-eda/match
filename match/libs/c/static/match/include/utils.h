@@ -7,6 +7,8 @@ int match_strcmp(const char* s1, const char* s2);
 
 int match_byte_checksum_check(const char* data, int size, int checksum);
 
+float match_float_checksum_check(void* data, int size, double checksum);
+
 void handle_int_classifier(int* output_pt, int classes, int runtime_status);
 
 #endif

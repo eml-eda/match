@@ -29,7 +29,6 @@ def match_multi_model(
     for model_name,model in models.items():
         model.compile(target=target,out_path=output_path)
         results[model_name] = CompiledModule.result
-    
     target.gen_libs_and_main(models=models,default_model=default_model,out_path=output_path)
     # log_results(results)
     return results

@@ -10,7 +10,7 @@ class MatchOpAdd(MatchOp):
         super().__init__(out_arr, var_arr, const_arr, op="Add", **kwargs)
         self.axis = axis
         self.adder = adder
-        self.op_code = 9
+        self.op_code = 2
 
     def basic_schedules(self):
         output, activations, biases = self.outs[0], self.vars[0], self.consts[0]

@@ -1,0 +1,13 @@
+def @main(%data: Tensor[(1, 4, 8, 8), float32], %conv0_weight: Tensor[(8, 4, 3, 3), float32], %conv0_bias: Tensor[(8), float32], %dense0_weight: Tensor[(4, 128), float32], %label: Tensor[(1, 4), float32]) -> (float32, Tensor[(1, 4), float32], Tensor[(1, 4), float32], Tensor[(1, 128), float32], Tensor[(1, 8, 8, 8), float32], Tensor[(1, 8, 8, 8), float32], Tensor[(1, 4, 8, 8), float32]) {
+  %0 = nn.conv2d(%data, %conv0_weight, padding=[1, 1, 1, 1], kernel_size=[3, 3]) /* ty=Tensor[(1, 8, 8, 8), float32] */;
+  %1 = nn.bias_add(%0, %conv0_bias) /* ty=Tensor[(1, 8, 8, 8), float32] */;
+  %2 = nn.relu(%1) /* ty=Tensor[(1, 8, 8, 8), float32] */;
+  %3 = nn.max_pool2d(%2, pool_size=[2, 2], strides=[2, 2], padding=[0, 0, 0, 0]) /* ty=Tensor[(1, 8, 4, 4), float32] */;
+  %4 = reshape(%3, newshape=[-1, 128]) /* ty=Tensor[(1, 128), float32] */;
+  %5 = nn.dense(%4, %dense0_weight, units=None) /* ty=Tensor[(1, 4), float32] */;
+  %6 = reshape(%5, newshape=[0, 0]) /* ty=Tensor[(1, 4), float32] */;
+  %7 = nn.log_softmax(%6) /* ty=Tensor[(1, 4), float32] */;
+  %8 = nn.cross_entropy_with_logits(%7, %label) /* ty=float32 */;
+  %9 = copy(%data) /* ty=Tensor[(1, 4, 8, 8), float32] */;
+  (%8, %7, %7, %4, %2, %1, %9)
+}

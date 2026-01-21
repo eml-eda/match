@@ -11,7 +11,7 @@ class MatchOpClip(MatchOp):
         super().__init__(out_arr, var_arr, const_arr, op="Clip", **kwargs)
         self.clip_min = clip_min
         self.clip_max = clip_max
-        self.op_code = 6
+        self.op_code = 8
 
     def basic_schedules(self):
         output, activations = self.outs[0], self.vars[0]

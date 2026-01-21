@@ -25,7 +25,7 @@ class MatchOpConv3D(MatchOp):
         self.data_layout = data_layout
         self.kernel_layout = kernel_layout
         self.out_dtype = out_dtype
-        self.op_code = 11
+        self.op_code = 4
     
     def basic_schedules(self) -> List[MatchSchedule]:
         output, activations, weights = self.outs[0], self.vars[0], self.consts[0]

@@ -66,9 +66,13 @@ def c_friendly_npvalue(arr):
 def get_random_np_array(dtype, shape, min_val=None, max_val=None):
     shape = [int(i) for i in shape]
     if np.issubdtype(dtype, np.floating):
+        if len(shape) == 0:
+            data = np.random.rand(1)
+        else: 
+            data = np.random.rand(*shape)
         if min_val is not None and max_val is not None:
-            return (max_val - min_val) * np.random.rand(*shape).astype(dtype) + min_val
-        return np.random.rand(*shape).astype(dtype)
+            return (max_val - min_val) * data.astype(dtype) + min_val
+        return data.astype(dtype)
     elif np.issubdtype(dtype, np.integer):
         info = np.iinfo(dtype)
         return np.random.randint(info.min if min_val is None or not isinstance(min_val,(int, float)) else min_val,

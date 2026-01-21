@@ -16,8 +16,6 @@ class ZigZagTransformMappingToSchedule:
                  zigzag_operands, zigzag_temporal_mapping, spatial_mapping, zigzag_operands_to_tensors,
                  platform_memories):
         self.match_node = match_node
-        self.mem_hierarchy = mem_hierarchy
-        self.mem_hierarchy_dict = mem_hierarchy_dict
         self.workload = workload
         self.zigzag_parser = zigzag_parser
         self.cme = cme
@@ -154,7 +152,7 @@ class ZigZagTransformMappingToSchedule:
                                     continue
                                 if dim.dim_dependency:
                                     new_size = 0
-                                    for ind_dim,mult in dim.dim_dependency.size_dependencies.items():
+                                    for (ind_dim,mult) in dim.dim_dependency.size_dependencies:
                                         new_size += (mult*(ind_dim if not hasattr(ind_dim,"name") else steps[ind_dim.name]))
                                     new_size = int(new_size)
                                     self.schedule.tensor_tiles[tensor.name][mem_idx].tiled_dims[dim_idx].max_size = new_size
@@ -189,7 +187,8 @@ class ZigZagTransformMappingToSchedule:
                             ],
                         ) for idx,tm in enumerate(self.temporal_mapping)
                     ],
-                    backend="ZigZag"
+                    backend="ZigZag",
+                    num_buffers_for_computation=int(self.platform_memories[0].double_buffering_support)+1
                 )
             ],
             # ZigZag schedule shouldnt use intermediate tensors

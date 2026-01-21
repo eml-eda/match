@@ -10,7 +10,7 @@ class MatchOpMultiply(MatchOp):
         super().__init__(out_arr, var_arr, const_arr, op="Multiply", **kwargs)
         self.axis = axis
         self.multiplier = multiplier
-        self.op_code = 8
+        self.op_code = 10
 
     def basic_schedules(self):
         output, activations, biases = self.outs[0], self.vars[0], self.consts[0]

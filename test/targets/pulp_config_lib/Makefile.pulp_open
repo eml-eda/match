@@ -18,6 +18,8 @@ INC_PATHS = -I${STANDALONE_CRT_PATH}/include \
 			 $(foreach model, $(MODEL_DIRS), -I$(model)/include) \
 			 -I ./include/
 
+INC_PATHS += -I ./include/pulp_train/  # temp fix
+
 # Source files
 SRC =  $(foreach model, $(MODEL_DIRS), $(wildcard $(model)/src/*.c)) $(shell find $(abspath $(SRC_DIR)) -name '*.c')  $(STANDALONE_CRT_PATH)/src/runtime/crt/common/crt_backend_api.c $(STANDALONE_CRT_PATH)/src/runtime/crt/memory/stack_allocator.c
 
@@ -33,8 +35,16 @@ OPT_LEVEL = 3
 # Use -DPULP for preprocessor in malloc wrapper
 # Need to link in libm for math.h inclusion in softmax operator
 APP_CFLAGS += -DNUM_CORES=$(CORE) -g $(INC_PATHS) -DNDEBUG -O$(OPT_LEVEL) -DPULP 
+
+# flags for PULP-TrainLib (to improve)
+APP_CFLAGS += -DOPTIMIZE 
+
 # GAP9 fixes, the first because abort() is not in stdlib. The second to avoid a crt_backend_api.c error
 APP_CFLAGS +=  -Wno-error=format -w -fno-indirect-inlining -w #-flto
+
+# FP32 precision flags, keep on if precision is good otherwise put off
+APP_CFLAGS += -ffp-contract=on
+
 APP_LDFLAGS += -lm -Wl,--print-memory-usage #-flto
 
 GAP9_DEFAULT_FLASH_TYPE = DEFAULT_FLASH

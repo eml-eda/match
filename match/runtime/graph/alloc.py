@@ -159,8 +159,8 @@ def try_to_allocate(
         tensor.load_from_ext_mem_at = list()
         tensor.move_temp_to_ext_mem = list()
         tensor.stored_in_external_memory = True
-        if tensor.is_output:
-            print(f"[MEMORY PLANNER] Tensor {tensor.name} is an output tensor")
+        # if tensor.is_output:
+            # print(f"[MEMORY PLANNER] Tensor {tensor.name} is an output tensor")
         for time in range(tensor.start_usage, tensor.last_usage+1):
             if time in calls_idxs:
                 if time in tensor.used_at:
@@ -294,6 +294,9 @@ def try_allocate_easy(
     separeted_intermediate_fine: bool=False,
     tens_size: int=1, time: int=0
 ):
+    
+    # print('tens_size:', tens_size)
+    # print('available_soc_bytes', available_soc_bytes)
     # allocate a single time
     allocated = False
     # check if theres enough space from the last tensor to the end of the memory
@@ -325,19 +328,35 @@ def allocate_tensor(
     tensor_fixed_to_ext_mem: bool=False,
     tensor: MatchMemoryTensor=None
 ):
+
+    # print(f"[MEMORY PLANNER] tensors_allocated_at_time: {tensors_allocated_at_time}")
+    # print(f"[MEMORY PLANNER] free_size_at_time: {free_size_at_time}")
+    # print('tensor.used_at:', tensor.used_at, len(tensor.used_at))
+    
+    # do not allocate any input tensor that is not used anywhere
+    if tensor.is_input and len(tensor.used_at) == 0:
+        return
+    
     tens_size = tensor.num_bytes
     max_allocated_tensors_at = -1
     less_free_mem_at = -1
     for time in range(tensor.start_usage, tensor.last_usage+1):
         if time in calls_idxs and time in tensor.used_at:
+            # print('time:', time)
             if max_allocated_tensors_at==-1 or len(tensors_allocated_at_time[time])>len(tensors_allocated_at_time[max_allocated_tensors_at]):
                 max_allocated_tensors_at = time
             if less_free_mem_at==-1 or free_size_at_time[time]<free_size_at_time[less_free_mem_at]:
                 less_free_mem_at = time
+    
+    # print('- max_allocated_tensors_at:',max_allocated_tensors_at)
+    # print('- less_free_mem_at:',less_free_mem_at)
+
+
     # found the most congested spot
     allocated = False
     if max_allocated_tensors_at!=-1:
         if len(tensors_allocated_at_time[max_allocated_tensors_at])>1:
+            # print('[try_allocate_congested] start')
             allocated = try_allocate_congested(
                 calls_idxs=calls_idxs,
                 tensors_allocated_at_time=tensors_allocated_at_time,
@@ -347,6 +366,8 @@ def allocate_tensor(
                 tens_size=tens_size,
                 time=max_allocated_tensors_at
             )
+            # print('[try_allocate_congested] allocated:',allocated)
+
             if not allocated:
                 allocated = try_allocate_congested(
                     calls_idxs=calls_idxs,
@@ -360,6 +381,7 @@ def allocate_tensor(
                 )
         
         elif len(tensors_allocated_at_time[max_allocated_tensors_at])==1:
+            # print('[try_allocate_buffer] start')
             allocated = try_allocate_buffer(
                 calls_idxs=calls_idxs,
                 tensors_allocated_at_time=tensors_allocated_at_time,
@@ -369,6 +391,8 @@ def allocate_tensor(
                 tens_size=tens_size,
                 time=max_allocated_tensors_at
             )
+            # print('[try_allocate_buffer] allocated:',  allocated)
+
             if not allocated:
                 allocated = try_allocate_buffer(
                     calls_idxs=calls_idxs,
@@ -382,6 +406,7 @@ def allocate_tensor(
                 )
         else:
             # try to allocate at 0
+            # print('[try_allocate_easy] start' )
             allocated = try_allocate_easy(
                 calls_idxs=calls_idxs,
                 tensors_allocated_at_time=tensors_allocated_at_time,
@@ -391,6 +416,7 @@ def allocate_tensor(
                 tens_size=tens_size,
                 time=max_allocated_tensors_at
             )
+            # print('[try_allocate_easy] allocated:',  allocated)
             if not allocated:
                 allocated = try_allocate_easy(
                     calls_idxs=calls_idxs,
@@ -403,10 +429,10 @@ def allocate_tensor(
                     time=max_allocated_tensors_at
                 )
     if not allocated:
-        print(f"[MEMORY PLANNER] Couldnt allocate all the tensors, tensor {tensor.name} allocation was not successfull")
-        print(f"[MEMORY PLANNER] Node at {max_allocated_tensors_at} cannot fit SoC memory")
+        print(f"[MEM PLANNER] Couldnt allocate all the tensors, tensor {tensor.name} allocation was not successfull")
+        print(f"[MEM PLANNER] Node at {max_allocated_tensors_at} cannot fit SoC memory")
         # TODO: add list of nodes to run from external memory
-        raise Exception(f"[MEMORY PLANNER] Couldnt allocate all the tensors, tensor {tensor.name} with size {tens_size} allocation was not successfull")
+        raise Exception(f"[MEM PLANNER] Couldnt allocate all the tensors, tensor {tensor.name} with size {tens_size} allocation was not successfull")
 
     for time_ in tensor.mem_offset_at:
         free_size_at_time[time_] -= tensor.num_bytes

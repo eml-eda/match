@@ -56,13 +56,23 @@ extern volatile MatchCtx* ${name}_ctx;
 
 % for dep_dim in match_node.dependent_dims:
 inline void ${name}_update_${dep_dim.name}(){
+    % if dep_dim.dim_dependency.is_idx_floating:
+    float idx_float_val_ = 
+    % else:
     ${name}_${dep_dim.name}->global_idx = 
-    % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.idx_dependencies.items()):
-    ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else name+"_"+ind_dim.name+"->global_idx"})
+    % endif
+    % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.idx_dependencies):
+    ${" + " if idx_dep>0 else ""}(${"(float)" if dep_dim.dim_dependency.is_idx_floating else ""}${mult}*${ind_dim if not hasattr(ind_dim,"name") else name+"_"+ind_dim.name+"->global_idx"})
     % endfor
     ;
+    % if dep_dim.dim_dependency.is_idx_floating:
+    // added for float-int casting purposes, e.g. since the idx is a float if its 0.3f we want it to be 0
+    ${name}_${dep_dim.name}->idx_remainder = idx_float_val_<0.0f?idx_float_val_ + (int)idx_float_val_:idx_float_val_ - (int)idx_float_val_;
+    if ((idx_float_val_ - (int)idx_float_val_) != 0.0f) idx_float_val_ -= ${name}_${dep_dim.name}->idx_remainder;
+    ${name}_${dep_dim.name}->global_idx = idx_float_val_;
+    % endif
     ${name}_${dep_dim.name}->curr_max_size = 
-    % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.size_dependencies.items()):
+    % for idx_dep,(ind_dim,mult) in enumerate(dep_dim.dim_dependency.size_dependencies):
     ${" + " if idx_dep>0 else ""}(${mult}*${ind_dim if not hasattr(ind_dim,"name") else name+"_"+ind_dim.name+"->curr_size"})
     % endfor
     ;
@@ -84,14 +94,14 @@ inline void ${name}_update_${dep_dim.name}(){
             ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
             ${name}_${lp.dim.name}->curr_size = ${lp.step};
             ${name}_${lp.dim.name}->curr_max_size = ${lp.step};
-            % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
+            % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependent_on_dims]:
             ${name}_update_${dep_dim}();
             % endfor
         }
         inline int ${name}_block_${block_idx}_loop_${lp.name}_reset(){
             // ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
             ${name}_${lp.dim.name}->global_idx -= ${lp.step*lp.size};
-            % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
+            % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependent_on_dims]:
             ${name}_update_${dep_dim}();
             % endfor
             return 0;
@@ -102,7 +112,7 @@ inline void ${name}_update_${dep_dim.name}(){
             // update the current size of the dim
             ${name}_${lp.dim.name}->curr_size = ${lp.step};
             ${name}_${lp.dim.name}->curr_max_size = ${lp.step};
-            % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependencies]:
+            % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependent_on_dims]:
             ${name}_update_${dep_dim}();
             % endfor
         }

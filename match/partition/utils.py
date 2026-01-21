@@ -4,7 +4,7 @@ def add_checks_get_first_op(node, op):
     if not isinstance(node, relay.Call):
         print(f"[PATTERN MATCHING-UTILS] Searching op {op} but op {op} is not a call node")
         raise Exception(f"[PATTERN MATCHING-UTILS] Searching op {op} but op {op} is not a call node")
-    while node.op.name!=op:
+    while not hasattr(node.op, 'name') or node.op.name != op:
         found = False
         for arg in node.args:
             if isinstance(arg, relay.Call):
@@ -13,7 +13,8 @@ def add_checks_get_first_op(node, op):
                 break
         if not found:
             print(f"[PATTERN MATCHING-UTILS] Searching op {op} but op {node.op.name} doesn't have any op as args")
-            raise Exception(f"[PATTERN MATCHING-UTILS] Searching op {op} but op {node.op.name} doesn't have any op as args")
+            return None
+            # raise Exception(f"[PATTERN MATCHING-UTILS] Searching op {op} but op {node.op.name} doesn't have any op as args")
     return node
 
 def add_checks_get_all_ops(node, op):
