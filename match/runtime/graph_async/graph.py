@@ -331,7 +331,7 @@ class MatchTVMGraphRuntime:
                     
         # Prepare template data for codegen
         template_data = {
-            "async": True,
+            "run_matcha": True,
             "target": self.target,
             "mem_tensors": mem_tensors,
             "ext_mem_needed_bytes": self.ext_mem_needed_bytes,

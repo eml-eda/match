@@ -199,7 +199,7 @@ def partition(mod, params, dpu, opts):
     pipeline.append(transform.InferType())
     pipeline.append(MatchSaveRelay(f"{saved_relay_id()}_transformed"))
 
-    if True:
+    if target.enable_device_parallelism:
         pipeline.append(MatchOptimizer(target))
     else:
         pipeline.append(transform.MergeComposite(pattern_table(target=target)))

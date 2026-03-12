@@ -33,7 +33,7 @@ void match_${model_name}_runtime(
         match_ctx->status = tvmgen_${model_name}_run(&model_inps_${model_name.upper()},&model_outs_${model_name.upper()});
 
     % elif executors[model_name] == "graph":
-        match_ctx->status = match_${model_name}_run_graph_async(
+        match_ctx->status = match_${model_name}_run_graph${"_async" if run_matcha else ""}(
             % for inp_name,inp in inputs.items():
                 ${inp_name}_pt,
             % endfor

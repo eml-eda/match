@@ -13,7 +13,8 @@ import tvm
 from tvm import relay
 
 from match.compile.c_graph import MatchCompilerCGraph
-from match.runtime.graph_async.graph import MatchTVMGraphRuntime
+from match.runtime.graph.graph import MatchTVMGraphRuntime
+from match.runtime.graph_async.graph import MatchTVMGraphRuntime as MatchTVMGraphAsyncRuntime
 from match.relay.get_relay import get_dyn_relay_from, get_relay_from
 from match.utils import (
     save_all_relay,
@@ -228,6 +229,7 @@ class MatchModel:
             + [key_ for key_ in self.other_models],
             "target": target,
             "executors": self.executors,
+            "run_matcha" : False,
         }
         # if not there move and unzip the TVM runtime
         if not Path(abs_out_path + "/runtime").is_dir():
@@ -299,7 +301,8 @@ class MatchModel:
                 params_bytes = params_file.read()
             params = relay.load_param_dict(params_bytes)
             # now with both params and mod info generate a runtime considering memory planning etc.
-            graph_runtime = MatchTVMGraphRuntime(
+            __graph_runtime_cls__ = MatchTVMGraphRuntime if not target.enable_device_parallelism else MatchTVMGraphAsyncRuntime
+            graph_runtime = __graph_runtime_cls__(
                 target=target,
                 mod_info=mod_info,
                 params=params,
@@ -322,10 +325,11 @@ class MatchModel:
                     filename = os.path.dirname(__file__) + "/../libs/c/mako/match/src/graph.c"
                     content = Template(filename=filename).render(**graph_runtime_template_data)
                     run_file.write(format_c_code(content))
-                with open(f"{build_dir}/codegen/host/src/{model_name}_graph_async.c", "w") as run_file:
-                    filename = os.path.dirname(__file__) + "/../libs/c/mako/match/src/graph_async.c"
-                    content = Template(filename=filename, strict_undefined=True).render(**graph_runtime_template_data)
-                    run_file.write(format_c_code(content))
+                if target.enable_device_parallelism:
+                    with open(f"{build_dir}/codegen/host/src/{model_name}_graph_async.c", "w") as run_file:
+                        filename = os.path.dirname(__file__) + "/../libs/c/mako/match/src/graph_async.c"
+                        content = Template(filename=filename, strict_undefined=True).render(**graph_runtime_template_data)
+                        run_file.write(format_c_code(content))
                 with open(f"{build_dir}/codegen/host/include/{model_name}_graph.h", "w") as run_file:
                     filename = os.path.dirname(__file__) + "/../libs/c/mako/match/include/graph.h"
                     content = Template(filename=filename).render(**graph_runtime_template_data)
@@ -379,7 +383,7 @@ class MatchModel:
                         raise e
 
             subprocess.getoutput(f"rm {build_dir}/mod.tar")
-
+            
         # create codegen if it doesn't exist
         if not Path(abs_out_path + "/codegen").is_dir():
             subprocess.getoutput(f"mkdir {abs_out_path}/codegen")

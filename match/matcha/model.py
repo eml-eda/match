@@ -229,6 +229,7 @@ class MatchaModel:
             + [key_ for key_ in self.other_models],
             "target": target,
             "executors": self.executors,
+            "run_matcha" : True,
         }
         # if not there move and unzip the TVM runtime
         if not Path(abs_out_path + "/runtime").is_dir():

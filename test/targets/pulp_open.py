@@ -11,8 +11,8 @@ from tvm import relay
 # pulp config
 PULP_CORES = 8
 L1_SCRATCHPAD_KB_SIZE = 38
-L2_SHARED_MEM_KB_SIZE = 512
-L3_FLASH_KB_SIZE = 8*1024
+L2_SHARED_MEM_KB_SIZE = 16*1024
+L3_FLASH_KB_SIZE = 16*1024
 ASYNC_DMA = False
 
 class PulpOpen(MatchTarget):

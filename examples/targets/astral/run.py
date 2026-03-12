@@ -16,14 +16,14 @@ from match.relay.utils.utils import create_random_array
 import tvm
 from tvm import relay
 from match.model.model import MatchModel
-from carfield import Carfield
+from examples.targets.astral.astral import Astral
 
 INPUT_FILE_PATH = "models/qyolo_chw_inp.txt"
 ONNX_FILE_PATH = "models/qyolo.onnx"
-# MODEL_NAME = "qyolo"
-MODEL_NAME = "smalldense"
+MODEL_NAME = "qyolo"
+# MODEL_NAME = "smalldense"
 HOST_ONLY = False
-EXECUTOR = "graph"
+EXECUTOR = "aot"
 OUTPUT_DIR = MODEL_NAME + "_" + EXECUTOR + "_" + ("host" if HOST_ONLY else "cluster")
 
 # python3 test.py --executor graph --target pulp_open --model yolo_sanitized_uint8_fix --min_input_val 0 --max_input_val 0 --handle_out_fn handle_yolo_output --input_files /home/moyne/phd/yolo/yolov5relu-tristan-industrial/exp/qat21/golden/input_quantizer.txt
@@ -108,7 +108,9 @@ oenne_model = MatchModel(
     profile=True,
     profile_fallback=True,
 )
-target = Carfield()
+target = Astral(
+    # run_nodes_on_dram = True,
+)
 if HOST_ONLY:
     target.disable_exec_module("pulp_cluster")
 match.match(
@@ -116,3 +118,8 @@ match.match(
     target = target,
     output_path = OUTPUT_DIR,
 )
+
+print("Done! Output files are in ", OUTPUT_DIR)
+print(f"Found {target.__nodes_found__} nodes matched")
+print(f"Of which {target.__same_node_found__} used same cached schedule")
+print(f"And {target.__diff_node_found__} used different cached schedule")

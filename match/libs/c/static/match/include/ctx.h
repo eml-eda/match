@@ -4,6 +4,8 @@
 #include <match/ops.h>
 #include <match/utils.h>
 
+#define __MATCH_INVALID_TASK_ID__ 0xFFFFFFF0
+
 // Enums
 
 typedef enum {

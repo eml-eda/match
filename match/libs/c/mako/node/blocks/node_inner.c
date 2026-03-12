@@ -15,38 +15,38 @@
 <%def name="smp_primary_core_region_begin()">
     <% global smp_region_counter %>
     % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
-        if (!${platform_apis.smp_primary_core_guard}(ctx)) goto smp_skip_${smp_region_counter};
+        // if (!${platform_apis.smp_primary_core_guard}(ctx)) goto smp_skip_${smp_region_counter};
     % endif
 </%def>
 
 <%def name="smp_primary_core_region_end()">
     <% global smp_region_counter %>
     % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
-        smp_skip_${smp_region_counter}: ;
+        // smp_skip_${smp_region_counter}: ;
     % endif
     <% smp_region_counter += 1 %>
 </%def>
 
 <%def name="profile_region_begin()">
-    % if not exec_module.separate_build and exec_module.timer_start_fn != "":
+    % if profile_inside_node and not exec_module.separate_build and exec_module.timer_start_fn != "":
         ${exec_module.timer_start_fn}();
-    %elif exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+    %elif profile_inside_node and exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
         ${exec_module.timer_start_fn}();
     % endif
 </%def>
 
 <%def name="profile_region_end(label)">
-    % if not exec_module.separate_build and exec_module.timer_stop_fn != "":
+    % if profile_inside_node and not exec_module.separate_build and exec_module.timer_stop_fn != "":
         ${name}_stats.${label}_cycles += ${exec_module.timer_stop_fn}();
-    % elif exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+    % elif profile_inside_node and exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
         real_args[8 + ${"0" if label=="compute" else "1" if label=="load" else "2"}] += ${exec_module.timer_stop_fn}();
     % endif
 </%def>
 
 <%def name="profile_var(label)">
-    % if not exec_module.separate_build and exec_module.timer_start_fn != "":
+    % if profile_inside_node and not exec_module.separate_build and exec_module.timer_start_fn != "":
         ${name}_stats.${label} += 
-    % elif exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
+    % elif profile_inside_node and exec_module.separate_build and exec_module.timer_start_fn != "" and platform_apis.init_platform != "":
         real_args[8 + ${"3" if label=="load_bytes" else "4"}] +=
     % endif
 </%def>

@@ -47,6 +47,12 @@ void carfield_shutdown() {
     mini_printf("\r\nBye.\r\n");
 }
 
+void carfield_wait_eoc() {
+    asm volatile("wfi":::"memory");
+    asm volatile("fence rw,rw":::"memory"); // important
+}
+
+/* PULP CLUSTER */
 
 void pulp_cluster_reset() {
     volatile uint32_t *booten_addr = (uint32_t*)(CAR_INT_CLUSTER_BOOTEN_ADDR(car_soc_ctrl));
@@ -86,7 +92,7 @@ void pulp_cluster_send_task_poll(volatile uint32_t* args, uint32_t task_id) {
 
 
 int pulp_cluster_wait_end_of_task_poll(volatile uint32_t* args, uint32_t task_id) {
-    while (args[0] != 0xFFFFFFF0) {
+    while (args[0] != __MATCH_INVALID_TASK_ID__) {
         asm volatile("fence r,rw" ::: "memory");
     }
     return 0;

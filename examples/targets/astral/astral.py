@@ -12,25 +12,30 @@ PULP_CORES = 8
 #L2_SHARED_MEM_KB_SIZE = 256*1024
 
 L1_SCRATCHPAD_KB_SIZE = 101
+# L1_SCRATCHPAD_KB_SIZE = 16*1024
 L2_SHARED_MEM_KB_SIZE = 16*1024
 L3_FLASH_KB_SIZE = 16*1024
 
 ASYNC_DMA = False
 
-class Carfield(MatchTarget):
+class Astral(MatchTarget):
     def __init__(self):
-        super(Carfield,self).__init__([
-            PulpCluster(
-                num_cores=PULP_CORES,
-                l1_kb_size=L1_SCRATCHPAD_KB_SIZE,
-                l2_kb_size=L2_SHARED_MEM_KB_SIZE,
-                l3_kb_size=L3_FLASH_KB_SIZE,
-                async_dma=ASYNC_DMA
-            )
-        ],name="carfield")
+        super(Astral,self).__init__(
+            [
+                PulpCluster(
+                    num_cores=PULP_CORES,
+                    l1_kb_size=L1_SCRATCHPAD_KB_SIZE,
+                    l2_kb_size=L2_SHARED_MEM_KB_SIZE,
+                    l3_kb_size=L3_FLASH_KB_SIZE,
+                    async_dma=ASYNC_DMA
+                )
+            ],
+            name="carfield",
+        )
         self.set_target_host()
         self.set_paths()
         self.set_apis()
+        self.enable_device_parallelism = False
 
     def set_target_host(self):
         self.cpu_type = "riscv_cpu -march=riscv64"
@@ -74,6 +79,8 @@ class Carfield(MatchTarget):
         self.timer_start_fn = "carfield_timer_start"
         self.timer_stop_fn = "carfield_timer_stop"
         self.fix_io_tensors_in_ext_mem = False
+        # wait
+        self.wait_eoc = "carfield_wait_eoc"
 
     def network_transformations(self, opts):
         return [
@@ -84,5 +91,10 @@ class Carfield(MatchTarget):
     
     def host_memories(self):
         return [
-            MemoryInst(name="L2_SHARED_MEM",k_bytes=L2_SHARED_MEM_KB_SIZE),
+            MemoryInst(name="MEM_L2",k_bytes=L2_SHARED_MEM_KB_SIZE),
+            # MemoryInst(
+            #     name="MEM_L1_PULPD", 
+            #     k_bytes=L2_SHARED_MEM_KB_SIZE,
+            #     # sw_controlled=True
+            # ),
         ]

@@ -90,16 +90,17 @@ int main(int argc, char** argv){
         % if exec_module.separate_build:
             // Offloading ${exec_module.name} runtime
             asm volatile("":::"memory");
-            for (int i = 0; ${exec_module.name}_binary_sections[i].size != 0; i++) {
-                ${target.offload_dma_fn}(
-                    ${exec_module.name}_binary_sections[i].src,
-                    ${exec_module.name}_binary_sections[i].dst,
-                    ${exec_module.name}_binary_sections[i].size
-                );
-            }
+            // for (int i = 0; ${exec_module.name}_binary_sections[i].size != 0; i++) {
+            //     ${target.offload_dma_fn}(
+            //         ${exec_module.name}_binary_sections[i].src,
+            //         ${exec_module.name}_binary_sections[i].dst,
+            //         ${exec_module.name}_binary_sections[i].size
+            //     );
+            // }
+            load_binary();
             asm volatile("":::"memory");
             if (${exec_module.name}_boot_addr != NULL) {
-                *(volatile uint32_t*)(${exec_module.shared_memory_extern_addr}) = 0;
+                *(volatile uint32_t*)(${exec_module.shared_memory_extern_addr}) = __MATCH_INVALID_TASK_ID__;
                 asm volatile("":::"memory");
                 ${exec_module.match_platform_apis().init_platform}(${exec_module.name}_boot_addr);
             }

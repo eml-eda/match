@@ -23,12 +23,12 @@ extern "C" {
 #endif
 
 void __attribute__((noreturn)) TVMPlatformAbort(tvm_crt_error_t error_code) {
-  abort();
-  exit(-1);
+  // abort();
+  // exit(-1);
 }
 
 int TVMPlatformMemoryAllocate(size_t num_bytes, DLDevice dev, void** out_ptr) {
-  *out_ptr = malloc(num_bytes);
+  // *out_ptr = malloc(num_bytes);
   // Return nonzero exit code to caller on failure to allocate
   if (*out_ptr == NULL){
       return 1;
@@ -37,13 +37,13 @@ int TVMPlatformMemoryAllocate(size_t num_bytes, DLDevice dev, void** out_ptr) {
 }
 
 int TVMPlatformMemoryFree(void* ptr, DLDevice dev) {
-  free(ptr);
+  // free(ptr);
   return 0;
 }
 
 void TVMLogf(const char* msg, ...) {
   // FIX for GAP9
-  printf(msg);
+  // printf(msg);
   //va_list args;
   //va_start(args, msg);
   //vfprintf(stdout, msg, args);

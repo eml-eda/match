@@ -124,6 +124,7 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
             return super().def_transfer_cost()
         USE_SIMPLER_MODEL = False
         if USE_SIMPLER_MODEL:
+            __is_dw_node__ = "depthwise" in self.pattern_name
             def get_stride_2_op(operand):
                 if operand in ['I','X','Y']:
                     return self.loop_sizes['C' if 'C' in self.size_per_mem_level[operand] else 'K']*self.partial_relevant_loop_sizes['IX']
@@ -140,29 +141,29 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
                     return self.loop_sizes['K']
             def get_num_2d_copies_op(operand):
                 if operand in ['I','X','Y']:
-                    return self.size_per_mem_level[operand]["OY"][0]
+                    return self.size_per_mem_level[operand]["IY"][0]
                 elif operand=='W':
-                    return self.size_per_mem_level["W"]["K"][0] if self.pattern_name!='depthwise_conv_2d' else 1
+                    return self.size_per_mem_level["W"]["K"][0] if not __is_dw_node__ else 1
                 elif operand=='O':
                     return self.size_per_mem_level["O"]["OY"][0]
             def get_num_1d_copies_op(operand):
                 if operand in ['I','X','Y']:
-                    return self.size_per_mem_level[operand]["OX"][0]
+                    return self.size_per_mem_level[operand]["IX"][0]
                 elif operand=='W':
-                    return self.loop_sizes['FY']*self.loop_sizes['FX']*self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else 1
+                    return self.loop_sizes['FY']*self.loop_sizes['FX']*self.loop_sizes['C'] if not __is_dw_node__ else 1
                 elif operand=='O':
                     return self.size_per_mem_level["O"]["OX"][0]
             def get_len_1d_copy_op(operand):
                 if operand in ['I','X','Y']:
                     return self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][0]
                 elif operand=='W':
-                    return self.loop_sizes['C'] if self.pattern_name!='depthwise_conv_2d' else (self.size_per_mem_level["W"]["K"][0])*self.loop_sizes['FY']*self.loop_sizes['FX']
+                    return self.loop_sizes['C'] if not __is_dw_node__ else (self.size_per_mem_level["W"]["K"][0])*self.loop_sizes['FY']*self.loop_sizes['FX']
                 elif operand=='O':
                     return self.size_per_mem_level["O"]["K"][0]
             
             dmaconfstruct={
                 operand:{
-                    'hwc_to_cwh':operand=='I' and self.pattern_name=='depthwise_conv_2d',
+                    'hwc_to_cwh':operand=='I' and __is_dw_node__,
                     'stride_2d':get_stride_2_op(operand),
                     'stride_1d':get_stride_1_op(operand),
                     'num_2d_copies':get_num_2d_copies_op(operand),
@@ -251,7 +252,7 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
                     IN_CHANNELS_L2 = self.size_per_mem_level[operand]['C' if 'C' in self.size_per_mem_level[operand] else 'K'][1]
 
                     # HWC TO CHW
-                    if self.pattern_name in ['depthwise_conv2d','depthwise_conv2d_less_4']:
+                    if "depthwise" in self.pattern_name:
                         BYTES_PER_CYCLE = 1
                         OVERHEAD_BETWEEN_TRANSFERS = 12
                         NUM_TRANSFERS = IN_CHANNELS_L1
@@ -319,8 +320,10 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
         if "FY" in self.loop_sizes:
             kernel_size_y = self.loop_sizes['FY']
         output_shape=[1,ch_out,self.size_per_mem_level["O"]["OY"][0],self.size_per_mem_level["O"]["OX"][0]]
-        if self.pattern_name in ["conv2d","pointwise_conv2d"]:
-            IS_POINTWISE = self.pattern_name=="pointwise_conv2d"
+        __is_conv2d_node__ = "conv2d" in self.pattern_name
+        __is_dw_node__ = "depthwise" in self.pattern_name
+        if __is_conv2d_node__ and (not __is_dw_node__):
+            IS_POINTWISE = (kernel_size_x * kernel_size_y) == 1
             # define scalar costs
             COST_SCALAR_MAC = 14
             COST_SCALAR_LOAD = 3
@@ -359,7 +362,7 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
                 latency = iterations * ((_floor(int(ch_out), 4) * (matmul+leftover_matmul)) + (leftover_out_ch_channels * (leftover_out_ch_matmul+leftover_out_ch_matmul_im2col))) +\
                     iterations * leftover_width_hoparallel * (ch_out * (leftover_width_matmul + leftover_width_matmul_im2col) )
 
-        elif self.pattern_name in ['depthwise_conv2d','depthwise_conv2d_less_4']:
+        elif __is_dw_node__:
             # define scalar costs
             COST_SCALAR_MAC = 2
             COST_SCALAR_LOAD = 2
@@ -370,9 +373,9 @@ class PulpClusterCostModel(ZigZagMatchCostModel):
             # parallelized by 4 over the im2col, 6 loads 8 macs
             vec_matmul = (5 + _floor(kernel_size_x * kernel_size_y, 4) * (2*3 + 1) + 10)
             scalar_matmul = (5 + ((kernel_size_x * kernel_size_y) % 4) * ((2*COST_SCALAR_LOAD) + (1*COST_SCALAR_MAC)) + 10)
-            im2col = self.size_per_mem_level["I"]["OY"][0] * kernel_size_y
+            im2col = self.size_per_mem_level["I"]["IY"][0] * kernel_size_y
             latency = iterations * (im2col + output_shape[2] * (scalar_matmul + vec_matmul + COST_QUANT))
-        elif self.pattern_name=='dense':
+        elif "dense" in self.pattern_name:
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)
         else:
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)

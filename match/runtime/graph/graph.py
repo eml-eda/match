@@ -302,9 +302,9 @@ class MatchTVMGraphRuntime:
                 if "match" not in node["name"]:
                     # run the fallback function to get the debugging values
                     mem_tensor.used_by_tvm = True
-                    output_nd = tvm.nd.empty(shape=mem_tensor.shape, dtype=mem_tensor.dtype)
+                    output_nd = tvm.nd.empty(shape=mem_tensor.shape, dtype=mem_tensor.dtype if "avg_pool" not in node["name"] else "int32")
                     self.host_module[node["attrs"]["func_name"]](*node_activations, output_nd)
-                    activations[mem_tensor.name] = output_nd.numpy()
+                    activations[mem_tensor.name] = output_nd.numpy() if "avg_pool" not in node["name"] else output_nd.numpy().astype(mem_tensor.dtype)
                 else:
                     # run the CPU version of the MATCH-node to get the debugging values
                     module = tvm.contrib.graph_executor.GraphModule(host_lib["default"](self.dev))
@@ -399,7 +399,7 @@ class MatchTVMGraphRuntime:
         
         # template data for code generation
         template_data = {
-            "async": False,
+            "run_matcha": False,
             "target": self.target,
             "mem_tensors": mem_tensors,
             "ext_mem_needed_bytes": self.ext_mem_needed_bytes,

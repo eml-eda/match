@@ -3,12 +3,10 @@
 
 #include <stdint.h>
 
-#ifdef __pulp_cluster__
-#include "pulp.h"
-#endif
+#define DMA_DIR_LOC2EXT 0
+#define DMA_DIR_EXT2LOC 1
 
-#define DMA_DIR_L2_TO_L1 0
-#define DMA_DIR_L1_TO_L2 1
+#define __PULP_NO_DMA__ 1
 
 typedef struct dma_transfer_cfg {
   uint32_t ext;
@@ -29,6 +27,10 @@ void dma_transfer_2d_async(dma_transfer_cfg_t conf);
 void dma_transfer_3d_async(dma_transfer_cfg_t conf);
 void dma_transfer_async(dma_transfer_cfg_t conf);
 void dma_transfer_hwc_to_chw(dma_transfer_cfg_t conf);
+
+void pulp_cluster_transfer_1d(dma_transfer_cfg_t conf);
+void pulp_cluster_transfer_2d(dma_transfer_cfg_t conf);
+void pulp_cluster_transfer_3d(dma_transfer_cfg_t conf);
 
 dma_transfer_id_t dma_transfer_create();
 void dma_transfer_free(dma_transfer_id_t transfer);

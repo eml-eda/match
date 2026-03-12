@@ -59,7 +59,7 @@ PULP_TARGETS = $(TARGETS)
 
 build-offload: 
 	@echo "Building pulp_cluster runtime..."
-	$(MAKE) PULP_LDFLAGS="$(PULP_LDFLAGS) -Tpulpd_link.ld" CONFIG_LIBC_MINIMAL=0 $(PULP_TARGETS)
+	$(MAKE) PULP_LDFLAGS="$(PULP_LDFLAGS) -Tcorrect_link_pulpd.ld" CONFIG_LIBC_MINIMAL=0 $(PULP_TARGETS)
 	/home/fpgauser/pulp_toolchain/bin/riscv32-unknown-elf-objcopy $(PULPD_ELF_REMOVE_SECTIONS) $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime;
 
 	@echo "Generating objdump..."
@@ -91,8 +91,8 @@ PULPD_TEST_NAME ?=
 PULPD_BOOTMODE  ?=
 
 LD_DIR     ?= $(BUILD_DIR)/link
-HOST_LDFLAGS ?= $(CHS_SW_LDFLAGS) -Llink.ld -mcmodel=medany
-# HOST_LD_SCRIPT  ?= $(CHS_ROOT)/sw/link/dram.ld
+HOST_LDFLAGS ?= $(CHS_SW_LDFLAGS) -L$(CAR_LD_DIR)
+# HOST_LD_SCRIPT  ?= /home/fpgauser/git/astral/cheshire/sw/link/dram.ld
 HOST_LD_SCRIPT  ?= link.ld
 
 HOST_INCLUDES    = -I$(CAR_SW_DIR)/include -I$(CHS_SW_DIR)/include $(CHS_SW_DEPS_INCS) -Wno-implicit-function-declaration -Wno-int-conversion -Wno-implicit-int -Wno-incompatible-pointer-types -Wno-unused-function -Wno-unused-variable -Wno-unused-but-set-variable -Wno-unused-parameter -Wno-maybe-uninitialized -Wno-sign-compare -Wno-missing-field-initializers
@@ -108,7 +108,7 @@ $(HOST_LIB): $(HOST_LIB_SRCS_O)
 $(CAR_SW_DIR)/%.car.o: $(CAR_SW_DIR)/%.c
 	$(CHS_SW_CC) $(CAR_SW_INCLUDES) $(CHS_SW_CCFLAGS) -c $< -o $@
 
-HOST_FLAGS := -O3 -mcmodel=medany -T$(HOST_LD_SCRIPT) -Wno-pointer-to-int-cast -DIntClustNumCores=8 -Dhalf=_Float16 -g -march=rv64gc_zifencei
+HOST_FLAGS := -O3 -mcmodel=medany -T$(HOST_LD_SCRIPT) -Wno-pointer-to-int-cast -DIntClustNumCores=8 -Dhalf=_Float16 -g -march=rv64gc_zifencei 
 
 
 
@@ -116,7 +116,7 @@ HOST_FLAGS := -O3 -mcmodel=medany -T$(HOST_LD_SCRIPT) -Wno-pointer-to-int-cast -
 pulp_cluster_RUNTIME_PAYLOAD_HEADER := $(wildcard $(BUILD_DIR)/codegen/*/include/*_pulp_cluster_runtime_payload.h)
 build-payload: build-offload
 	@echo "Building runtime payload..."
-	$(PYTHON) $(BUILD_DIR)/elf2payload.py --binary $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime --output $(pulp_cluster_RUNTIME_PAYLOAD_HEADER)
+	$(PYTHON) $(BUILD_DIR)/elf2payload.py --binary $(BUILD_DIR)/build/pulp_cluster_runtime/pulp_cluster_runtime --vectors $(pulp_cluster_RUNTIME_PAYLOAD_HEADER)
 	@echo "Runtime payload header done."
 
 

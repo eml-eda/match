@@ -283,7 +283,7 @@ class Gap9ClusterCostModel(ZigZagMatchCostModel):
             # parallelized by 4 over the im2col, 6 loads 8 macs
             vec_matmul = (5 + _floor(kernel_size_x * kernel_size_y, 4) * (2*3 + 1) + 10)
             scalar_matmul = (5 + ((kernel_size_x * kernel_size_y) % 4) * ((2*COST_SCALAR_LOAD) + (1*COST_SCALAR_MAC)) + 10)
-            im2col = self.size_per_mem_level["I"]["OY"][0] * kernel_size_y
+            im2col = self.size_per_mem_level["I"]["IY"][0] * kernel_size_y
             latency = iterations * (im2col + output_shape[2] * (scalar_matmul + vec_matmul + COST_QUANT))
         elif self.layer_data.specific_pattern=='dense':
             latency += _floor(ch_in, 2) * _floor(ch_out, 4)

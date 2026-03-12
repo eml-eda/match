@@ -44,8 +44,6 @@ def create_conv_ex(
     )
     b = relay.var(bias_name, relay.TensorType(bias.shape, bias.dtype))
     s = relay.var(scale_name, relay.TensorType(scale.shape, scale.dtype))
-    x = relay.op.cast(x, "int32")
-    x = relay.frontend.common.set_span(x, "FAKE_CAST_TVM_OUT_DTYPE")
     x = relay.op.multiply(x, s)
     x = relay.op.add(x, b)
     if requant_pattern:

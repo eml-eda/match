@@ -487,7 +487,7 @@ class Runtime:
 
         # Prepare template data for codegen
         template_data = {
-            "async": True,
+            "run_matcha": True,
             "target": self.target,
             "nodes": runtime_graph.nodes,
             "tensors": runtime_graph.tensors,

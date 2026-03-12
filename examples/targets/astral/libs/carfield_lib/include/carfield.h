@@ -7,7 +7,7 @@
 
 #include "carfield_lib/dma.h"
 
-// #define L1_SCRATCHPAD_SIZE 32768
+#define L1_SCRATCHPAD_SIZE 32768
 
 
 // General host functions
@@ -64,11 +64,8 @@ void pulp_cluster_send_task_mbox(volatile uint32_t* args, uint32_t task_id);
 int pulp_cluster_wait_end_of_task_mbox(volatile uint32_t* args, uint32_t task_id);
 
 
-extern const uint8_t __l2_common_start[];
-extern const uint8_t __l2_common_end[];
+extern const uint8_t __l2_host_mex_addr__[];
 
-#define __OFFLOAD_ARGS_PT__ 0x7800FF00
-
-#define offload_args ((volatile uint32_t*)__OFFLOAD_ARGS_PT__)
+#define pulp_cluster_args ((volatile uint32_t*)__l2_host_mex_addr__)
 
 #endif // CAR_LIB_CARFIELD_H

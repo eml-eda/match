@@ -101,6 +101,10 @@ class MatchTarget(ABC):
     def __init__(self, exec_modules, name: str = "match", optimize_param: str = "latency", **kwargs):
         if self.singleton_instantiated(**kwargs):
             return
+        # logging data
+        self.__same_node_found__ = 0
+        self.__diff_node_found__ = 0
+        self.__nodes_found__ = 0
         self.name = name
         # can choose between riscv_cpu, arm_cpu, micro, and more, look at tvm/python/tvm/target/target.py
         self.cpu_type = "riscv_cpu"
@@ -153,7 +157,7 @@ class MatchTarget(ABC):
             self.add_exec_module(exec_module)
             self.exec_modules_dict[exec_module.name] = exec_module
             
-        self.enable_device_parallelism = True
+        self.enable_device_parallelism = False
 
     def singleton_instantiated(self, **kwargs):
         prev_kwargs_ = dict() if not hasattr(self, "prev_kwargs") else self.prev_kwargs
@@ -315,8 +319,10 @@ class MatchTarget(ABC):
             raise Exception(f"[TARGET]: No valid loop ordering found for {match_pt.name} with node {node}")
         schedule, latency, energy = self.find_in_cached_list(pt_res)
         if schedule is not None:
+            self.__same_node_found__ += 1
             return latency, energy
         else:
+            self.__diff_node_found__ += 1
             try:
                 schedule_gen.generate()
             except Exception as exc:
@@ -413,6 +419,7 @@ class MatchTarget(ABC):
                     else:
                         print(f"[PATTERN MATCHER] Matched pattern {other_pt.name} didnt satisfy the additional conditions")
             # best fully supported pattern for these set of nodes
+            self.__nodes_found__ += 1
             return True
         else:
             print(f"[PATTERN MATCHER] Matched pattern {match_pt.name} didnt satisfy the additional conditions")

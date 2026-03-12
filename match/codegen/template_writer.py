@@ -41,6 +41,10 @@ class TemplateWriter:
         self.template_data = dict()
     
     def get_template_data(self):
+        # for now dont do profiling-debugging inside node
+        self.template_data["profile_inside_node"] = False
+        self.template_data["debug_inside_node"] = False
+        # populate template data
         self.template_data["c_dtype"] = numpy_dtype_to_c_type
         self.template_data["c_np_array"] = c_friendly_npvalue
         #self.template_data["pattern_name"] = self.exec_module.specific_pattern

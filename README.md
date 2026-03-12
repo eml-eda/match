@@ -82,8 +82,8 @@ To use MATCH directly, the end user can execute the run.py script, setting the t
 Considering an ONNX network the user that should be compiled for a pulp platform, the user shall execute the following command
 
 ```
-$ python3 test/test.py --model image_classification --executor graph
-$ python3 test/test.py --model drone_vfe --executor graph --target GAP9
+$ python3 test/test.py --model visual_wake_words --executor graph
+$ python3 test/test.py --model keyword_spotting --executor graph --target GAP9
 ```
 
 --model: specify the model name in the folder models

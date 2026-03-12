@@ -21,7 +21,7 @@ void match_alloc_workspace(int offset, int size){
     match_num_workspaces++;
     if(match_num_workspaces >= __MATCH_MEMORY_MAX_WORKSPACES__){
         // printf("[MATCH] Maximum number of workspaces reached (%d). Cannot allocate more.\n", __MATCH_MEMORY_MAX_WORKSPACES__);
-        exit(-1);
+        // exit(-1);
     }
     return;
 }
