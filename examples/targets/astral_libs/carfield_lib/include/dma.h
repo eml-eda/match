@@ -6,7 +6,26 @@
 #define DMA_DIR_LOC2EXT 0
 #define DMA_DIR_EXT2LOC 1
 
-#define __PULP_NO_DMA__ 1
+#define __PULP_NO_DMA__ 0
+#define __PULP_USE_MCHAN_API__ 0
+
+typedef struct { 
+  unsigned int size_2d;
+  unsigned int l1_length_2d;
+  unsigned int l1_stride_2d;
+  unsigned int ext_length_2d;
+  unsigned int ext_stride_2d;
+} transfer_2d;
+
+void mchan_2d(
+    uint8_t* ext_ptr, uint8_t* l1_ptr,
+    transfer_2d transfer_params, int core_id, int ext2loc
+);
+void mchan_1d(
+    uint8_t* ext_ptr, uint8_t* l1_ptr,
+    unsigned int size, int core_id, int ext2loc
+);
+
 
 typedef struct dma_transfer_cfg {
   uint32_t ext;

@@ -1,4 +1,3 @@
-
 import json
 from typing import Any, List, Dict
 from match.runtime.graph.tensor import MatchMemoryTensor
@@ -16,8 +15,9 @@ class MatchMemoryPlanner:
         calls_idxs: List=[],
         nodes: List=[],
         out_path: str="output_path",
-        algorithm: str="match",
-        fix_io_tensors_in_ext_mem: bool=True
+        algorithm: str="cp",
+        fix_io_tensors_in_ext_mem: bool=True,
+        target=None,
     ):
         self.mem_tensors = mem_tensors
         self.extra_dynamic_buffers = extra_dynamic_buffers
@@ -54,6 +54,7 @@ class MatchMemoryPlanner:
         self.total_memory_needed_bytes = self.input_memory_usage + self.output_memory_usage + self.constant_memory_usage + max(self.intermediate_memory_usage)
         self.total_memory_needed_bytes_w_consts = self.input_memory_usage + self.output_memory_usage + max(self.overall_intermediate_memory_usage)
         self.fix_io_tensors_in_ext_mem = fix_io_tensors_in_ext_mem
+        self.target = target
         
     @property
     def external_memory_needed(self):
@@ -237,18 +238,24 @@ class MatchMemoryPlanner:
         )
         for node in self.nodes:
             node.free_buffers = nodes_buffers[node.node_id]["empty_areas"]
-        return soc_mem_needed, ext_mem_needed
+        return soc_mem_needed, ext_mem_needed, list()
+
+    def cp_mem_planner_impl(self, tensor_fixed_to_ext_mem:List[str]=[]):
+        from match.runtime.graph.memplan_cp import cp_mem_planner_impl
+        return cp_mem_planner_impl(self, tensor_fixed_to_ext_mem)
 
     def generate(self):
         # use only SoC memory if possible, otherwise use external memory
         try:
-            if self.algorithm=="match":
+            if self.algorithm.lower()=="match":
                 return self.match_mem_planner_impl(
                     # tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if\
                     #                          tensor.is_output\
-                    #                             or tensor.is_input
+                    #                             or tensor.is_input or tensor.is_constant
                     # ]
                 )
+            elif self.algorithm.lower()=="cp":
+                return self.cp_mem_planner_impl()
             else:
                 raise Exception(f"[MEM PLANNER] Algorithm {self.algorithm} not implemented")
         except Exception as exc:

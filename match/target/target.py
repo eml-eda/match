@@ -113,6 +113,7 @@ class MatchTarget(ABC):
         # which algorithm to use in case we use USMP, can be greedy etc.
         # hill_climb looks the best overall but you can play with it
         self.static_mem_plan_algorithm = "hill_climb"
+        self.graph_runtime_mem_plan_algorithm = "CP"
         self.match_patterns = []
         self.exec_modules = []
         self.exec_modules_dict = dict()
@@ -143,9 +144,17 @@ class MatchTarget(ABC):
         self.print_fn = "printf"
         self.offload_dma_fn = "offload_dma"
         self.wait_eoc = "wait_eoc"
+        # Parameter-data placement flags (used by params_data templates).
+        # Targets can override these names in subclasses/instances.
+        self.params_data_on_chip_flag = ""
+        self.params_data_off_chip_flag = ""
+        self.params_off_chip_file = True
+        self.async_off_chip_to_on_chip_dm = False
+        self.wait_async_off_chip_transfer_fn = ""
         self.clean_funcs = []
         self.init_funcs = []
         self.include_list = []
+        self.include_list_quotes = []
         self.input_macros = ""
         self.__cached_pattern_results__ = []
         self.__cached_failed_pattern_results__ = []
@@ -383,7 +392,6 @@ class MatchTarget(ABC):
                     f"[PATTERN MATCHER] Node is supported by {match_pt.name} with expected latency {latency} and expected energy {energy}"
                 )
             except Exception as exc:
-                breakpoint()
                 print(f"[PATTERN MATCHER] Node failed to be evaluated with pattern {match_pt.name}")
                 return False
             # check all the patterns that are after me

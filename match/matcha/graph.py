@@ -63,10 +63,8 @@ class Graph():
         }
         
         
-        print(mod)
-        
         # TODO move this to exec_module or target
-        self.device_speeds = [0.5, 8, 6] # remove hardcoded device speeds
+        self.device_speeds = [0.5, 8] # remove hardcoded device speeds
         self.mod = mod
         self.patterns = patterns
         
@@ -94,10 +92,12 @@ class Graph():
                 return
             if isinstance(node, tvm.ir.Op):
                 return 
-            if hasattr(node, 'span') and node.span.source_name.name == "GID":
+            if hasattr(node, 'span') and hasattr(node.span, 'source_name') and node.span.source_name.name == "GID":
                 gid = node.span.line
                 self.gid_to_relay[gid] = node
                 self.relay_to_gid[node] = gid
+            elif hasattr(node, "span") and not hasattr(node.span, "source_name"):
+                return
             else:
                 nodes_not_annotated.append(node)
         

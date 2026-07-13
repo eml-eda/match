@@ -40,7 +40,6 @@ class MemoryApis:
         self.alloc_buffer = ""
         
         self.shared_memory_extern_addr = "offload_args"
-        
         """
         APIs and flags from the legacy lib
         DEFAULT_LAYOUT = {"O":"NCHW","I":"NCHW","W":"NCHW","X":"NCHW","Y":"NCHW"}
@@ -183,6 +182,7 @@ class ExecModule(ABC):
         self.is_smp = False
         # Shared Memory address
         self.shared_memory_extern_addr = "offload_args"
+        self.name_boot_addr = "boot_addr"
         # Only used when separated_build is True - TODO this should be reconsidered for paralell node execution
         self.host_send_task_fn = ""
         self.host_wait_end_of_task_fn = ""

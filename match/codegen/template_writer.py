@@ -119,7 +119,6 @@ class TemplateWriter:
         Path(out_path+"/include/"+node_path).mkdir(parents=True,exist_ok=True)
         print(f"[TEMPLATE WRITER] Generating node {self.template_data['node_name']}")
         node_code = "#include <stdio.h>\n"
-        # breakpoint()
         
         template_blocks_dir = os.path.dirname(__file__) + "/../libs/c/mako/node/blocks"
         

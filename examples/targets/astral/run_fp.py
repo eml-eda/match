@@ -16,28 +16,17 @@ from match.model.model import MatchModel as Model
 
 from astral import Astral
 
-INPUT_FILE_PATH = "model_fp16/cifar10_resnet8_fp16/input.txt"
-ONNX_FILE_PATH = "model_fp16/cifar10_resnet8_fp16/model_fp16_nchw.onnx"
+NET = "model_fp16/model_graph.relay"
+PARAMS = "model_fp16/model_params.txt"
 OUTPUT_DIR_PATH = "output"
 
-argparser = argparse.ArgumentParser()
-argparser.add_argument("-o", "--output_dir", type=str, default=OUTPUT_DIR_PATH, help="Directory to save the output files")
-argparser.add_argument("-i", "--input_file", type=str, default=INPUT_FILE_PATH, help="Input file path")
-argparser.add_argument("-m", "--model_file", type=str, default=ONNX_FILE_PATH, help="ONNX model file path")
-
-args = argparser.parse_args()
-
-print(f"Using model file: '{args.model_file}'")
-print(f"Using input file: '{args.input_file}'")
-print(f"Using output dir: '{args.output_dir}'")
-
-relay_mod, relay_params = match.get_relay_network(filename=args.model_file)
+relay_mod, relay_params = match.get_relay_network(input_type="relay", filename=NET, params_filename=PARAMS)
 
 oenne_model = Model(
     relay_mod = relay_mod,
     relay_params = relay_params,
     model_name = "model",
-    default_inputs = get_default_inputs(mod=relay_mod, params=relay_params, input_files=[args.input_file]),
+    default_inputs = get_default_inputs(mod=relay_mod, params=relay_params, input_files=[]),
     handle_out_fn="handle_fp16_classifier",
     debug = False,
     debug_fallback = False,
@@ -49,5 +38,5 @@ target = Astral()
 match.match(
     model = oenne_model,
     target = target,
-    output_path = args.output_dir,
+    output_path = OUTPUT_DIR_PATH,
 )   

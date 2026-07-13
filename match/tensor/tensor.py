@@ -146,10 +146,10 @@ class MatchTensor:
                     sizes_.append(size_)
         else:
             sizes_ = [f"{node_name}_{self.name}_tiles_[{mem}*{self.num_dims}+{inner_idx}].size" for inner_idx,inner_dim in enumerate(self.dims) if inner_dim.size > 1]
-        if len(sizes_) == 0:
-            return "0"
         if self.bits!=8:
-            sizes_.append(f"{self.bits/8}")
+            sizes_.append(f"{int(self.bits/8) if self.bits%8==0 else self.bits/8}")
+        elif len(sizes_)==0:
+            sizes_.append("1")
         return " * ".join(sizes_)
 
     @property

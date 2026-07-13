@@ -1,5 +1,6 @@
 from match.node.node import MatchNode
 from match.opt.easy_tile import EasyTileEngine
+from match.opt.cp import ConstraintProgrammingEngine
 from match.opt.basic import BasicEngine
 from match.opt.basic_plus import BasicPlusEngine
 from match.parser.relay import MatchRelayParser
@@ -16,6 +17,9 @@ from match.opt.engine import ScheduleEngine
 SCHEDULE_ENGINE_MAP={
     "ZigZag":ZigZagEngine,
     "EasyTile": EasyTileEngine,
+    "ConstraintProgramming": ConstraintProgrammingEngine,
+    "CP": ConstraintProgrammingEngine,
+    "cp": ConstraintProgrammingEngine,
     "basic":BasicEngine,
     "basic_plus":BasicPlusEngine,
 }
@@ -66,6 +70,7 @@ class ScheduleGenerator:
         self.schedule_engine.transform_schedule()
         self.schedule = self.schedule_engine.get_schedule()
         self.schedule.exec_module = self.exec_module
+        self.schedule.buffers = []
         self.exec_module.set_buffers_for_schedule(self.match_node, self.schedule,
                                                   self.pattern_name, self.schedule_engine_classname)
         self.latency = self.schedule_engine.get_latency()

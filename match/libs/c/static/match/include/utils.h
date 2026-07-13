@@ -12,6 +12,10 @@ int match_byte_checksum_check(const char *data, int size, int checksum);
 
 float match_float_checksum_check(void* data, int size, double checksum);
 
+float match_fp16_checksum_check(void* data, int size, double checksum);
+
+double match_fp16_checksum_comp(void* data, int size, double checksum);
+
 void handle_int_classifier(int* output_pt, int classes, int runtime_status);
 
 void handle_fp32_classifier(float *output_pt, int classes, int runtime_status);

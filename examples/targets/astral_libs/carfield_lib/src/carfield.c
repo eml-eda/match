@@ -22,8 +22,12 @@
 
 
 #define VERIFY_DMA 0
-#define __ASTRAL_USE_HOST_DMA__ 0
+#define __ASTRAL_USE_HOST_DMA__ 1
 #define __ASTRAL_USE_MBOX__ 0
+
+#if __ASTRAL_USE_HOST_DMA__
+static volatile uint32_t last_dma_copy_id = 0;
+#endif
 
 
 uint64_t astral_get_cycleno() {
@@ -38,13 +42,16 @@ void carfield_init() {
     carfield_init_uart();
     // If mailboxes are used initialize the PLIC
     carfield_init_plic();
-
+    #if __PRINT_ENABLED__
     mini_printf("Hi, there. I'm Carfield 🐱\r\n\n");
+    #endif
 }
 
 void carfield_shutdown() {
     car_disable_domain(CAR_PULP_RST);
+    #if __PRINT_ENABLED__
     mini_printf("\r\nBye.\r\n");
+    #endif
 }
 
 void carfield_wait_eoc() {
@@ -68,7 +75,9 @@ void pulp_cluster_reset() {
 
 void pulp_cluster_offload_async(void* boot_addr)
 {
+    #if __PRINT_ENABLED__
     mini_printf("Starting PULP cluster...\r\n");
+    #endif
     pulp_cluster_reset();
     pulp_cluster_set_bootaddress(boot_addr);
     pulp_cluster_start();
@@ -80,7 +89,9 @@ void pulp_cluster_offload_blk(void* boot_addr)
 {
     pulp_cluster_offload_async(boot_addr);
     pulp_cluster_wait_eoc();
+    #if __PRINT_ENABLED__
     mini_printf("> Cluster finished.\r\n");
+    #endif
 }
 
 
@@ -118,7 +129,6 @@ int pulp_cluster_wait_end_of_task_mbox(volatile uint32_t* args, uint32_t task_id
         asm volatile("fence rw,rw" ::: "memory");
         asm volatile("wfi":::"memory");
         asm volatile("fence rw,rw" ::: "memory");
-        //mini_printf("In effetti qua ci siamo...\r\n");
     }
     return last_task_error_code;
     #else
@@ -170,7 +180,6 @@ void handle_interrupt_pulp_cluster_mbox() {
     #if __ASTRAL_USE_MBOX__
     mailbox_read(CLUSTER_TO_HOST_MBOX, &last_completed_node_id, &last_task_error_code);
     mailbox_clear(CLUSTER_TO_HOST_MBOX);
-    //mini_printf("Hey IIiIIIIIIIInterrupt!\r\n");
     #else
     // Should not happen
     #endif
@@ -193,20 +202,22 @@ void trap_vector(void) {
 
 // Other things
 
-void handle_host_dma_transfer(void* src, void* dst, size_t size) 
+int handle_host_dma_transfer(void* src, void* dst, size_t size) 
 {
-    mini_printf("Starting DMA transfer...\r\n");
+    // mini_printf("Starting DMA transfer...\r\n");
     
     #if __ASTRAL_USE_HOST_DMA__
     // Use the DMA engine
-    sys_dma_2d_blk_memcpy(dst, src, size, 0, 0, 1);
+    last_dma_copy_id = sys_dma_memcpy(dst, src, size, 0);
+    int transfer_id = (int)last_dma_copy_id;
     #else
     // Use a simple manual copy
     for (size_t i = 0; i < size; i++)
         ((uint8_t*)dst)[i] = ((uint8_t*)src)[i];
+    int transfer_id = 0;
     #endif
 
-    mini_printf("Transfer complete.\r\n");
+    // mini_printf("Transfer complete.\r\n");
 
     #if VERIFY_DMA
     // Verify
@@ -228,6 +239,8 @@ void handle_host_dma_transfer(void* src, void* dst, size_t size)
         mini_printf("Transfer Verified Successfully.\r\n");
     }
     #endif
+
+    return transfer_id;
 }
 
 
@@ -260,12 +273,26 @@ void carfield_load_file_to_ram(const char* file_name, void* dst, size_t size) {
     // TODO
 }
 
-void carfield_memcpy_from_ram(void* loc, const void* ext, size_t size) {
-    handle_host_dma_transfer(ext, loc, size);
+int carfield_memcpy_from_ram(void* ext, void* loc, size_t size) {
+    return handle_host_dma_transfer((void*)ext, loc, size);
+    // carfield_wait_dma(transfer_id);
 }
 
-void carfield_memcpy_to_ram(const void* loc, void* ext, size_t size) {
-    handle_host_dma_transfer(loc, ext, size);
+int carfield_memcpy_to_ram(void* loc, void* ext, size_t size) {
+    return handle_host_dma_transfer((void*)loc, ext, size);
+    // carfield_wait_dma(transfer_id);
+}
+
+void carfield_wait_dma(int transfer_id) {
+    #if __ASTRAL_USE_HOST_DMA__
+    if (transfer_id < 0) {
+        return;
+    }
+    while (*(sys_dma_done_ptr()) < (uint32_t)transfer_id) { asm volatile("nop"); }
+    #else
+    // No async transfer, nothing to wait for
+    (void)transfer_id;
+    #endif
 }
 
 void carfield_free_ram(void* ext, size_t size) {

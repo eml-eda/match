@@ -62,8 +62,18 @@ class EasyTileEngine(ScheduleEngine):
     def transform_schedule_for_engine(self):
         pass
 
+    def _num_buffers_for_computation(self, tensors):
+        for tensor in tensors.values():
+            if tensor.tensor_type not in ["var", "output", "intermediate"]:
+                continue
+            memories = self.mem_hierarchy[tensor.tensor_type]
+            if memories and memories[0].double_buffering_support:
+                return 2
+        return 1
+
     def generate_schedule(self):
         tensors = {tens_name:tens for tens_name,tens in self.match_node.tensors.items() if tens.tensor_type!="intermediate"}
+        num_buffers_for_computation = self._num_buffers_for_computation(tensors)
         loops = list()
         inner_loop = MatchLoop(
             name = "nop_loop",
@@ -100,6 +110,8 @@ class EasyTileEngine(ScheduleEngine):
                         [get_dependent_dim_size(tensor, dim_idx) if dim.dim_dependency else dims_sizes[dim.name] for dim_idx,dim in enumerate(tensor.dims)]
                         + [tensor.bits//8]  # Convert bits to bytes
                     )
+                    if memories[0].double_buffering_support and tensor.tensor_type in ["var", "output", "intermediate"]:
+                        tile_size *= num_buffers_for_computation
                     memories_sizes[memories[0].name] -= tile_size
                     if memories_sizes[memories[0].name] < 0:
                         fit_lowest_memory = False
@@ -131,8 +143,8 @@ class EasyTileEngine(ScheduleEngine):
             
         tensor_tiles = dict()
         for tensor_name, tensor in tensors.items():
+            memories = self.mem_hierarchy[tensor.tensor_type]
             if len(tensor.dims)>0:
-                memories = self.mem_hierarchy[tensor.tensor_type]
                 if len(memories)>1:
                     sw_controlled = memories[0].sw_controlled
                     inner_loop.mem_transfers.append(
@@ -172,7 +184,7 @@ class EasyTileEngine(ScheduleEngine):
             instrs = [],
             parallel_execution = False,
             num_tasks = 1,
-            num_buffers_for_computation = 1,
+            num_buffers_for_computation = num_buffers_for_computation,
         )
         self.schedule = MatchSchedule(
             blocks = [block],

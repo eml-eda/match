@@ -1,7 +1,7 @@
 import os
 from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
-from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM
+from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM, RemoveLayoutTransformPass
 from match.transform.requant import MatchRequantRewriter
 from pulp_cluster import PulpCluster
 from tvm import relay
@@ -9,11 +9,11 @@ from tvm import relay
 # pulp config
 PULP_CORES = 8
 #L1_SCRATCHPAD_KB_SIZE = 128*1024
-#L2_SHARED_MEM_KB_SIZE = 256*1024
-
+# L2_SHARED_MEM_KB_SIZE = 256*1024
 L1_SCRATCHPAD_KB_SIZE = 101
 # L1_SCRATCHPAD_KB_SIZE = 16*1024
-L2_SHARED_MEM_KB_SIZE = 16*1024
+L2_SHARED_MEM_KB_SIZE = 968
+# L2_SHARED_MEM_KB_SIZE = 1024 * 1024
 L3_FLASH_KB_SIZE = 16*1024
 
 ASYNC_DMA = False
@@ -36,9 +36,13 @@ class Astral(MatchTarget):
         self.set_paths()
         self.set_apis()
         self.enable_device_parallelism = False
+        self.async_off_chip_to_on_chip_dm = True
 
     def set_target_host(self):
         self.cpu_type = "riscv_cpu -march=riscv64"
+        self.params_data_on_chip_flag = "__attribute__((section(\".l2_data\"), ))"
+        self.params_data_off_chip_flag = "__attribute__((section(\".rodata.tvm\"), ))"
+        self.params_off_chip_file = False
 
     def set_paths(self):
         self.makefile_path = os.path.dirname(__file__)+"/config/Makefile"
@@ -53,6 +57,9 @@ class Astral(MatchTarget):
         self.crt_config_path = os.path.dirname(__file__)+"/config/crt_config.h"
         self.include_list = [
             "carfield_lib/carfield"
+        ]
+        self.include_list_quotes = [
+            "util"
         ]
 
     def set_apis(self):
@@ -81,11 +88,13 @@ class Astral(MatchTarget):
         self.fix_io_tensors_in_ext_mem = False
         # wait
         self.wait_eoc = "carfield_wait_eoc"
+        self.wait_async_off_chip_transfer_fn = "carfield_wait_dma"
 
     def network_transformations(self, opts):
         return [
             ("requant", MatchRequantRewriter()),
             ("layout", MatchLayoutNCHWtoNHWCTVM),
+            # ("laybatchdense", RemoveLayoutTransformPass),
             ("folded", relay.transform.FoldConstant()),
         ]
     

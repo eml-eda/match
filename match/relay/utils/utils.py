@@ -262,8 +262,10 @@ def create_random_array(shape: Tuple[int, ...], dtype: str, min_val=None, max_va
     if dtype in ['int4', 'int2']:
         np_dtype = 'int8'
     shape = [int(i) for i in shape]
-    np_array = np.random.rand(*shape).astype(np_dtype) if float_dtype else np.random.randint(low=dtype_min, high=dtype_max+1, size=shape, dtype=np_dtype)
-    return numpy_to_array(np_array, dtype)
+    if float_dtype:
+        return numpy_to_array(((np.random.rand(*shape).astype(np_dtype) * (dtype_max - dtype_min)) + dtype_min), dtype)
+    else:
+        return numpy_to_array(np.random.randint(low=dtype_min, high=dtype_max+1, size=shape, dtype=np_dtype), dtype)
 
 def create_build_dir(build_path: str = "./build",
                      match_lib_path: str = "./lib",

@@ -34,8 +34,8 @@ class MatchSchedule:
         self.buffers = buffers
         self.num_units = 1
         self.exec_module = exec_module
-        self.latency = 0
-        self.energy = 0
+        self.latency = latency
+        self.energy = energy
 
     def set_default_tensor_tiles(self):
         for tensor in self.tensors.values():

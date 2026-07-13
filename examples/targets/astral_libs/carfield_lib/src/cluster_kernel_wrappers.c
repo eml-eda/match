@@ -85,6 +85,10 @@ void kernel_wrapper(MatchCtx* ctx)
         case pulpd_avgpool2d_fp16: pulp_fp16_avgpool2d_wrapper(ctx); break;
     #endif
 
+    #ifdef pulpd_redmule_conv3d_fp16
+        case pulpd_redmule_conv3d_fp16: redmule_fp16_conv3d_wrapper(ctx); break;
+    #endif
+
         default: wtf_wrapper(ctx); break;
     }
 }
@@ -579,6 +583,78 @@ void redmule_fp16_dense_wrapper(MatchCtx* ctx) {
         1,              // M dim
         inp_neurons,    // N dim
         out_neurons     // K dim
+    );
+}
+
+void redmule_fp16_conv3d_wrapper(MatchCtx* ctx) {
+    MatchTensor* tensors = ctx->tensors->tensors;
+    MatchOp* ops = ctx->ops->ops;
+    int num_ops = ctx->ops->num_ops;
+    int num_tensors = ctx->tensors->num_tensors;
+    int d_in = tensors[0].tiles[MEM_L1_PULPD*5+1].size;
+    int h_in = tensors[0].tiles[MEM_L1_PULPD*5+2].size;
+    int w_in = tensors[0].tiles[MEM_L1_PULPD*5+3].size;
+    int c_in = tensors[0].tiles[MEM_L1_PULPD*5+4].size;
+    int d_out = tensors[num_tensors-1].tiles[MEM_L1_PULPD*5+1].size;
+    int h_out = tensors[num_tensors-1].tiles[MEM_L1_PULPD*5+2].size;
+    int w_out = tensors[num_tensors-1].tiles[MEM_L1_PULPD*5+3].size;
+    int c_out = tensors[num_tensors-1].tiles[MEM_L1_PULPD*5+4].size;
+    MatchConv3DAttrs* conv3d_attrs = (MatchConv3DAttrs*)ctx->ops->ops[0].attrs;
+    int k_d = conv3d_attrs->kernel_size[0];
+    int k_h = conv3d_attrs->kernel_size[1];
+    int k_w = conv3d_attrs->kernel_size[2];
+    int s_d = conv3d_attrs->strides[0];
+    int s_h = conv3d_attrs->strides[1];
+    int s_w = conv3d_attrs->strides[2];
+    int pad_d_top = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*5+1]));
+    int pad_h_top = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*5+2]));
+    int pad_w_left = match_get_pad_x_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*5+3]));
+    int pad_d_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*5+1]));
+    int pad_h_bottom = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*5+2]));
+    int pad_w_right = match_get_pad_y_of_tile(&(tensors[0].tiles[MEM_L1_PULPD*5+3]));
+    int apply_relu = ops[num_ops-1].op_code == MATCH_OP_RELU;
+    void *input = tensors[0].pt;
+    void *weights = tensors[1].pt;
+    void *bias = num_tensors > 3 ? tensors[2].pt : NULL;
+    void *output_matrix = tensors[num_tensors-1].pt;
+    
+    #if DEBUG_CLUSTER_LIB
+    smp_printf(
+        "[PULP][KER] 'redmule_fp16_conv3d': input=%p weights=%p bias=%p output=%p\r\n",
+        input, weights, bias, output_matrix
+    );
+    smp_printf(
+        "[PULP][KER] 'redmule_fp16_conv3d': c_in=%d d_in=%d h_in=%d w_in=%d | c_out=%d d_out=%d h_out=%d w_out=%d\r\n",
+        c_in, d_in, h_in, w_in, c_out, d_out, h_out, w_out
+    );
+    smp_printf(
+        "[PULP][KER] 'redmule_fp16_conv3d': kernel=(%d,%d,%d) strides=(%d,%d,%d) padding_d=(%d,%d) padding_h=(%d,%d) padding_w=(%d,%d) relu=%d\r\n",
+        k_d, k_h, k_w,
+        s_d, s_h, s_w,
+        pad_d_top, pad_d_bottom,
+        pad_h_top, pad_h_bottom,
+        pad_w_left, pad_w_right,
+        apply_relu
+    );
+    smp_printf("[PULP][KER] 'redmule_fp16_conv3d': first 4 act values %x %x first 4 weights %x %x\r\n",
+        ((uint32_t*)input)[0], ((uint32_t*)input)[1], ((uint32_t*)weights)[0], ((uint32_t*)weights)[1]
+    );
+    #endif
+
+    redmule_fp16_conv3d_dhwn_rd(
+        input,
+        weights,
+        output_matrix,
+        im2col_pt_,
+        bias,
+        apply_relu,
+        c_in, d_in, h_in, w_in,
+        c_out, d_out, h_out, w_out,
+        k_d, k_h, k_w,
+        s_d, s_h, s_w,
+        pad_d_top, pad_d_bottom,
+        pad_h_top, pad_h_bottom,
+        pad_w_left, pad_w_right
     );
 }
 

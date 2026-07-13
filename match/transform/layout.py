@@ -1,6 +1,7 @@
 import tvm
 import tvm.relay
 from tvm import relay
+import numpy as np
 
 NCHW_TO_NHWC_OPERATORS_SET = (
     "nn.conv2d", "nn.max_pool2d", "nn.avg_pool2d",
@@ -19,7 +20,8 @@ desired_layouts = {
     "nn.global_avg_pool2d": ["NHWC"],
     "nn.batch_norm": ["NHWC"],
     "nn.instance_norm": ["NHWC"],
-    "nn.layer_norm": ["NHWC"]
+    "nn.layer_norm": ["NHWC"],
+    "nn.dense": ["NDHWC"]
 }
 MatchLayoutNCHWtoNHWCTVM = relay.transform.ConvertLayout(desired_layouts)
 
@@ -150,3 +152,68 @@ class MatchLayoutNCHWtoNHWC(relay.ExprMutator):
             new_args = [self.visit(arg) for arg in call.args]
             new_call = relay.Call(call.op, new_args, call.attrs)
         return new_call
+
+class RemoveLayoutTransformMutator(relay.ExprMutator):
+    def visit_call(self, call):
+        # 1. Look for the nn.dense operator
+        if call.op == tvm.ir.Op.get("nn.dense"):
+            inputs = call.args
+            data_expr = inputs[0]
+            weight_expr = inputs[1]
+
+            # 2. Check if the input to dense comes from nn.batch_flatten
+            # We recurse/visit the data expression first to ensure upstream graph is processed
+            data_expr = self.visit(data_expr)
+            
+            if isinstance(data_expr, relay.Call) and data_expr.op == tvm.ir.Op.get("nn.batch_flatten"):
+                flatten_input = data_expr.args[0]
+                flatten_input = self.visit(flatten_input)
+
+                # 3. Check if the input to batch_flatten comes from a layout_transform
+                if isinstance(flatten_input, relay.Call) and flatten_input.op == tvm.ir.Op.get("layout_transform"):
+                    lt_attrs = flatten_input.attrs
+                    
+                    # Verify it's exactly the NDHWC -> NCDHW transform you want to eliminate
+                    if lt_attrs.src_layout == "NDHWC" and lt_attrs.dst_layout == "NCDHW":
+                        # We also need to make sure the weights are a Constant we can manipulate
+                        if isinstance(weight_expr, relay.Constant):
+                            
+                            # --- NumPy Weight Permutation Magic ---
+                            # Extract raw data from TVM Constant to a NumPy array
+                            old_weights = weight_expr.data.asnumpy() # Shape: (Units, 1260) -> (1, 1260)
+                            units = old_weights.shape[0]
+                            
+                            # Hardcoded mapping based on your graph dimensions:
+                            # Total features 1260 = C(70) * D(2) * H(3) * W(3)
+                            C, D, H, W = 70, 2, 3, 3
+                            
+                            # Reshape to 5D logical NCDHW structure (including units axis)
+                            weights_5d = old_weights.reshape(units, C, D, H, W)
+                            
+                            # Permute axes to match NDHWC layout flattening order:
+                            # Original axes: 0=Units, 1=C, 2=D, 3=H, 4=W
+                            # Target order:  Units, D, H, W, C -> axes (0, 2, 3, 4, 1)
+                            permuted_weights_5d = np.transpose(weights_5d, (0, 2, 3, 4, 1))
+                            
+                            # Flatten back to 2D matrix (Units, 1260)
+                            new_weights_np = permuted_weights_5d.reshape(units, -1)
+                            
+                            # Create a fresh TVM Constant with the updated layout data
+                            new_weight_const = relay.const(new_weights_np, dtype=weight_expr.data.dtype)
+                            
+                            # --- Graph Rewriting ---
+                            # Bypass layout_transform: feed the layout_transform's source (%40) 
+                            # directly into a new batch_flatten node
+                            new_flatten = relay.nn.batch_flatten(flatten_input.args[0])
+                            
+                            # Construct the new dense layer using the bypassed data and updated weights
+                            new_dense = relay.nn.dense(new_flatten, new_weight_const, units=call.attrs.units)
+                            return new_dense
+
+        return super().visit_call(call)
+
+# --- How to wrap and execute it as a standard TVM Pass ---
+@tvm.relay.transform.function_pass(opt_level=1)
+def RemoveLayoutTransformPass(function, module, context):
+    mutator = RemoveLayoutTransformMutator()
+    return mutator.visit(function)

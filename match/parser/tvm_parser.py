@@ -228,6 +228,12 @@ class MatchTVMParser:
                 d = (int(data[2]), dims[2])
                 h = (int(data[3]), dims[3])
                 w = (int(data[4]), dims[4])
+            elif layout=="OIDHW":
+                n = (int(data[0]), dims[0])
+                c = (int(data[1]), dims[1])
+                d = (int(data[2]), dims[2])
+                h = (int(data[3]), dims[3])
+                w = (int(data[4]), dims[4])
             elif layout=="OCDHW":
                 n = (int(data[0]), dims[0])
                 c = (int(data[1]), dims[1])

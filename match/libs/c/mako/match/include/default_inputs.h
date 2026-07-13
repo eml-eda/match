@@ -11,9 +11,14 @@
 % for inp_name,inp in match_inputs.items():
 #if defined(__${default_model}_GRAPH_${inp_name}_UNUSED__)
 extern const ${inp["c_type"]} ${target.input_macros}* ${inp["name"]}_default;
-#elif !defined(__${default_model}_GRAPH_${inp_name}_FROM_EXTERNAL_MEM__) || !__${default_model}_GRAPH_${inp_name}_FROM_EXTERNAL_MEM__
-extern const ${inp["c_type"]} ${target.input_macros} ${inp["name"]}_default[${inp["c_arr_size"]}];
 #endif
+% if target.params_off_chip_file:
+#if !defined(__${default_model}_GRAPH_${inp_name}_FROM_EXTERNAL_MEM__) || !__${default_model}_GRAPH_${inp_name}_FROM_EXTERNAL_MEM__
+% endif
+extern const ${inp["c_type"]} ${target.input_macros} ${inp["name"]}_default[${inp["c_arr_size"]}];
+% if target.params_off_chip_file:
+#endif
+% endif
 % endfor
 % endif
 

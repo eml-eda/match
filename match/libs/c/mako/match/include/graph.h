@@ -7,16 +7,20 @@
 
 #define __MATCH_MEM_SIZE__ ${mem_needed_bytes}
 
-% if mem_needed_bytes>0 and (target.alloc_fn=="" or target.free_fn==""):
-// static memory allocation if no alloc/free functions are provided
-extern uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
-% endif
+// Run a single node or all the graph
+#define __${model_name}_GRAPH_RUN_ALL_NODES__ 1
+#define __${model_name}_GRAPH_RUN_ONLY_NODE_ID__ -1
 
 % for include in target.include_list:
     #include <${include}.h>
 % endfor
 #include <tvm/runtime/c_runtime_api.h>
 #include <${model_name}_params_data.h>
+
+% if mem_needed_bytes>0 and (target.alloc_fn=="" or target.free_fn==""):
+// static memory allocation if no alloc/free functions are provided
+extern ${"__MATCH_"+model_name+"_PARAM_ON_CHIP__" if target.params_data_on_chip_flag != "" else ""} uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
+% endif
 
 /* 
  * TVM node function signature

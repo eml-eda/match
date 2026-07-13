@@ -17,7 +17,7 @@ from match.matcha.model import MatchaModel as Model
 from carfield import Carfield
 
 INPUT_FILE_PATH = "model_fp16/cifar10_resnet8_fp16/input.txt"
-ONNX_FILE_PATH = "model_fp16/cifar10_resnet8_fp16/model_fp16_nchw.onnx"
+ONNX_FILE_PATH = "model_fp16/cifar10_resnet8_fp16/model.onnx"
 OUTPUT_DIR_PATH = "output"
 
 argparser = argparse.ArgumentParser()

@@ -105,6 +105,8 @@ void redmule_fp16_dense_wrapper(MatchCtx* ctx);
 void redmule_fp16_gemm_wrapper(MatchCtx* ctx);
 void redmule_fp16_matmul_wrapper(MatchCtx* ctx);
 
+void redmule_fp16_conv3d_wrapper(MatchCtx* ctx);
+
 // Pulp Trainlib Wrappers (fp16)
 
 // TODO

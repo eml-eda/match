@@ -5,7 +5,6 @@
 DLTensor tvm_fallback_dltensor_${tens_idx};
 % endfor
 // params of nodes
-// void* args, int32_t* arg_type_ids, int32_t num_args, void* out_ret_value, int32_t* out_ret_tcode, void* resource_handl
 TVMValue tvm_fallback_args_[${max([len(node.inputs)+len(node.outputs) for node in nodes if node.fallback]+[0])}];
 int* tvm_fallback_arg_type_ids_;
 void* tvm_fallback_out_ret_value_;
@@ -15,12 +14,9 @@ void* tvm_fallback_resource_handle_;
 // Perf counters kernels
 #if __${model_name}_FALLBACK_GRAPH_PROFILE__
 int constants_loading_cycles = 0;
-// int sum_kernel_comp_cyc = 0;
 % for node in nodes:
 int ${node.name}_perf_cnt;
 % endfor
-// Perf Counters Mem Transfers
-// int sum_mem_transfer_cyc = 0;
 % for mem_tensor in mem_tensors:
 % for  node in nodes:
 % if node.node_id in mem_tensor.move_temp_to_ext_mem:
@@ -38,9 +34,35 @@ int ${mem_tensor.name}_cp_to_ext_mem_cyc;
 
 % if mem_needed_bytes>0 and (target.alloc_fn=="" or target.free_fn==""):
 // static memory allocation if no alloc/free functions are provided
-uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
+${"__MATCH_"+model_name+"_PARAM_ON_CHIP__" if target.params_data_on_chip_flag != "" else ""} uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
 % endif
 
+<% ext_mem_offset = 0 %>
+% for mem_tensor in mem_tensors:
+<% ext_mem_offset = mem_tensor.get_new_mem_offset(ext_mem_offset) %>
+% endfor
+
+static inline void wait_async_off_chip_transfer(int transfer_id){
+% if target.async_off_chip_to_on_chip_dm and getattr(target, "wait_async_off_chip_transfer_fn", ""):
+    if (transfer_id >= 0) {
+        ${target.wait_async_off_chip_transfer_fn}(transfer_id);
+    }
+% elif getattr(target, "wait_async_off_chip_transfer_fn", ""):
+    (void)transfer_id;
+    ${target.wait_async_off_chip_transfer_fn}();
+% else:
+    (void)transfer_id;
+    return;
+% endif
+}
+
+% if target.async_off_chip_to_on_chip_dm:
+% for mem_tensor_name in wait_tensors_name:
+static int ${mem_tensor_name}_dma_transfer_id = -1;
+% endfor
+% endif
+
+% if write_power_profiling_code:
 // GPIO variables
 #ifdef USE_GPIO 
     pi_gpio_e gpio_test_0, gpio_test_1, gpio_test_2;
@@ -50,10 +72,11 @@ uint8_t match_static_malloc_mem[__MATCH_MEM_SIZE__];
     #define WRITE_GPIO(gpio_pin_x, x) {hal_compiler_barrier(); pi_gpio_pin_write(gpio_pin_x, x); hal_compiler_barrier();}
     #define SWITCH_GPIO(gpio_pin_x) {hal_compiler_barrier(); pi_gpio_pin_toggle(gpio_pin_x); hal_compiler_barrier();}
 #endif
+% endif
 
+% if target.params_off_chip_file:
 void match_${model_name}_graph_load_files(void* match_mem, void* match_ext_mem){
     <% ext_mem_offset = 0 %>
-    //read all files into ext mem <% for mem_tensor in mem_tensors: ext_mem_offset = mem_tensor.get_new_mem_offset(ext_mem_offset) %>
     % for mem_tensor in mem_tensors:
     % if mem_tensor.is_constant and mem_tensor.stored_in_external_memory:
     ${target.load_file_to_ext_mem_fn}("${model_name}_${mem_tensor.name}_data.hex", ${mem_tensor.get_ext_pt}, ${mem_tensor.elems * mem_tensor.dtype.itemsize});
@@ -61,98 +84,48 @@ void match_${model_name}_graph_load_files(void* match_mem, void* match_ext_mem){
     % endfor
     return;
 }
+% endif
 
 #if __${model_name}_FALLBACK_GRAPH_PROFILE__
 void match_${model_name}_graph_profile_summary(void){
-    printf("Node\tCycle\n");
+    ${target.print_fn}("Node\tCycle\n\r");
     % for node in nodes:
-    printf("[${node.fn_name}]\t%d\n", ${node.name}_perf_cnt );
+    ${target.print_fn}("[${node.fn_name}]\t%d\n\r", ${node.name}_perf_cnt );
     % endfor
-    // printf("Total node cycles\t%d\n", sum_kernel_comp_cyc );
-    // printf("Total memory cycles\t%d\n", sum_mem_transfer_cyc );
 
-    printf("\nProfiling Mem Transfers Performance\n");
-    printf("[file_constants_off_chip_loading LOAD]\tBytes:\t${sum([m_t.num_bytes for m_t in mem_tensors if m_t.is_constant and m_t.stored_in_external_memory])}\tCycles:\t%d\n", constants_loading_cycles);
+    ${target.print_fn}("\nProfiling Mem Transfers Performance\n\r");
+    ${target.print_fn}("[file_constants_off_chip_loading LOAD]\tBytes:\t${sum([m_t.num_bytes for m_t in mem_tensors if m_t.is_constant and m_t.stored_in_external_memory])}\tCycles:\t%d\n\r", constants_loading_cycles);
     % for  node in nodes:
     % for mem_tensor in mem_tensors:
     % if node.node_id in mem_tensor.move_temp_to_ext_mem:
-    printf("[${node.fn_name} ${mem_tensor.name} STORE]\tBytes:\t${mem_tensor.elems * mem_tensor.dtype.itemsize}\tCycles:\t%d\n",${mem_tensor.name}_cp_to_ext_mem_cyc );
+    ${target.print_fn}("[${node.fn_name} ${mem_tensor.name} STORE]\tBytes:\t${mem_tensor.elems * mem_tensor.dtype.itemsize}\tCycles:\t%d\n\r",${mem_tensor.name}_cp_to_ext_mem_cyc );
     % endif
     % if node.node_id in mem_tensor.load_from_ext_mem_at:
-    printf("[${node.fn_name} ${mem_tensor.name} LOAD]\tBytes:\t${mem_tensor.elems * mem_tensor.dtype.itemsize}\tCycles:\t%d\n", ${mem_tensor.name}_cp_from_ext_mem_cyc );
+    ${target.print_fn}("[${node.fn_name} ${mem_tensor.name} LOAD]\tBytes:\t${mem_tensor.elems * mem_tensor.dtype.itemsize}\tCycles:\t%d\n\r", ${mem_tensor.name}_cp_from_ext_mem_cyc );
     % endif
     % endfor
     % endfor
     % for mem_tensor in [m_t__ for m_t__ in mem_tensors if -1 in m_t__.move_temp_to_ext_mem]:
-    printf("[\t${mem_tensor.name} STORE]\tBytes:\t${mem_tensor.elems * mem_tensor.dtype.itemsize}\tCycles:\t%d\n", ${mem_tensor.name}_cp_to_ext_mem_cyc );
+    ${target.print_fn}("[\t${mem_tensor.name} STORE]\tBytes:\t${mem_tensor.elems * mem_tensor.dtype.itemsize}\tCycles:\t%d\n\r", ${mem_tensor.name}_cp_to_ext_mem_cyc );
     % endfor
 }
 #endif
 
-
-int match_${model_name}_run_graph(
+% for node in nodes:
+static int match_${model_name}_run_node_${node.node_id}(
+    void* match_mem, void* match_ext_mem
 % for rt_i in rt_inputs:
-    ${rt_i.c_type}* ${rt_i.name}_${"ext_" if rt_i.stored_in_external_memory else ""}pt,
+    , ${rt_i.c_type}* ${rt_i.name}_${"ext_" if rt_i.stored_in_external_memory else ""}pt
 % endfor
-% for rt_o_idx,rt_o in enumerate(rt_outputs):
-    ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_${"ext_" if rt_o.stored_in_external_memory else ""}pt
+% for rt_o in rt_outputs:
+    , ${rt_o.c_type}* ${rt_o.name}_${"ext_" if rt_o.stored_in_external_memory else ""}pt
 % endfor
-){
-
-
+) {
+#if __${model_name}_GRAPH_RUN_ALL_NODES__ || __${model_name}_GRAPH_RUN_ONLY_NODE_ID__==${node.node_id}
 #if __${model_name}_GRAPH_PROFILE__ || __${model_name}_FALLBACK_GRAPH_PROFILE__
-    ${target.timestamp_type} start,end;
-    double time_elapsed_ms = 0.0f;
+    ${target.timestamp_type} start, end;
 #endif
-#ifdef USE_GPIO
-    //struct pi_gpio_conf gpio_conf = {0};
-    gpio_test_0 = TEST_GPIO_0;
-    pi_pad_function_set(PI_PAD_089, 1);
-    pi_gpio_pin_configure(gpio_test_0, PI_GPIO_OUTPUT);
-    WRITE_GPIO(gpio_test_0, 1);
 
-    gpio_test_1 = TEST_GPIO_1;
-    pi_pad_function_set(PI_PAD_068, 1);
-    pi_gpio_pin_configure(gpio_test_1, PI_GPIO_OUTPUT);
-    WRITE_GPIO(gpio_test_1, 1);
-
-    gpio_test_2 = TEST_GPIO_2;
-    pi_pad_function_set(PI_PAD_052, 1);
-    pi_gpio_pin_configure(gpio_test_2, PI_GPIO_OUTPUT);
-    WRITE_GPIO(gpio_test_2, 1);
-#endif
-% if ext_mem_needed_bytes>0:
-    void* match_ext_mem = ${target.allocate_ext_mem}(${ext_mem_needed_bytes});
-    % else:
-    void* match_ext_mem = NULL;
-    % endif
-    % if mem_needed_bytes>0:
-    % if target.alloc_fn!="" and target.free_fn!="":
-    void* match_mem = ${target.alloc_fn}(__MATCH_MEM_SIZE__);
-    % else:
-    void* match_mem = match_static_malloc_mem;
-    % endif
-    if (!match_mem) {
-        printf("Error: match_mem allocation failed\n");
-        return -1;
-    }
-    % else:
-    void* match_mem = NULL;
-    % endif
-    match_set_match_mem_pt(match_mem);
-
-    #if __${model_name}_GRAPH_PROFILE__
-    start = ${target.start_get_timestamp_api}();
-    #endif
-    match_${model_name}_graph_load_files(match_mem, match_ext_mem);
-    #if __${model_name}_GRAPH_PROFILE__
-    end = ${target.end_get_timestamp_api}();
-    constants_loading_cycles = (int)(end - start);
-    #endif
-    #ifdef USE_GPIO
-    WRITE_GPIO(gpio_test_0, 0);
-    #endif
-    % for node in nodes:
     % for (free_buffer_off, free_buffer_size, free_buffer_name) in node.free_buffers:
     // alloc buffer ${free_buffer_name} of size ${free_buffer_size} at offset ${free_buffer_off}
     match_alloc_workspace(${free_buffer_off}, ${free_buffer_size});
@@ -161,7 +134,7 @@ int match_${model_name}_run_graph(
     % if node.fallback:
         #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
-    ${target.print_fn}("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}: '${node.fn_name}'\r\n");
+    ${target.print_fn}("[${model_name} GRAPH] Running ${'TVM' if node.fallback else 'MATCH'} node ${node.name}: '${node.fn_name}'\n\r");
     % if node.fallback:
         #endif
     % endif
@@ -172,46 +145,106 @@ int match_${model_name}_run_graph(
     #if __${model_name}_GRAPH_PROFILE__
     start = ${target.start_get_timestamp_api}();
     #endif
+    % if write_power_profiling_code:
     #ifdef USE_GPIO
     WRITE_GPIO(gpio_test_2, 0);
     #endif
-    ${target.load_to_ext_mem_fn}(${mem_tensor.get_pt}, ${mem_tensor.get_ext_pt},${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    % endif
+    // write back
+    % if target.async_off_chip_to_on_chip_dm:
+    % if mem_tensor.name in wait_tensors_name:
+    ${mem_tensor.name}_dma_transfer_id = 
+    % else:
+    int dummy_transfer_id_${mem_tensor.name}_wb =
+    % endif
+    % endif
+    ${target.load_to_ext_mem_fn}(${mem_tensor.get_pt}, ${mem_tensor.get_ext_pt}, ${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    % if write_power_profiling_code:
     #ifdef USE_GPIO
     WRITE_GPIO(gpio_test_2, 1);
     #endif
+    % endif
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
-    ${mem_tensor.name}_cp_to_ext_mem_cyc = (int)(end - start);
-    // sum_mem_transfer_cyc += ${mem_tensor.name}_cp_to_ext_mem_cyc;
+    ${mem_tensor.name}_cp_to_ext_mem_cyc = (int)((end - start) ${target.timestamp_to_ms});;
     #endif
     % endif
-    % if node.node_id in mem_tensor.load_from_ext_mem_at:
+    % endfor
+
+    % for mem_tensor in mem_tensors:
+    % if node.node_id in mem_tensor.load_from_ext_mem_at and node.node_id in mem_tensor.used_at:
     % if mem_tensor.mem_offset_at[node.node_id]!=mem_tensor.mem_offset:
-    ## update mem pt of tensor in soc memory
     <% mem_tensor.mem_offset = mem_tensor.mem_offset_at[node.node_id] %>
     % endif
-    // load tensor from external memory
     #if __${model_name}_GRAPH_PROFILE__
     start = ${target.start_get_timestamp_api}();
     #endif
+    % if write_power_profiling_code:
     #ifdef USE_GPIO
     WRITE_GPIO(gpio_test_2, 0);
     #endif
-    ${target.load_from_ext_mem_fn}(${mem_tensor.get_pt}, ${mem_tensor.get_ext_pt},${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    % endif
+    // load required by this node
+    % if target.async_off_chip_to_on_chip_dm:
+    % if mem_tensor.name in wait_tensors_name:
+    ${mem_tensor.name}_dma_transfer_id = 
+    % else:
+    int dummy_transfer_id_${mem_tensor.name}_lr =
+    % endif
+    % endif
+    ${target.load_from_ext_mem_fn}(${mem_tensor.get_ext_pt}, ${mem_tensor.get_pt}, ${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    % if write_power_profiling_code:
     #ifdef USE_GPIO
     WRITE_GPIO(gpio_test_2, 1);
     #endif
+    % endif
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
-    ${mem_tensor.name}_cp_from_ext_mem_cyc = (int)(end - start);
-    // sum_mem_transfer_cyc += ${mem_tensor.name}_cp_from_ext_mem_cyc;
+    ${mem_tensor.name}_cp_from_ext_mem_cyc = (int)((end - start) ${target.timestamp_to_ms});;
+    #endif
+    % endif
+    % endfor
+
+    % if target.async_off_chip_to_on_chip_dm and node.node_id in wait_map:
+    // Wait only for loads-writes required by this node (including prefetched earlier).
+    wait_async_off_chip_transfer(${wait_map[node.node_id]}_dma_transfer_id);
+    % endif
+
+    % for mem_tensor in mem_tensors:
+    % if node.node_id in mem_tensor.load_from_ext_mem_at and node.node_id not in mem_tensor.used_at:
+    % if mem_tensor.mem_offset_at[node.node_id]!=mem_tensor.mem_offset:
+    <% mem_tensor.mem_offset = mem_tensor.mem_offset_at[node.node_id] %>
+    % endif
+    #if __${model_name}_GRAPH_PROFILE__
+    start = ${target.start_get_timestamp_api}();
+    #endif
+    % if write_power_profiling_code:
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_2, 0);
+    #endif
+    % endif
+    % if target.async_off_chip_to_on_chip_dm:
+    // prefetching load
+    % if mem_tensor.name in wait_tensors_name:
+    ${mem_tensor.name}_dma_transfer_id = 
+    % else:
+    int dummy_transfer_id_${mem_tensor.name}_lp =
+    % endif
+    % endif
+    ${target.load_from_ext_mem_fn}(${mem_tensor.get_ext_pt}, ${mem_tensor.get_pt}, ${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    % if write_power_profiling_code:
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_2, 1);
+    #endif
+    % endif
+    #if __${model_name}_GRAPH_PROFILE__
+    end = ${target.end_get_timestamp_api}();
+    ${mem_tensor.name}_cp_from_ext_mem_cyc = (int)((end - start) ${target.timestamp_to_ms});;
     #endif
     % endif
     % endfor
 
     % if node.fallback:
-    ## SET V_HANDLE OF TENSORS
-    // set correct pointers for node
     % for inp_idx,node_in in enumerate(node.inputs):
     tvm_fallback_dltensor_${inp_idx}.data = ${node_in.get_pt};
     tvm_fallback_args_[${inp_idx}].v_handle = (void*)(&tvm_fallback_dltensor_${inp_idx});
@@ -225,14 +258,14 @@ int match_${model_name}_run_graph(
     #endif
     if( ${node.fn_name}(tvm_fallback_args_, tvm_fallback_arg_type_ids_, ${len(node.inputs)+len(node.outputs)},
                         tvm_fallback_out_ret_value_, tvm_fallback_out_ret_tcode_, tvm_fallback_resource_handle_)) return -1;
+    % if write_power_profiling_code:
     #ifdef USE_GPIO
     SWITCH_GPIO(gpio_test_1);
     #endif
+    % endif
     #if __${model_name}_FALLBACK_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
-    time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
-    ${node.name}_perf_cnt = (int)(end - start);
-    // sum_kernel_comp_cyc += ${node.name}_perf_cnt;
+    ${node.name}_perf_cnt = (int)((end - start) ${target.timestamp_to_ms});
     #endif
     % else:
     % for node_in in [inp__ for inp__ in node.inputs if inp__.is_constant]:
@@ -250,75 +283,147 @@ int match_${model_name}_run_graph(
             % endfor
         )
     ) return -1;
+    % if write_power_profiling_code:
     #ifdef USE_GPIO
     SWITCH_GPIO(gpio_test_1);
     #endif
+    % endif
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
-    time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
-    ${node.name}_perf_cnt = (int)(end - start);
-    // sum_kernel_comp_cyc += ${node.name}_perf_cnt;
-    // printf("[${model_name} GRAPH] MATCH node ${node.name} done, took %fms\n", time_elapsed_ms);
+    ${node.name}_perf_cnt = (int)((end - start) ${target.timestamp_to_ms});;
     #endif
     % endif
 
-    // Print profiling info
-    #if __${model_name}_GRAPH_PROFILE__
-    end = ${target.end_get_timestamp_api}();
-    time_elapsed_ms = ((double)(end - start)) ${target.timestamp_to_ms};
-    printf("[${model_name} GRAPH] ${"TVM" if node.fallback else "MATCH"} node ${node.name} done, took %fms\n", time_elapsed_ms);
-    #endif
-
-    // Check debug checksum
     #if __${model_name}_GRAPH_DEBUG__
     % if node.fallback:
         #if __${model_name}_FALLBACK_GRAPH_DEBUG__
     % endif
     % if node.dtype_output_node=="float32":
-    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, relative error between output and checksum by %f\n", match_float_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+    ${target.print_fn}("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, relative error between output and checksum by %f\n\r", match_float_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
     % else:
-    printf("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, output differs from checksum by %d\n", match_byte_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
+    ${target.print_fn}("[${model_name} GRAPH] ${'TVM' if node.fallback else 'MATCH'} node ${node.name} done, output differs from checksum by %d\n\r", match_byte_checksum_check(${node.outputs[0].get_pt}, __${model_name}_GRAPH_${node.name}_BYTES__, __${model_name}_GRAPH_${node.name}_CHECKSUM__));
     % endif
     % if node.fallback:
         #endif
     % endif
     #endif
     % if len(node.free_buffers)>0:
-    // free extra buffers allocated
     match_free_workspace();
     % endif
+#endif
+    return 0;
+}
+% endfor
+
+int match_${model_name}_run_graph(
+% for rt_i in rt_inputs:
+    ${rt_i.c_type}* ${rt_i.name}_${"ext_" if rt_i.stored_in_external_memory else ""}pt,
+% endfor
+% for rt_o_idx,rt_o in enumerate(rt_outputs):
+    ${"" if rt_o_idx==0 else ", "}${rt_o.c_type}* ${rt_o.name}_${"ext_" if rt_o.stored_in_external_memory else ""}pt
+% endfor
+){
+
+#if __${model_name}_GRAPH_PROFILE__ || __${model_name}_FALLBACK_GRAPH_PROFILE__
+    ${target.timestamp_type} start,end;
+#endif
+% if write_power_profiling_code:
+#ifdef USE_GPIO
+    gpio_test_0 = TEST_GPIO_0;
+    pi_pad_function_set(PI_PAD_089, 1);
+    pi_gpio_pin_configure(gpio_test_0, PI_GPIO_OUTPUT);
+    WRITE_GPIO(gpio_test_0, 1);
+
+    gpio_test_1 = TEST_GPIO_1;
+    pi_pad_function_set(PI_PAD_068, 1);
+    pi_gpio_pin_configure(gpio_test_1, PI_GPIO_OUTPUT);
+    WRITE_GPIO(gpio_test_1, 1);
+
+    gpio_test_2 = TEST_GPIO_2;
+    pi_pad_function_set(PI_PAD_052, 1);
+    pi_gpio_pin_configure(gpio_test_2, PI_GPIO_OUTPUT);
+    WRITE_GPIO(gpio_test_2, 1);
+#endif
+% endif
+% if ext_mem_needed_bytes>0:
+    void* match_ext_mem = ${target.allocate_ext_mem}(${ext_mem_needed_bytes});
+    % else:
+    void* match_ext_mem = NULL;
+    % endif
+    % if mem_needed_bytes>0:
+    % if target.alloc_fn!="" and target.free_fn!="":
+    void* match_mem = ${target.alloc_fn}(__MATCH_MEM_SIZE__);
+    % else:
+    void* match_mem = match_static_malloc_mem;
+    % endif
+    if (!match_mem) {
+        ${target.print_fn}("Error: match_mem allocation failed\n\r");
+        return -1;
+    }
+    % else:
+    void* match_mem = NULL;
+    % endif
+    match_set_match_mem_pt(match_mem);
+
+    #if __${model_name}_GRAPH_PROFILE__
+    start = ${target.start_get_timestamp_api}();
+    #endif
+    % if target.params_off_chip_file:
+    match_${model_name}_graph_load_files(match_mem, match_ext_mem);
+    % endif
+    #if __${model_name}_GRAPH_PROFILE__
+    end = ${target.end_get_timestamp_api}();
+    constants_loading_cycles = (int)((end - start) ${target.timestamp_to_ms});;
+    #endif
+    % if write_power_profiling_code:
+    #ifdef USE_GPIO
+    WRITE_GPIO(gpio_test_0, 0);
+    #endif
+    % endif
+    % for node in nodes:
+    if (match_${model_name}_run_node_${node.node_id}(match_mem, match_ext_mem
+    % for rt_i in rt_inputs:
+        , ${rt_i.name}_${"ext_" if rt_i.stored_in_external_memory else ""}pt
+    % endfor
+    % for rt_o in rt_outputs:
+        , ${rt_o.name}_${"ext_" if rt_o.stored_in_external_memory else ""}pt
+    % endfor
+    )) return -1;
     % endfor
 
     % for mem_tensor in [m_t__ for m_t__ in mem_tensors if -1 in m_t__.move_temp_to_ext_mem]:
     #if __${model_name}_GRAPH_PROFILE__
     start = ${target.start_get_timestamp_api}();
     #endif
+    % if write_power_profiling_code:
     #ifdef USE_GPIO
     WRITE_GPIO(gpio_test_2, 0);
     #endif
+    % endif
     ${target.load_to_ext_mem_fn}(${mem_tensor.get_pt}, ${mem_tensor.get_ext_pt}, ${mem_tensor.elems * mem_tensor.dtype.itemsize});
+    % if write_power_profiling_code:
     #ifdef USE_GPIO
     WRITE_GPIO(gpio_test_2, 1);
     #endif
+    % endif
     #if __${model_name}_GRAPH_PROFILE__
     end = ${target.end_get_timestamp_api}();
-    ${mem_tensor.name}_cp_to_ext_mem_cyc = (int)(end - start);
-    // sum_mem_transfer_cyc += ${mem_tensor.name}_cp_to_ext_mem_cyc;
+    ${mem_tensor.name}_cp_to_ext_mem_cyc = (int)((end - start) ${target.timestamp_to_ms});;
     #endif
     % endfor
+    % if write_power_profiling_code:
     #ifdef USE_GPIO
     WRITE_GPIO(gpio_test_0, 1);
     #endif
+    % endif
 
     #if __${model_name}_FALLBACK_GRAPH_PROFILE__
     match_${model_name}_graph_profile_summary();
     #endif
-    // final cleanup
     % if mem_needed_bytes>0 and target.free_fn != "" and target.alloc_fn != "":
     ${target.free_fn}(match_mem);
 % endif
 
-// Free external L3 memory pool
 % if ext_mem_needed_bytes > 0:
     ${target.free_external_mem}(match_ext_mem, ${ext_mem_needed_bytes});
 % endif

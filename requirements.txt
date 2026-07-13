@@ -17,3 +17,4 @@ matplotlib
 onnx==1.17
 tqdm
 multiprocessing_on_dill
+python-constraint

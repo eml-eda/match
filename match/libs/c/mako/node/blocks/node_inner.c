@@ -15,14 +15,14 @@
 <%def name="smp_primary_core_region_begin()">
     <% global smp_region_counter %>
     % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
-        // if (!${platform_apis.smp_primary_core_guard}(ctx)) goto smp_skip_${smp_region_counter};
+        if (!${platform_apis.smp_primary_core_guard}(ctx)) goto smp_skip_${smp_region_counter};
     % endif
 </%def>
 
 <%def name="smp_primary_core_region_end()">
     <% global smp_region_counter %>
     % if exec_module.is_smp and platform_apis.smp_primary_core_guard != "":
-        // smp_skip_${smp_region_counter}: ;
+        smp_skip_${smp_region_counter}: ;
     % endif
     <% smp_region_counter += 1 %>
 </%def>

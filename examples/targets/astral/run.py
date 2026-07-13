@@ -5,10 +5,12 @@ import sys
 import onnx
 
 MATCH_PATH = "../../../.."
-sys.path.append(f"{MATCH_PATH}/match/match-tvm/python")
-sys.path.append(f"{MATCH_PATH}/match/zigzag")
-sys.path.append(f"{MATCH_PATH}/match")
-sys.path.append(".")
+BASE_DIR = Path(__file__).resolve().parent
+MATCH_ROOT = (BASE_DIR / MATCH_PATH / "match").resolve()
+sys.path.insert(0, str((MATCH_ROOT / "match-tvm" / "python").resolve()))
+sys.path.insert(0, str((MATCH_ROOT / "zigzag").resolve()))
+sys.path.insert(0, str(MATCH_ROOT))
+sys.path.insert(0, str(BASE_DIR))
 
 import match
 from match.utils.utils import get_default_inputs
@@ -16,16 +18,26 @@ from match.relay.utils.utils import create_random_array
 import tvm
 from tvm import relay
 from match.model.model import MatchModel
-from examples.targets.astral.astral import Astral
+from astral import Astral
 
-INPUT_FILE_PATH = "models/qyolo_chw_inp.txt"
-ONNX_FILE_PATH = "models/qyolo.onnx"
+# INPUT_FILE_PATH = "model/input.txt"
+# ONNX_FILE_PATH = "model/model.onnx"
+# MODEL_NAME = "default"
+# INPUT_FILE_PATH = "yolo_dump/features/input_quantizer_chw.txt"
+INPUT_FILE_PATH = "yolo_dump/input.txt"
+# ONNX_FILE_PATH = "yolo_dump/yolo_tristan_multiple_out_fix.onnx"
+ONNX_FILE_PATH = "yolo_dump/qyolo.onnx"
 MODEL_NAME = "qyolo"
-# MODEL_NAME = "smalldense"
 HOST_ONLY = False
-EXECUTOR = "aot"
-OUTPUT_DIR = MODEL_NAME + "_" + EXECUTOR + "_" + ("host" if HOST_ONLY else "cluster")
+# HOST_ONLY = False
+EXECUTOR = "graph"
 
+
+ONNX_FILE_PATH = "tristan-aereo/tristan-aero/inputs_cf/tristan_aereo.onnx"
+INPUT_FILE_PATH = "tristan-aereo/tristan-aero/inputs_cf/input.txt"
+MODEL_NAME = "tristan_aereo"
+
+OUTPUT_DIR = MODEL_NAME + "_" + EXECUTOR + "_" + ("host" if HOST_ONLY else "cluster")
 # python3 test.py --executor graph --target pulp_open --model yolo_sanitized_uint8_fix --min_input_val 0 --max_input_val 0 --handle_out_fn handle_yolo_output --input_files /home/moyne/phd/yolo/yolov5relu-tristan-industrial/exp/qat21/golden/input_quantizer.txt
 
 def create_dense_ex(
@@ -84,7 +96,11 @@ if MODEL_NAME != "smalldense":
     
     save_model_and_params(relay_mod, relay_params)
 
-    default_inputs = get_default_inputs(mod=relay_mod, params=relay_params, input_files=[INPUT_FILE_PATH])
+    default_inputs = get_default_inputs(
+        mod=relay_mod,
+        params=relay_params,
+        input_files=[INPUT_FILE_PATH]
+    )
 else:
     relay_mod, relay_params = create_dense_ex(
         inp_features=16,

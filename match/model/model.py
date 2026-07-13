@@ -274,20 +274,33 @@ class MatchModel:
                 "-I" + os.path.join(tvm.__path__[0], "../..", "3rdparty", "dlpack", "include"),
                 "-I" + os.path.join(tvm.__path__[0], "../..", "include"),
             ]
+            host_only_lib_path = f"{build_dir}/host_only_lib_{model_name}.so"
             other_flags = [
                 "-Dhalf=_Float16",
             ]
-            host_only_lib_path = f"{build_dir}/host_only_lib_{model_name}.so"
-            tvm.contrib.cc.create_shared(
-                output=host_only_lib_path,
-                objects=[
-                    f"{build_dir}/codegen/host/src/devc.c",
-                    f"{build_dir}/codegen/host/src/lib0.c",
-                    f"{build_dir}/codegen/host/src/lib1.c",
-                ],
-                options=include_paths + other_flags,
-                cc="clang",
-            )
+            try:
+                tvm.contrib.cc.create_shared(
+                    output=host_only_lib_path,
+                    objects=[
+                        f"{build_dir}/codegen/host/src/devc.c",
+                        f"{build_dir}/codegen/host/src/lib0.c",
+                        f"{build_dir}/codegen/host/src/lib1.c",
+                    ],
+                    options=include_paths + other_flags,
+                    cc="clang",
+                )
+            except Exception as e:
+                other_flags = [ "-Dhalf=__fp16",]
+                tvm.contrib.cc.create_shared(
+                    output=host_only_lib_path,
+                    objects=[
+                        f"{build_dir}/codegen/host/src/devc.c",
+                        f"{build_dir}/codegen/host/src/lib0.c",
+                        f"{build_dir}/codegen/host/src/lib1.c",
+                    ],
+                    options=include_paths + other_flags,
+                    cc="clang",
+                )
             host_module = tvm.runtime.load_module(host_only_lib_path)
             # read the json of the mod and the params to build the runtime
             mod_info = {}
@@ -318,6 +331,7 @@ class MatchModel:
             graph_runtime_template_data["debug_fallback"] = debug_fallback
             graph_runtime_template_data["profile"] = profile
             graph_runtime_template_data["profile_fallback"] = profile_fallback
+            graph_runtime_template_data["write_power_profiling_code"] = False
 
             try:
                 # Graph Runtime

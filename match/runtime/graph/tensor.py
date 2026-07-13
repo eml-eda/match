@@ -49,6 +49,8 @@ class MatchMemoryTensor:
         self.mem_offset_at = dict()
         self.used_by_tvm = False
         self.ext_mem_offset = -1
+        self.wait_async_off_chip_transfer_at = list()
+        self._off_chip_file_ = False
 
     @property
     def get_pt(self):
@@ -60,7 +62,12 @@ class MatchMemoryTensor:
             return f"match_mem + {self.mem_offset}"
     
     def get_new_mem_offset(self, ext_mem_offset: int=0):
-        if (len(self.load_from_ext_mem_at)>0 and (not self.is_input and not self.is_output)) or (self.is_constant and self.stored_in_external_memory):
+        needs_ext_allocation = (
+            ((len(self.load_from_ext_mem_at) > 0) or (len(self.move_temp_to_ext_mem) > 0) or self.stored_in_external_memory)
+            and (not self.is_input and not self.is_output)
+        ) or (self.is_constant and self.stored_in_external_memory)
+
+        if needs_ext_allocation:
             self.ext_mem_offset = ext_mem_offset 
             return ext_mem_offset + (self.elems * self.dtype.itemsize)
         else:
@@ -71,6 +78,8 @@ class MatchMemoryTensor:
     def get_ext_pt(self):
         if (self.is_input or self.is_output) and self.stored_in_external_memory:
             return f"{self.name}_ext_pt"
+        elif self.is_constant and self.stored_in_external_memory and not self._off_chip_file_:
+            return f"{self.name}_data_"
         else:
             return f"match_ext_mem + {self.ext_mem_offset}"
 
@@ -101,3 +110,4 @@ class MatchMemoryTensor:
         self.stored_in_external_memory = False
         self.move_temp_to_ext_mem = list()
         self.load_from_ext_mem_at = list()
+        self.wait_async_off_chip_transfer_at = list()

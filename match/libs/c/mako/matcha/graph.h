@@ -29,6 +29,12 @@
 #define __${model_name}_GRAPH_PROFILE__ ${int(profile)}
 #define __${model_name}_FALLBACK_GRAPH_PROFILE__ ${int(profile_fallback)}
 
+// Run a single node or all the groph
+#define __${model_name}_GRAPH_RUN_ALL_NODES__ 1
+#define __${model_name}_GRAPH_RUN_ONLY_NODE_ID__ -1
+
+
+
 // Debugging flags
 #define __${model_name}_GRAPH_DEBUG__ ${int(debug)}
 #define __${model_name}_FALLBACK_GRAPH_DEBUG__ ${int(debug_fallback)}

@@ -178,7 +178,6 @@ def only_std_conv1d(node):
         return False
     if conv.attrs.groups!=1:
         return False
-    breakpoint()
     if conv.attrs.data_layout!="NWC":
         return False
     return True

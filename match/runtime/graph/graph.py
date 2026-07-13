@@ -1,10 +1,12 @@
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List
 import numpy as np
 from match.runtime.graph.memplan import MatchMemoryPlanner
 from match.runtime.graph.tensor import MatchMemoryTensor
+from match.runtime.graph.waits import WaitPoint
 from match.target.target import MatchTarget
 from match.utils.utils import get_fname_node_schedule
+from match.utils.execution_analysis import generate_execution_report
 import tvm
 
 class MatchGraphRuntimeNodeCall:
@@ -53,6 +55,7 @@ class MatchTVMGraphRuntime:
         self.out_path = out_path
         self.mem_planner = None
         self.ext_mem_needed_bytes = 0
+        self.wait_points : List[WaitPoint] = []
         self.mem_needed_bytes = 0
         self.match_inputs = match_inputs
         self.host_module = host_module
@@ -75,9 +78,10 @@ class MatchTVMGraphRuntime:
                     splitted_line = line.strip().split()
                     buffer_name = splitted_line[1]
                     buffer_size = int(splitted_line[5].split(")")[1][:-1])
+                    buffer_nbits_dtype = int(splitted_line[-1][:-2])
                     if func_name not in self.fallback_kernel_extra_dynamic_mem:
                         self.fallback_kernel_extra_dynamic_mem[func_name] = {"total": 0, "buffers": []}
-                    self.fallback_kernel_extra_dynamic_mem[func_name]["buffers"].append((buffer_name, buffer_size))
+                    self.fallback_kernel_extra_dynamic_mem[func_name]["buffers"].append((buffer_name, buffer_size, buffer_nbits_dtype))
                     self.fallback_kernel_extra_dynamic_mem[func_name]["total"] += buffer_size
         self.max_extra_dynamic_mem = max(
             [self.fallback_kernel_extra_dynamic_mem[func_name]["total"] for func_name in self.fallback_kernel_extra_dynamic_mem]+[0]
@@ -106,6 +110,7 @@ class MatchTVMGraphRuntime:
                 storage_ids_size[storage_id] = tensor_size
         extra_dynamic_buffer_id = 0
         extra_dynamic_buffers = []
+        match_nodes_data = {}  # Store MATCH node info for execution analysis
         for match_inp in self.match_inputs.values():
             activations[match_inp["name"]] = match_inp["np_values"]
             dtype_activations[match_inp["name"]] = match_inp["np_values"].dtype
@@ -234,6 +239,14 @@ class MatchTVMGraphRuntime:
                 host_lib = None
                 if "match" in node["name"]:
                     match_node, schedule, match_node_name, cpu_only_c_lib, host_lib = get_fname_node_schedule(node["name"])
+                    # Store MATCH node data for execution analysis
+                    if host_lib is not None:
+                        match_nodes_data[node["name"]] = {
+                            "ir_mod": host_lib.ir_mod if hasattr(host_lib, 'ir_mod') else None,
+                            "schedule": schedule,
+                            "match_node": match_node,
+                            "match_node_name": match_node_name
+                        }
                     if match_node is not None and schedule is not None:
                         for w_tensor in match_node.const_tensors.values():
                             if w_tensor.name in schedule.tensors:
@@ -332,14 +345,14 @@ class MatchTVMGraphRuntime:
                 map_names[tens_name] = (call_node.name, node["name"]+"_out", node["name"])
 
                 if "match" not in node["name"] and call_node.fn_name in self.fallback_kernel_extra_dynamic_mem:
-                    for buffer_name, buffer_size in self.fallback_kernel_extra_dynamic_mem[call_node.fn_name]["buffers"]:
+                    for buffer_name, buffer_size, buffer_nbits_dtype in self.fallback_kernel_extra_dynamic_mem[call_node.fn_name]["buffers"]:
                         mem_tensor_extra = MatchMemoryTensor(
                             name=f"TVM_EXTRA_DYNAMIC_BUFFER_{extra_dynamic_buffer_id}_{buffer_name}",
                             is_intermediate=True,
                             is_extra_dynamic=True,
                             extra_dynamic_buffer_id=extra_dynamic_buffer_id,
-                            shape=(buffer_size,),
-                            dtype=np.dtype("uint8"),
+                            shape=(buffer_size // (buffer_nbits_dtype // 8),),
+                            dtype=np.dtype(f"uint{buffer_nbits_dtype}"),
                             node_id=node_id,
                         )
                         extra_dynamic_buffers.append(mem_tensor_extra)
@@ -356,10 +369,11 @@ class MatchTVMGraphRuntime:
             calls_idxs=[node.node_id for node in nodes],
             nodes=nodes,
             out_path=self.out_path,
-            algorithm="match",
+            algorithm=self.target.graph_runtime_mem_plan_algorithm,
             fix_io_tensors_in_ext_mem=self.target.fix_io_tensors_in_ext_mem,
+            target=self.target,
         )
-        self.mem_needed_bytes, self.ext_mem_needed_bytes = self.mem_planner.generate()
+        self.mem_needed_bytes, self.ext_mem_needed_bytes, self.wait_points = self.mem_planner.generate()
         inputs = [tens for tens in mem_tensors if tens.is_input]
         outputs = list()
         found_outputs_cnt = dict()
@@ -373,11 +387,13 @@ class MatchTVMGraphRuntime:
             Path(self.out_path+"/parameters").absolute().mkdir()
         if not Path(self.out_path+"/golden").absolute().is_dir():
             Path(self.out_path+"/golden").absolute().mkdir()
-        for mem_tensor in mem_tensors:
-            if mem_tensor.stored_in_external_memory and mem_tensor.is_constant:
-                np.frombuffer(mem_tensor.constant_val.flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}_data.hex"))
-            elif mem_tensor.stored_in_external_memory and mem_tensor.is_input:
-                np.frombuffer(activations[mem_tensor.name].flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}_data.hex"))
+        
+        if self.target.params_off_chip_file:
+            for mem_tensor in mem_tensors:
+                if mem_tensor.stored_in_external_memory and mem_tensor.is_constant:
+                    np.frombuffer(mem_tensor.constant_val.flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}_data.hex"))
+                elif mem_tensor.stored_in_external_memory and mem_tensor.is_input:
+                    np.frombuffer(activations[mem_tensor.name].flatten().tobytes(),dtype="uint8").tofile(Path(self.out_path+f"/parameters/{self.model_name}_{mem_tensor.name}_data.hex"))
         for activation_name, activation in activations.items():
             mem_tensor_ = None
             for m_t in mem_tensors:
@@ -393,7 +409,7 @@ class MatchTVMGraphRuntime:
         for activation_name, activation in activations.items():
             # print(activation_name, dtype_activations[activation_name])
             if np.issubdtype(dtype_activations[activation_name], np.floating):
-                checksums[activation_name] = np.frombuffer(activation.flatten(), dtype="float32").astype(np.float64).sum()
+                checksums[activation_name] = np.frombuffer(activation.flatten(), dtype=dtype_activations[activation_name]).astype(np.float64).sum()
             else: # FIXME 
                 checksums[activation_name] = np.frombuffer(activation.flatten().tobytes(),dtype="uint8").sum()
         
@@ -403,6 +419,9 @@ class MatchTVMGraphRuntime:
             "target": self.target,
             "mem_tensors": mem_tensors,
             "ext_mem_needed_bytes": self.ext_mem_needed_bytes,
+            "wait_points": self.wait_points,
+            "wait_tensors_name": set([m.tracking_tensor for m in self.wait_points]),
+            "wait_map": {m.node_id: m.tracking_tensor for m in self.wait_points},
             "mem_needed_bytes": self.mem_needed_bytes,
             "nodes": nodes,
             "model_name": self.model_name,
@@ -416,4 +435,16 @@ class MatchTVMGraphRuntime:
             "tvm_memplan_storage_ids_size": storage_ids_size,
             "total_tvm_memplan_storage_size": sum(storage_ids_size.values())
         }
+        
+        # Generate execution analysis report
+        try:
+            report_path = str(Path(self.out_path) / "execution_analysis.xlsx")
+            report_result = generate_execution_report(self.mod_info, output_file=report_path, match_nodes_data=match_nodes_data)
+            if report_result:
+                print(f"[EXECUTION ANALYSIS] Report generated: {report_path}")
+        except ImportError:
+            print("[EXECUTION ANALYSIS] Warning: openpyxl not installed. Install with: pip install openpyxl")
+        except Exception as e:
+            print(f"[EXECUTION ANALYSIS] Warning: Could not generate report: {e}")
+        
         return template_data

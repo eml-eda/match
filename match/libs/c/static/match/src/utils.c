@@ -58,6 +58,63 @@ float match_float_checksum_check(void* data, int size, double checksum) {
     return sum - checksum;
 }
 
+static float half_to_float(uint16_t h) {
+    uint32_t sign = (h >> 15) & 0x1;
+    uint32_t exp  = (h >> 10) & 0x1F;
+    uint32_t mant = h & 0x3FF;
+    uint32_t f;
+
+    if (exp == 0) {
+        if (mant == 0) {
+            f = sign << 31;
+        } else {
+            // subnormal -> normalize
+            while ((mant & 0x400) == 0) {
+                mant <<= 1;
+                exp--;
+            }
+            exp += 1;
+            mant &= 0x3FF;
+            exp = (uint32_t)(exp + (127 - 15));
+            f = (sign << 31) | (exp << 23) | (mant << 13);
+        }
+    } else if (exp == 31) {
+        // Inf or NaN
+        f = (sign << 31) | 0x7F800000u | (mant << 13);
+    } else {
+        exp = (uint32_t)(exp + (127 - 15));
+        f = (sign << 31) | (exp << 23) | (mant << 13);
+    }
+
+    union { uint32_t u; float f; } conv;
+    conv.u = f;
+    return conv.f;
+}
+
+float match_fp16_checksum_check(void* data, int size, double checksum) {
+    // Calculate checksum
+    double sum = 0.0;
+
+    // compute and return the checksum
+    for (int i = 0; i < size/2; ++i) {        
+        sum += half_to_float(((uint16_t*)data)[i]);
+    }
+    // Compute the relative error (1e-20 gives numerical stability)
+    return (float)(sum - checksum);
+}
+
+double match_fp16_checksum_comp(void* data, int size, double checksum) {
+    // Calculate checksum
+    double sum = 0.0;
+
+    // compute and return the checksum
+    for (int i = 0; i < size/2; ++i) {        
+        sum += half_to_float(((uint16_t*)data)[i]);
+    }
+    // Compute the relative error (1e-20 gives numerical stability)
+    return sum;
+}
+
 void handle_int_classifier(int* output_pt, int classes, int runtime_status){
     int max_idx = 0;
     int max_val = output_pt[0];

@@ -361,6 +361,7 @@ int handle_dma_transfer(
                             tensor->tiles[MEM_L1_PULPD*5+1].size*
                             tensor->tiles[MEM_L1_PULPD*5+2].size*
                             tensor->tiles[MEM_L1_PULPD*5+3].size*
+                            tensor->tiles[MEM_L1_PULPD*5+4].size*
                             tensor->bits/8;
                     pulp_cluster_transfer_1d((dma_transfer_cfg_t) {
                         .ext = tensor_l2_pt,
@@ -373,6 +374,7 @@ int handle_dma_transfer(
                             tensor->tiles[MEM_L1_PULPD*5+1].size*
                             tensor->tiles[MEM_L1_PULPD*5+2].size*
                             tensor->tiles[MEM_L1_PULPD*5+3].size*
+                            tensor->tiles[MEM_L1_PULPD*5+4].size*
                             tensor->bits/8;
                     pulp_cluster_transfer_2d((dma_transfer_cfg_t) {
                         .ext = tensor_l2_pt,
@@ -392,6 +394,8 @@ int handle_dma_transfer(
                     bytes = tensor->tiles[MEM_L1_PULPD*5+1].size*
                             tensor->tiles[MEM_L1_PULPD*5+2].size*
                             tensor->tiles[MEM_L1_PULPD*5+3].size*
+                            tensor->tiles[MEM_L1_PULPD*5+4].size*
+                            tensor->tiles[MEM_L1_PULPD*5+0].size*
                             tensor->bits/8;
                     for(int idx=0; idx<tensor->tiles[MEM_L1_PULPD*5+0].size; idx++)
                         pulp_cluster_transfer_3d((dma_transfer_cfg_t) {
@@ -417,8 +421,133 @@ int handle_dma_transfer(
                     bytes *= tensor->tiles[MEM_L1_PULPD*5+0].size;
                 }
                 transferred_bytes = bytes;
-            } else
-                exit(1);
+            } else{
+                int is_1d = tensor->tiles[MEM_L2*5+4].size==tensor->tiles[MEM_L1_PULPD*5+4].size &&
+                            tensor->tiles[MEM_L2*5+3].size==tensor->tiles[MEM_L1_PULPD*5+3].size &&
+                            tensor->tiles[MEM_L2*5+2].size==tensor->tiles[MEM_L1_PULPD*5+2].size &&
+                            tensor->tiles[MEM_L2*5+1].size==tensor->tiles[MEM_L1_PULPD*5+1].size &&
+                            tensor->tiles[MEM_L2*5+0].size==tensor->tiles[MEM_L1_PULPD*5+0].size;
+                if(is_1d){
+                    bytes = tensor->tiles[MEM_L1_PULPD*5+0].size*
+                            tensor->tiles[MEM_L1_PULPD*5+1].size*
+                            tensor->tiles[MEM_L1_PULPD*5+2].size*
+                            tensor->tiles[MEM_L1_PULPD*5+3].size*
+                            tensor->tiles[MEM_L1_PULPD*5+4].size*
+                            tensor->bits/8;
+                    #if DEBUG_CLUSTER_LIB
+                    mini_printf("            5D transfer 1D\r\n");
+                    #endif
+                    pulp_cluster_transfer_1d((dma_transfer_cfg_t) {
+                        .ext = tensor_l2_pt,
+                        .loc = tensor_l1_pt,
+                        .length_1d_copy = bytes,
+                        .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
+                    });
+                }
+                else{
+                    int dim_0_size = tensor->tiles[MEM_L2*5+0].size;
+                    int is_2d = tensor->tiles[MEM_L2*5+4].size==tensor->tiles[MEM_L1_PULPD*5+4].size &&
+                            tensor->tiles[MEM_L2*5+3].size==tensor->tiles[MEM_L1_PULPD*5+3].size &&
+                            tensor->tiles[MEM_L2*5+2].size==tensor->tiles[MEM_L1_PULPD*5+2].size &&
+                            tensor->tiles[MEM_L2*5+1].size==tensor->tiles[MEM_L1_PULPD*5+1].size;
+                    int is_2d_dim_0_one = tensor->tiles[MEM_L2*5+4].size==tensor->tiles[MEM_L1_PULPD*5+4].size &&
+                            tensor->tiles[MEM_L2*5+3].size==tensor->tiles[MEM_L1_PULPD*5+3].size &&
+                            tensor->tiles[MEM_L2*5+2].size==tensor->tiles[MEM_L1_PULPD*5+2].size &&
+                            dim_0_size==1;
+                    if(is_2d){
+                        bytes = tensor->tiles[MEM_L1_PULPD*5+0].size*
+                                tensor->tiles[MEM_L1_PULPD*5+1].size*
+                                tensor->tiles[MEM_L1_PULPD*5+2].size*
+                                tensor->tiles[MEM_L1_PULPD*5+3].size*
+                                tensor->tiles[MEM_L1_PULPD*5+4].size*
+                                tensor->bits/8;
+                        #if DEBUG_CLUSTER_LIB
+                        mini_printf("            5D transfer 2D\r\n");
+                        #endif
+                        pulp_cluster_transfer_2d((dma_transfer_cfg_t) {
+                            .ext = tensor_l2_pt,
+                            .loc = tensor_l1_pt,
+                            .number_of_1d_copies = tensor->tiles[MEM_L1_PULPD*5+0].size,
+                            .length_1d_copy = tensor->tiles[MEM_L1_PULPD*5+1].size*
+                                                tensor->tiles[MEM_L1_PULPD*5+2].size*
+                                                tensor->tiles[MEM_L1_PULPD*5+3].size*
+                                                tensor->tiles[MEM_L1_PULPD*5+4].size*
+                                                tensor->bits/8,
+                            .stride_1d = tensor->tiles[MEM_L2*5+1].size*
+                                            tensor->tiles[MEM_L2*5+2].size*
+                                            tensor->tiles[MEM_L2*5+3].size*
+                                            tensor->tiles[MEM_L2*5+4].size*
+                                            tensor->bits/8,
+                            .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
+                        });
+                    }
+                    else if(is_2d_dim_0_one){
+                        bytes = tensor->tiles[MEM_L1_PULPD*5+0].size*
+                                tensor->tiles[MEM_L1_PULPD*5+1].size*
+                                tensor->tiles[MEM_L1_PULPD*5+2].size*
+                                tensor->tiles[MEM_L1_PULPD*5+3].size*
+                                tensor->tiles[MEM_L1_PULPD*5+4].size*
+                                tensor->bits/8;
+                        #if DEBUG_CLUSTER_LIB
+                        mini_printf("            5D transfer 2D dim 0 one\r\n");
+                        #endif
+                        pulp_cluster_transfer_2d((dma_transfer_cfg_t) {
+                            .ext = tensor_l2_pt,
+                            .loc = tensor_l1_pt,
+                            .number_of_1d_copies = tensor->tiles[MEM_L1_PULPD*5+1].size,
+                            .length_1d_copy = tensor->tiles[MEM_L1_PULPD*5+2].size*
+                                                tensor->tiles[MEM_L1_PULPD*5+3].size*
+                                                tensor->tiles[MEM_L1_PULPD*5+4].size*
+                                                tensor->bits/8,
+                            .stride_1d = tensor->tiles[MEM_L2*5+2].size*
+                                            tensor->tiles[MEM_L2*5+3].size*
+                                            tensor->tiles[MEM_L2*5+4].size*
+                                            tensor->bits/8,
+                            .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
+                        });
+                    } else {
+                        bytes = tensor->tiles[MEM_L1_PULPD*5+0].size*
+                                tensor->tiles[MEM_L1_PULPD*5+1].size*
+                                tensor->tiles[MEM_L1_PULPD*5+2].size*
+                                tensor->tiles[MEM_L1_PULPD*5+3].size*
+                                tensor->tiles[MEM_L1_PULPD*5+4].size*
+                                tensor->bits/8;
+                        #if DEBUG_CLUSTER_LIB
+                        mini_printf("            5D transfer 4D\r\n");
+                        #endif
+                        for(int idx_dim_0=0; idx_dim_0<tensor->tiles[MEM_L1_PULPD*5+0].size; idx_dim_0++)
+                            for(int idx_dim_1=0; idx_dim_1<tensor->tiles[MEM_L1_PULPD*5+1].size; idx_dim_1++)
+                                pulp_cluster_transfer_3d((dma_transfer_cfg_t) {
+                                    .ext = tensor_l2_pt + idx_dim_0*tensor->tiles[MEM_L2*5+1].size*
+                                                tensor->tiles[MEM_L2*5+2].size*
+                                                tensor->tiles[MEM_L2*5+3].size*
+                                                tensor->tiles[MEM_L2*5+4].size*
+                                                tensor->bits/8 + idx_dim_1*tensor->tiles[MEM_L2*5+2].size*
+                                                tensor->tiles[MEM_L2*5+3].size*
+                                                tensor->tiles[MEM_L2*5+4].size*tensor->bits/8,
+                                    .loc = tensor_l1_pt + idx_dim_0*tensor->tiles[MEM_L1_PULPD*5+1].size*
+                                                tensor->tiles[MEM_L1_PULPD*5+2].size*
+                                                tensor->tiles[MEM_L1_PULPD*5+3].size*
+                                                tensor->tiles[MEM_L1_PULPD*5+4].size*
+                                                tensor->bits/8 + idx_dim_1*tensor->tiles[MEM_L1_PULPD*5+2].size*
+                                                tensor->tiles[MEM_L1_PULPD*5+3].size*
+                                                tensor->tiles[MEM_L1_PULPD*5+4].size*tensor->bits/8,
+                                    .number_of_2d_copies = tensor->tiles[MEM_L1_PULPD*5+2].size,
+                                    .number_of_1d_copies = tensor->tiles[MEM_L1_PULPD*5+3].size,
+                                    .length_1d_copy =  tensor->tiles[MEM_L1_PULPD*5+4].size*
+                                                        tensor->bits/8,
+                                    .stride_1d = tensor->tiles[MEM_L2*5+4].size*
+                                                    tensor->bits/8,
+                                    .stride_2d = tensor->tiles[MEM_L2*5+3].size*
+                                                    tensor->tiles[MEM_L2*5+4].size*
+                                                    tensor->bits/8,
+                                    .dir = match_transfer_type==MATCH_SW_LOAD_TENSOR
+                                });
+                    }
+                }
+                
+            }
+            transferred_bytes = bytes;
             break;
         }
     }

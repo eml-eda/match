@@ -46,7 +46,7 @@ class Carfield(MatchTarget):
         self.set_paths()
         self.set_apis()
         
-        self.enable_device_parallelism = LAYER_SPLIT
+        # self.enable_device_parallelism = LAYER_SPLIT
 
     def set_target_host(self):
         self.cpu_type = "riscv_cpu -march=riscv64"

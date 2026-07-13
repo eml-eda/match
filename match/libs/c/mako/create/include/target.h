@@ -24,7 +24,7 @@
         #endif
     % endfor
 
-    extern volatile uint32_t ${exec_module.name}_args[16];
+    // extern volatile uint32_t ${exec_module.name}_args[16];
 % endfor
 
 % for pat_idx, pat in enumerate([pt for exec_module in target.exec_modules for pt in exec_module.partitioning_patterns()]):

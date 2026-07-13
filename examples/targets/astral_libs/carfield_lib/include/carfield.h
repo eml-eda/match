@@ -9,6 +9,7 @@
 
 #define L1_SCRATCHPAD_SIZE 32768
 
+#define __PRINT_ENABLED__ 1
 
 // General host functions
 
@@ -20,11 +21,13 @@ void carfield_init_uart();
 
 void carfield_shutdown();
 
-void handle_host_dma_transfer(
+int handle_host_dma_transfer(
     void* src,
     void* dst,
     size_t size
 );
+
+void carfield_wait_dma(int transfer_id);
 
 void carfield_timer_start();
 uint64_t carfield_timer_stop();
@@ -32,8 +35,8 @@ uint64_t carfield_timer_stop();
 // External memory management
 void* carfield_init_ram(size_t size);
 void carfield_load_file_to_ram(const char* file_name, void* dst, size_t size);
-void carfield_memcpy_from_ram(void* loc, const void* ext, size_t size);
-void carfield_memcpy_to_ram(const void* loc, void* ext, size_t size);
+int carfield_memcpy_from_ram(void* ext, void* loc, size_t size);
+int carfield_memcpy_to_ram(void* loc, void* ext, size_t size);
 void carfield_free_ram(void* ext, size_t size);
 
 // Host interrupt related things

@@ -8,10 +8,20 @@
 % endif
 % endfor
 
-% for mem_tensor in mem_tensors:
-% if mem_tensor.is_constant and not mem_tensor.stored_in_external_memory:
-extern const ${mem_tensor.c_type} ${mem_tensor.name}_data_[${mem_tensor.prod_shape}];
+% if target.params_data_on_chip_flag!="":
+#define __MATCH_${model_name}_PARAM_ON_CHIP__ ${target.params_data_on_chip_flag}
+% endif
+% if target.params_data_off_chip_flag!="":
+#define __MATCH_${model_name}_PARAM_OFF_CHIP__ ${target.params_data_off_chip_flag}
+% endif
 
+% for mem_tensor in mem_tensors:
+% if mem_tensor.is_constant:
+% if mem_tensor.stored_in_external_memory and not target.params_off_chip_file:
+extern ${"__MATCH_"+model_name+"_PARAM_OFF_CHIP__" if target.params_data_off_chip_flag != "" else ""} ${mem_tensor.c_type} ${mem_tensor.name}_data_[${mem_tensor.prod_shape}];
+% elif not mem_tensor.stored_in_external_memory:
+extern ${"__MATCH_"+model_name+"_PARAM_ON_CHIP__" if target.params_data_on_chip_flag != "" else ""} ${mem_tensor.c_type} ${mem_tensor.name}_data_[${mem_tensor.prod_shape}];
+% endif
 % endif
 % endfor
 
