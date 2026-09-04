@@ -31,16 +31,16 @@ class PulpCluster(ExecModule):
             name="pulp_cluster",
             libs_required={
                 "carfield_lib": ModuleLib(
-                    name="carfield_lib", base_path=cur_path + "../astral_libs/carfield_lib"
+                    name="carfield_lib", base_path=cur_path + "/../astral_libs/carfield_lib"
                 ),
                 "pulp_nn": ModuleLib(
-                    name="pulp_nn", base_path=cur_path + "../astral_libs/pulp_nn"
+                    name="pulp_nn", base_path=cur_path + "/../astral_libs/pulp_nn"
                 ),
                 "pulp_kernels": ModuleLib(
-                    name="pulp_kernels", base_path=cur_path + "../astral_libs/pulp_kernels"
+                    name="pulp_kernels", base_path=cur_path + "/../astral_libs/pulp_kernels"
                 ),
                 "redmule": ModuleLib(
-                    name="redmule", base_path=cur_path + "../astral_libs/redmule"
+                    name="redmule", base_path=cur_path + "/../astral_libs/redmule"
                 ),
             },
         )
