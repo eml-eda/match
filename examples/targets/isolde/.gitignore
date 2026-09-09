@@ -1,4 +1,4 @@
-output/
+output*
 models/
 tmp/
 __pycache__

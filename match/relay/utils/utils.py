@@ -308,15 +308,15 @@ def create_build_dir(build_path: str = "./build",
                 shutil.copytree(src=pathlib.Path(lib.base_path) / "src",
                                 dst=build_path / "src" / lib_name, dirs_exist_ok=True)
             else:
-                print(f"[UTILS:: create_build_dir] Could not find src path for {lib_name}")
-            if os.path.isdir(lib.src_path):
+                print(f"[UTILS:: create_build_dir] Could not find src path for {lib_name}, skipping {lib.src_path} and {lib.base_path}/src")
+            if os.path.isdir(lib.inc_path):
                 shutil.copytree(src=pathlib.Path(lib.inc_path), 
                                 dst=build_path / "include" / lib_name, dirs_exist_ok=True)
             elif os.path.isdir(lib.base_path+"/include"):
                 shutil.copytree(src=pathlib.Path(lib.base_path) / "include",
                                 dst=build_path / "include" / lib_name, dirs_exist_ok=True)
             else:
-                print(f"[UTILS:: create_build_dir] Could not find include path for {lib_name}")
+                print(f"[UTILS:: create_build_dir] Could not find include path for {lib_name}, skipping {lib.inc_path} and {lib.base_path}/include")
     patterns_set=set()
     for exec_module in target.exec_modules:
         patterns_set.update([pt.name for pt in exec_module.partitioning_patterns()])

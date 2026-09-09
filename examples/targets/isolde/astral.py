@@ -89,7 +89,8 @@ class Astral(MatchTarget):
     def network_transformations(self, opts):
         return [
             ("requant", MatchRequantRewriter()),
-            ("layout", MatchLayoutNCHWtoNHWCTVM),
+            # ("layout", MatchLayoutNCHWtoNHWCTVM),
+            # ("laybatchdense", RemoveLayoutTransformPass),
             ("folded", relay.transform.FoldConstant()),
         ]
     

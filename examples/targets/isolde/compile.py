@@ -11,9 +11,11 @@ from match.model.model import MatchModel as Model
 import random
 from astral import Astral
 
+__HOST_ONLY__ = True
+
 ONNX_FILE_PATH = "isolde.onnx"
 INPUT_FILE_PATH ="input.txt"
-OUTPUT_DIR_PATH = "output"
+OUTPUT_DIR_PATH = "output" + ("_host" if __HOST_ONLY__ else "_redmule")
 
 relay_mod, relay_params = match.get_relay_network(
     filename = ONNX_FILE_PATH
@@ -29,7 +31,11 @@ oenne_model = Model(
     profile = False,
     profile_fallback = False,
 )
+
 target = Astral()
+if __HOST_ONLY__:
+    target.disable_exec_module("pulp_cluster")
+
 match.match(
     model = oenne_model,
     target = target,
