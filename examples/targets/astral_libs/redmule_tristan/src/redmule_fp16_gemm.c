@@ -10,10 +10,10 @@
 #include "redmule/redmule_defines.h"
 
 
-void redmule_fp16_matmul_async(
+void redmule_fp16_gemm_async(
     const fp16 *__restrict__ x,
     const fp16 *__restrict__ w,
-    fp16 *__restrict__ z, 
+    fp16 *__restrict__ yz, 
     uint16_t dim_m,
     uint16_t dim_n,
     uint16_t dim_k
@@ -22,23 +22,23 @@ void redmule_fp16_matmul_async(
     
     redmule_init();
 
-    redmule_cfg(x, w, z, dim_m, dim_n, dim_k, (uint8_t)MATMUL, (uint8_t)Float16);
+    redmule_config(x, w, yz, dim_m, dim_n, dim_k, REDMULE_OP_GEMM, REDMULE_OP_FMT_FP16); 
 
     redmule_start();
 }
 
 
-void redmule_fp16_matmul(
+void redmule_fp16_gemm(
     const fp16 *__restrict__ x,
     const fp16 *__restrict__ w,
-    fp16 *__restrict__ z, 
+    fp16 *__restrict__ yz, 
     uint16_t dim_m,
     uint16_t dim_n,
     uint16_t dim_k
 ) {
     if (tid != 0) return; 
     
-    redmule_fp16_matmul_async(x, w, z, dim_m, dim_n, dim_k);
+    redmule_fp16_gemm_async(x, w, yz, dim_m, dim_n, dim_k);
 
     redmule_wait();
 }

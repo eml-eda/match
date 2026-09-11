@@ -22,7 +22,7 @@ void redmule_fp16_matmul_async(
     
     redmule_init();
 
-    redmule_cfg(x, w, z, dim_m, dim_n, dim_k, (uint8_t)MATMUL, (uint8_t)Float16);
+    redmule_config(x, w, z, dim_m, dim_n, dim_k, REDMULE_OP_MATMUL, REDMULE_OP_FMT_FP16);
 
     redmule_start();
 }
