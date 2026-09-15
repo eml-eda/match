@@ -26,8 +26,8 @@ oenne_model = Model(
     default_inputs = get_default_inputs(mod=relay_mod, params=relay_params, input_files=[INPUT_FILE_PATH]),
     debug = False,
     debug_fallback = False,
-    profile = False,
-    profile_fallback = False,
+    profile = True,
+    profile_fallback = True,
 )
 target = Astral()
 match.match(
