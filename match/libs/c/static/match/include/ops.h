@@ -23,6 +23,7 @@ typedef enum {
     MATCH_OP_SUBTRACT = 18,
     MATCH_OP_RSQRT = 19,
     MATCH_OP_BATCH_MATMUL = 20,
+    MATCH_OP_MAX_POOL2D = 21,
 } MATCH_OPS_CODE;
 
 // Attributes
@@ -62,6 +63,16 @@ typedef struct {
     const char* data_layout;
     const char* kernel_layout;
 } MatchConv2DTransposeAttrs;
+
+typedef struct {
+    int idx;
+    int strides[2];
+    int dilation[2];
+    int padding[4];
+    int pool_size[2];
+    const char* data_layout;
+    const char* out_layout;
+} MatchMaxPool2DAttrs;
 
 typedef struct {
     int idx;

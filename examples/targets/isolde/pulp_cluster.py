@@ -342,6 +342,14 @@ class PulpCluster(ExecModule):
             conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
             conv2d_add = is_op("add")(conv2d, is_constant()) | is_op("add")(is_constant(), conv2d)
             return conv2d_add
+
+        def maxpool2d():
+            return is_op("nn.max_pool2d")(wildcard())
+
+        def conv2d_bias_relu():
+            conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
+            conv2d_add = is_op("add")(conv2d, is_constant()) | is_op("add")(is_constant(), conv2d)
+            return is_op("nn.relu")(conv2d_add)
         
         def conv2d_bnorm():
             conv2d = is_op("nn.conv2d")(wildcard(), wildcard())
@@ -349,6 +357,15 @@ class PulpCluster(ExecModule):
             conv2d_batch_mul = is_op("multiply")(conv2d_add, is_constant()) | is_op("multiply")(is_constant(), conv2d_add)
             conv2d_batch_add = is_op("add")(conv2d_batch_mul, is_constant()) | is_op("add")(is_constant(), conv2d_batch_mul)
             return conv2d_batch_add
+
+        def conv2d_transpose_pt():
+            #Create pattern for a 2D Conv transpose block, with bias and ReLU.
+            conv2d_transpose = is_op("nn.conv2d_transpose")(
+                wildcard(), wildcard()
+            )
+            add = is_op("add")(conv2d_transpose, is_constant()) | is_op("add")(is_constant(), conv2d_transpose)
+            # return is_op("nn.relu")(add) | add
+            return add
         
         def only_out_fp16(node):
             #return False
@@ -486,6 +503,7 @@ class PulpCluster(ExecModule):
             
             PartitioningPattern(name="pulpd_conv2d_fp16",pattern=conv2d,additional_checks=pulpd_conv2d_fp16_check),
             PartitioningPattern(name="pulpd_conv2d_bias_fp16",pattern=conv2d_bias,additional_checks=pulpd_conv2d_fp16_check),
+            PartitioningPattern(name="pulpd_conv2d_bias_relu_fp16", pattern=conv2d_bias_relu, additional_checks=pulpd_conv2d_fp16_check),
             PartitioningPattern(name="pulpd_conv2d_bnorm_fp16",pattern=conv2d_bnorm,additional_checks=pulpd_conv2d_fp16_check),
             
             PartitioningPattern(name="pulpd_conv2d_grouped_fp16",pattern=conv2d,additional_checks=pulpd_conv2d_grouped_fp16_check),
@@ -495,6 +513,7 @@ class PulpCluster(ExecModule):
             #PartitioningPattern(name="avgpool2d_fp16",pattern=avgpool2d,additional_checks=only_out_fp16),
 
             PartitioningPattern(name="pulpd_batch_matmul_fp16",pattern=batch_matmul,additional_checks=pulpd_batch_matmul_fp16_check),
+            PartitioningPattern(name="pulpd_maxpool2d_fp16",pattern=maxpool2d,additional_checks=only_out_fp16),
 
             PartitioningPattern(name="pulpd_redmule_conv3d_fp16",pattern=conv3d_pt,additional_checks=only_out_fp16),
             # int8
@@ -504,5 +523,6 @@ class PulpCluster(ExecModule):
             PartitioningPattern(name="pulpd_conv2d",pattern=conv_pt_requant,additional_checks=only_std_convs),
             PartitioningPattern(name="pulpd_depthwise_conv2d",pattern=conv_pt_requant,additional_checks=only_dw_convs),
             PartitioningPattern(name="pulpd_pointwise_conv2d",pattern=conv_pt_requant,additional_checks=only_pw_convs),
-            PartitioningPattern(name="pulpd_add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8)
+            PartitioningPattern(name="pulpd_add_requant",pattern=add_pt_requant,additional_checks=only_out_uint8),
+            PartitioningPattern(name="conv2d_transpose", pattern=conv2d_transpose_pt, additional_checks=only_out_fp16),
         ]

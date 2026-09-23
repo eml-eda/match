@@ -264,20 +264,20 @@ class ConstraintProgrammingEngine(ScheduleEngine):
         """Identify dimensions that must not be tiled.
 
         We lock:
-        - input channels dimension of Conv2D input activation
+        - input channels dimension of Conv2D/Conv2DTranspose input activation
         - input channels dimension of Conv3D input activation
-        - kernel height/width dimensions of Conv2D weights
+        - kernel height/width dimensions of Conv2D/Conv2DTranspose weights
 
         Detection is semantic (op/tensor/layout based), not name based, so it works
         for generated names like `input_0_dim_3`, `const_0_dim_0`, etc.
         """
         fixed_dim_names = set()
 
-        # Prefer semantic extraction from parsed Conv2D/Conv3D ops.
+        # Prefer semantic extraction from parsed Conv2D/Conv2DTranspose/Conv3D ops.
         conv_ops = [
             op
             for op in self.match_node.ops.values()
-            if getattr(op, "op", "") in {"Conv2D", "Conv3D"}
+            if getattr(op, "op", "") in {"Conv2D", "Conv2DTranspose", "Conv3D"}
         ]
 
         for conv in conv_ops:
