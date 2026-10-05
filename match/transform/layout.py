@@ -13,6 +13,7 @@ LAYOUT_FROM_TO = {"data_layout":{"from":"NCHW","to":"NHWC"},"kernel_layout":{"fr
 desired_layouts = {
     "nn.conv1d": ["NWC", "OWI"],
     "nn.conv2d": ["NHWC", "HWIO"],
+    "nn.conv2d_transpose": ["NHWC", "HWIO"],
     "nn.conv3d": ["NDHWC", "DHWIO"],
     "nn.max_pool2d": ["NHWC"],
     "nn.avg_pool2d": ["NHWC"],

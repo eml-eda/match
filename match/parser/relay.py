@@ -30,7 +30,65 @@ class MatchRelayParser(MatchTVMParser):
             "subtract": self.visit_subtract,
             "rsqrt": self.visit_rsqrt,
             "nn.batch_matmul": self.visit_batch_matmul,
+            "nn.max_pool2d": self.visit_max_pool2d,
         }
+
+    def visit_max_pool2d(self, call, attrs, name):
+        inp_name, inp_tensor, _ = self.get_name_and_tensor_of_arg(call, call.args[0], 0)
+        self.update_if_intermediate_tensor(tensor=inp_tensor, name=inp_name)
+
+        ishape = [int(v) for v in call.args[0].checked_type.shape]
+        oshape = [int(v) for v in call.checked_type.shape]
+        layout = attrs.layout if attrs.layout != "" else "NCHW"
+        out_layout = attrs.out_layout if attrs.out_layout != "" else layout
+        inp_tensor.layout = layout
+        (i_n, i_n_dim), (i_c, i_c_dim), (i_h, i_h_dim), (i_w, i_w_dim) = self.get_io_from_layout(
+            layout, ishape, inp_tensor.dims
+        )
+        (o_n, _), (_, _), (o_h, o_h_dim), (o_w, o_w_dim) = self.get_io_from_layout(
+            out_layout, oshape, [None, None, None, None]
+        )
+        pool_size = tuple(int(v) for v in attrs.pool_size)
+        strides = tuple(int(v) for v in attrs.strides)
+        padding = tuple(int(v) for v in attrs.padding)
+        dilation = tuple(int(v) for v in attrs.dilation)
+
+        if strides[0] != 1 or dilation[0] != 1 or pool_size[0] != 1 or padding[0] != 0:
+            o_h_dim = MatchDim(name=name + "_out_h", size=o_h)
+            self.node_all_dims[o_h_dim.name] = o_h_dim
+            i_h_dim.dim_dependency = DimDependency(
+                idx_dependencies=[(o_h_dim, strides[0]), (pool_size[0], dilation[0]), (padding[0], -1)],
+                size_dependencies=[(o_h_dim, strides[0]), (pool_size[0], dilation[0]), (strides[0], -1)],
+            )
+        else:
+            o_h_dim = i_h_dim
+        if strides[1] != 1 or dilation[1] != 1 or pool_size[1] != 1 or padding[1] != 0:
+            o_w_dim = MatchDim(name=name + "_out_w", size=o_w)
+            self.node_all_dims[o_w_dim.name] = o_w_dim
+            i_w_dim.dim_dependency = DimDependency(
+                idx_dependencies=[(o_w_dim, strides[1]), (pool_size[1], dilation[1]), (padding[1], -1)],
+                size_dependencies=[(o_w_dim, strides[1]), (pool_size[1], dilation[1]), (strides[1], -1)],
+            )
+        else:
+            o_w_dim = i_w_dim
+
+        o_tensor = MatchTensor(
+            name=name,
+            dims=self.get_dim_arr_from_layout_and_nchw_arr(out_layout, [i_n_dim, i_c_dim, o_h_dim, o_w_dim]),
+            dtype=np.dtype(call.checked_type.dtype),
+            tensor_type="output",
+            layout=out_layout,
+        )
+        self.calls_tensors[name] = o_tensor
+        if i_n != o_n:
+            raise NotImplementedError(f"[RELAY PARSER] Input batch size is {i_n}, while output batch size is {o_n}")
+        op = ops.MatchOpMaxPool2D(
+            out_arr=[o_tensor], var_arr=[inp_tensor],
+            padding=padding, strides=strides, dilation=dilation,
+            pool_size=pool_size, data_layout=layout, out_layout=out_layout,
+            out_dtype=np.dtype(call.checked_type.dtype),
+        )
+        self.update_match_node(op=op, call=call, name=name)
 
     def visit_rsqrt(self, call, attrs, name):
         inp_name, inp_tensor, inp_type = self.get_name_and_tensor_of_arg(call, call.args[0], 0)

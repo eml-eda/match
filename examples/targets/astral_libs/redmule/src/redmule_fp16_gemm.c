@@ -22,7 +22,7 @@ void redmule_fp16_gemm_async(
     
     redmule_init();
 
-    redmule_config(x, w, yz, dim_m, dim_n, dim_k, REDMULE_OP_GEMM, REDMULE_OP_FMT_FP16); 
+    redmule_cfg(x, w, yz, dim_m, dim_n, dim_k, (uint8_t)GEMM, (uint8_t)Float16); 
 
     redmule_start();
 }

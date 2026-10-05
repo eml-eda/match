@@ -9,7 +9,7 @@
 #include "redmule/redmule_kernels.h"
 #include "redmule/redmule_defines.h"
 
-#define __PROFILE_REDMULE__ 0
+// #define __PROFILE_REDMULE__ 0
 #define __CONV_FILL_BIAS_WITH_IM2COL__ 1
 
 void redmule_fp16_conv3d_rd(

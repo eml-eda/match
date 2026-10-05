@@ -120,6 +120,16 @@ void pulp_fp16_avgpool2d(
     uint16_t stride_y 
 );
 
+void pulp_fp16_maxpool2d(
+    const fp16 *__restrict__ input,
+    fp16 *__restrict__ output,
+    uint16_t dim_ix, uint16_t dim_iy, uint16_t dim_ic,
+    uint16_t dim_ox, uint16_t dim_oy, uint16_t dim_oc,
+    uint16_t dim_fx, uint16_t dim_fy,
+    uint16_t pad_t, uint16_t pad_b, uint16_t pad_l, uint16_t pad_r,
+    uint16_t stride_x, uint16_t stride_y
+);
+
 void pulp_fp16_copy(
     const fp16 *input,
     fp16 *output,

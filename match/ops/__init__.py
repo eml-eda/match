@@ -19,3 +19,4 @@ from .sum import MatchOpSum
 from .instance_norm import MatchOpInstanceNorm
 from .subtract import MatchOpSubtract
 from .rsqrt import MatchOpRsqrt
+from .max_pool2d import MatchOpMaxPool2D
