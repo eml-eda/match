@@ -28,6 +28,13 @@ def cp_mem_planner_impl(planner, tensor_fixed_to_ext_mem: List[str] = []) -> Tup
     max_prefetch_lookback = int(getattr(target, "max_async_prefetch_lookback", 8)) if async_dma else 0
     # Bound async write-back lookahead separately (defaults to same value as prefetch lookback).
     max_writeback_lookahead = int(getattr(target, "max_async_writeback_lookahead", max_prefetch_lookback)) if async_dma else 0
+    # Without external memory every tensor stays in the host memory, and inputs/outputs are
+    # the caller's buffers used in place: they take no match_mem space and are never copied.
+    has_ext_mem = bool(getattr(target, "has_external_memory", True))
+    ext_mem_bytes = int(getattr(target, "external_memory_bytes", 0) or 0)
+
+    def _is_caller_buffer(tensor) -> bool:
+        return not has_ext_mem and (getattr(tensor, "is_input", False) or getattr(tensor, "is_output", False))
 
     def _alignment_of(tensor) -> int:
         if hasattr(tensor, "dtype") and hasattr(tensor.dtype, "itemsize") and tensor.dtype.itemsize:
@@ -49,7 +56,14 @@ def cp_mem_planner_impl(planner, tensor_fixed_to_ext_mem: List[str] = []) -> Tup
         off_chip = model.NewBoolVar(f"off_chip_{tensor.name}")
         model.Add(on_chip + off_chip == 1)
 
-        if tensor.name in tensor_fixed_to_ext_mem or tensor.num_bytes > max_mem:
+        if not has_ext_mem:
+            if tensor.num_bytes > max_mem and not _is_caller_buffer(tensor):
+                raise Exception(
+                    f"[MEM PLANNER] Tensor {tensor.name} ({tensor.num_bytes} B) does not fit the "
+                    f"{max_mem} B host memory and the target has no external memory"
+                )
+            model.Add(on_chip == 1)
+        elif tensor.name in tensor_fixed_to_ext_mem or tensor.num_bytes > max_mem:
             model.Add(on_chip == 0)
 
         start, end = _new_aligned_offset(tensor.name, tensor.num_bytes, alignment)
@@ -204,17 +218,25 @@ def cp_mem_planner_impl(planner, tensor_fixed_to_ext_mem: List[str] = []) -> Tup
                     "next_key": next_key,
                 }
 
+    caller_buffers_bytes = sum(t.num_bytes for t in sorted_mem_tensors if _is_caller_buffer(t))
+    if caller_buffers_bytes > max_mem:
+        raise Exception(
+            f"[MEM PLANNER] Inputs and outputs ({caller_buffers_bytes} B) do not fit the "
+            f"{max_mem} B host memory and the target has no external memory"
+        )
+
     max_mem_used = model.NewIntVar(0, max_mem, "max_mem_used")
-    # Reserve SoC space for on-chip constants (separate from match_mem).
-    if constant_tensors:
-        model.Add(max_mem_used + const_on_chip_bytes <= max_mem)
+    # Reserve SoC space for on-chip constants and caller-owned inputs/outputs (separate from match_mem).
+    if constant_tensors or caller_buffers_bytes:
+        model.Add(max_mem_used + const_on_chip_bytes + caller_buffers_bytes <= max_mem)
     for time_idx in calls:
         intervals = []
         cap_terms = []
 
         for tensor in sorted_mem_tensors:
-            if getattr(tensor, "is_constant", False):
-                # Constants are stored in a separate on-chip region when on-chip;
+            if getattr(tensor, "is_constant", False) or _is_caller_buffer(tensor):
+                # Constants are stored in a separate on-chip region when on-chip, and
+                # caller-owned inputs/outputs live in the caller's buffers;
                 # do not allocate match_mem offsets for them.
                 continue
             on_chip = tensor_vars[tensor]["on_chip"]
@@ -299,10 +321,12 @@ def cp_mem_planner_impl(planner, tensor_fixed_to_ext_mem: List[str] = []) -> Tup
     ]
     ext_mem_used = model.NewIntVar(0, sum(t.num_bytes for t in ext_mem_candidates), "ext_mem_used")
     model.Add(ext_mem_used == sum(tensor_vars[t]["off_chip"] * t.num_bytes for t in ext_mem_candidates))
+    if has_ext_mem and ext_mem_bytes > 0:
+        model.Add(ext_mem_used <= ext_mem_bytes)
 
     compact_terms = []
     for tensor in sorted_mem_tensors:
-        if getattr(tensor, "is_constant", False):
+        if getattr(tensor, "is_constant", False) or _is_caller_buffer(tensor):
             continue
         start = tensor_vars[tensor]["start"]
         on_chip = tensor_vars[tensor]["on_chip"]
@@ -445,6 +469,11 @@ def cp_mem_planner_impl(planner, tensor_fixed_to_ext_mem: List[str] = []) -> Tup
 
         is_on_chip = solver.Value(tensor_vars[tensor]["on_chip"]) == 1
         if is_on_chip:
+            if _is_caller_buffer(tensor):
+                # Used in place from the caller's buffer (<name>_pt), not in match_mem.
+                tensor.stored_in_external_memory = False
+                tensor.mem_offset = -1
+                continue
             if getattr(tensor, "is_constant", False):
                 # On-chip constants live in the params area, not match_mem.
                 tensor.stored_in_external_memory = False

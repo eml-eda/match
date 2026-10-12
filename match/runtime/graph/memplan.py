@@ -244,20 +244,42 @@ class MatchMemoryPlanner:
         from match.runtime.graph.memplan_cp import cp_mem_planner_impl
         return cp_mem_planner_impl(self, tensor_fixed_to_ext_mem)
 
+    def check_external_memory(self, ext_mem_needed: int):
+        """Make sure the plan only uses the external memory the target actually has"""
+        has_ext_mem = getattr(self.target, "has_external_memory", True)
+        ext_mem_bytes = getattr(self.target, "external_memory_bytes", 0) or 0
+        if not has_ext_mem:
+            off_chip = [
+                t.name for t in self.mem_tensors + self.extra_dynamic_buffers
+                if t.stored_in_external_memory or t.load_from_ext_mem_at or t.move_temp_to_ext_mem
+            ]
+            if ext_mem_needed > 0 or off_chip:
+                raise Exception(
+                    f"[MEM PLANNER] The target has no external memory but the plan needs {ext_mem_needed} B "
+                    f"off-chip (tensors {off_chip}): the model does not fit the {self.available_soc_bytes} B host memory"
+                )
+        elif ext_mem_bytes > 0 and ext_mem_needed > ext_mem_bytes:
+            raise Exception(
+                f"[MEM PLANNER] The plan needs {ext_mem_needed} B of external memory, "
+                f"the target has only {ext_mem_bytes} B"
+            )
+
     def generate(self):
         # use only SoC memory if possible, otherwise use external memory
         try:
             if self.algorithm.lower()=="match":
-                return self.match_mem_planner_impl(
+                plan = self.match_mem_planner_impl(
                     # tensor_fixed_to_ext_mem=[tensor.name for tensor in self.mem_tensors if\
                     #                          tensor.is_output\
                     #                             or tensor.is_input or tensor.is_constant
                     # ]
                 )
             elif self.algorithm.lower()=="cp":
-                return self.cp_mem_planner_impl()
+                plan = self.cp_mem_planner_impl()
             else:
                 raise Exception(f"[MEM PLANNER] Algorithm {self.algorithm} not implemented")
+            self.check_external_memory(ext_mem_needed=plan[1])
+            return plan
         except Exception as exc:
             print(f"[MEM PLANNER] Error during memory planner {exc}")
             raise Exception(f"[MEM PLANNER] Error during memory planner {exc}")

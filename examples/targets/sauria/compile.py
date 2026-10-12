@@ -12,11 +12,11 @@ import random
 from astral import Astral
 
 __HOST_ONLY__ = False
-
+__USE_2D_MODEL__ = False
 # ONNX_FILE_PATH = "/home/moyne/phd/aicomp/match/test/models/anomaly_detection.onnx"
-ONNX_FILE_PATH = "./isolde_net/isolde.onnx"
+ONNX_FILE_PATH = f"./isolde_net/isolde{'_2d' if __USE_2D_MODEL__ else ''}.onnx"
 INPUT_FILE_PATH ="./isolde_net/features/input_quantizer.txt"
-OUTPUT_DIR_PATH = "output" + ("_host" if __HOST_ONLY__ else "_sauria")
+OUTPUT_DIR_PATH = "output" + ("_host" if __HOST_ONLY__ else "_sauria") + ("_2d" if __USE_2D_MODEL__ else "")
 
 relay_mod, relay_params = match.get_relay_network(
     filename = ONNX_FILE_PATH
@@ -29,10 +29,10 @@ match_model = Model(
     default_inputs = get_default_inputs(mod=relay_mod, params=relay_params, input_files=[
         INPUT_FILE_PATH
     ]),
-    debug = False,
-    debug_fallback = False,
-    profile = False,
-    profile_fallback = False,
+    debug = True,
+    debug_fallback = True,
+    profile = True,
+    profile_fallback = True,
 )
 
 target = Astral()

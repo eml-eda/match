@@ -2,11 +2,21 @@ import os
 from sauria import Sauria
 from match.target.memory_inst import MemoryInst
 from match.target.target import MatchTarget
-from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM, RemoveLayoutTransformPass
+from match.transform.layout import MatchLayoutNCHWtoNHWC, MatchLayoutNCHWtoNHWCTVM, RemoveLayoutTransformPass, desired_layouts
 from match.transform.requant import MatchRequantRewriter
 from tvm import relay
 
 __ASTRAL_DRAM_KB__ = 16*1024
+
+# SAURIA runs conv3d on NCDHW activations and IDHWO weights, conv2d on NCHW activations
+# and IHWO weights. The weights must reach MATCH as OIDHW / OIHW: its parser doesn't know
+# IDHWO / IHWO (it would read the first dim as O), and Sauria.update_constants transposes
+# them after parsing.
+AstralLayoutTransform = relay.transform.ConvertLayout({
+    **desired_layouts,
+    "nn.conv2d": ["NCHW", "OIHW"],
+    "nn.conv3d": ["NCDHW", "OIDHW"],
+})
 
 class Astral(MatchTarget):
     def __init__(self):
@@ -29,7 +39,7 @@ class Astral(MatchTarget):
         self.params_off_chip_file = False
 
     def set_paths(self):
-        self.makefile_path = os.path.dirname(__file__)+"/../isolde/config/Makefile"
+        self.makefile_path = os.path.dirname(__file__)+"/Makefile"
         self.other_files_to_copy = [
             os.path.dirname(__file__)+"/../isolde/config/link_pulpd.ld",
             os.path.dirname(__file__)+"/../isolde/config/elf2payload.py",
@@ -70,6 +80,8 @@ class Astral(MatchTarget):
         self.timer_start_fn = "carfield_timer_start"
         self.timer_stop_fn = "carfield_timer_stop"
         self.fix_io_tensors_in_ext_mem = False
+        # __astral_dram__ is the only memory: no off-chip copies of inputs/outputs/intermediates
+        self.has_external_memory = False
         # wait
         self.wait_eoc = "carfield_wait_eoc"
         self.wait_async_off_chip_transfer_fn = "carfield_wait_dma"
@@ -77,7 +89,7 @@ class Astral(MatchTarget):
     def network_transformations(self, opts):
         return [
             ("requant", MatchRequantRewriter()),
-            # ("layout", MatchLayoutNCHWtoNHWCTVM),
+            ("layout", AstralLayoutTransform),
             # ("laybatchdense", RemoveLayoutTransformPass),
             ("folded", relay.transform.FoldConstant()),
         ]

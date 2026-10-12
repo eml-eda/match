@@ -417,12 +417,12 @@ def sanitize_model_to_int32(model_path, new_model_path):
     with open(new_model_path, "wb") as new_f:
         onnx.save(onnx_model,new_f)
 
-def sanitize_model_to_uint8(model_path, new_model_path):
+def sanitize_model_to_int8(model_path, new_model_path):
     onnx_model = onnx.load(model_path)
     
-    onnx_update_inputs_to(onnx_model, np.dtype("uint8"))
+    onnx_update_inputs_to(onnx_model, np.dtype("int8"))
     onnx_update_outputs_to(onnx_model, np.dtype("int32"))
-    onnx_update_nodes(onnx_model, np.dtype("uint8"))
+    onnx_update_nodes(onnx_model, np.dtype("int8"))
     
     with open(new_model_path, "wb") as new_f:
         onnx.save(onnx_model,new_f)
@@ -452,10 +452,10 @@ def sanitize_model_multiple_outputs(model_path, new_model_path):
         onnx.save(onnx_model,new_f)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Convert a model to int32 or uint8")
+    parser = argparse.ArgumentParser(description="Convert a model to int32 or int8")
     parser.add_argument("--model_name", type=str, help="Name of the model")
     parser.add_argument("--new_model_name", type=str, help="Name of the new model")
-    parser.add_argument("--uint8", action="store_true", help="Convert to uint8")
+    parser.add_argument("--int8", action="store_true", help="Convert to int8")
     parser.add_argument("--fix_multiple_outputs", action="store_true", help="Fix only the multiple outputs issue")
     parser.add_argument("--remove_first_unsqueeze", action="store_true", help="Remove the first Unsqueeze node if present")
     parser.add_argument("--merge_pad_with_next_op", action="store_true", help="Merge Pad with next op if present")
@@ -472,8 +472,8 @@ if __name__ == "__main__":
         remove_first_unsqueeze(os.path.dirname(__file__)+"/"+args.model_name+".onnx", os.path.dirname(__file__)+"/"+args.new_model_name+".onnx")
     elif args.fix_multiple_outputs:
         sanitize_model_multiple_outputs(os.path.dirname(__file__)+"/"+args.model_name+".onnx", os.path.dirname(__file__)+"/"+args.new_model_name+".onnx")
-    elif args.uint8:
-        sanitize_model_to_uint8(os.path.dirname(__file__)+"/"+args.model_name+".onnx", os.path.dirname(__file__)+"/"+args.new_model_name+".onnx")
+    elif args.int8:
+        sanitize_model_to_int8(os.path.dirname(__file__)+"/"+args.model_name+".onnx", os.path.dirname(__file__)+"/"+args.new_model_name+".onnx")
     elif args.lift_1d_to_2d_height:
         lift_onnx_1d_to_2d(os.path.dirname(__file__)+"/"+args.model_name+".onnx", os.path.dirname(__file__)+"/"+args.new_model_name+".onnx", mode="height")
     elif args.lift_1d_to_2d_width:

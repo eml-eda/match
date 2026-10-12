@@ -82,12 +82,34 @@ class Sauria(ExecModule):
         return computational_apis
 
     def platform_apis_def(self, platform_apis = PlatformApis(), pattern_name: str="conv2d"):
-        platform_apis.init_platform = "__init_sauria__"
+        # platform_apis.init_platform = "__init_sauria__"
         return platform_apis
 
+    def update_constants(self, match_node = None, pattern_name = "conv2d"):
+        def transpose_constant(w_tensor, shape):
+            w_tensor.data = w_tensor.data.transpose(shape)
+            new_dims = list()
+            for dim_idx in shape:
+                new_dims.append(w_tensor.dims[dim_idx])
+            w_tensor.dims = new_dims
+
+        for w_tensor in match_node.const_tensors.values():
+            if w_tensor.name != "const_0":
+                continue
+            if w_tensor.layout == "OIDHW":
+                print(f"[Sauria] Transposing conv3d weights from OIDHW to IDHWO")
+                transpose_constant(w_tensor, (1, 2, 3, 4, 0))
+                w_tensor.layout = "IDHWO"
+                match_node.ops["conv3d"].kernel_layout = "IDHWO"
+            elif w_tensor.layout == "OIHW":
+                print(f"[Sauria] Transposing conv2d weights from OIHW to IHWO")
+                transpose_constant(w_tensor, (1, 2, 3, 0))
+                w_tensor.layout = "IHWO"
+                match_node.ops["conv2d"].kernel_layout = "IHWO"
+        return
+    
     def partitioning_patterns(self):
         def dense_pt_requant():
-            """Create pattern for conv2D with optional fused relu."""
             dense = is_op("nn.dense")(
                 wildcard(), wildcard()
             )
@@ -100,8 +122,13 @@ class Sauria(ExecModule):
             cast = is_op("cast")(clip)
             return cast
 
-        def conv3d_pt_requant():
-            """Create pattern for conv2D with optional fused relu."""
+        def __conv3d_pt__():
+            conv3d = is_op("nn.conv3d")(
+                wildcard(), wildcard()
+            )
+            return is_op("cast")(conv3d)
+
+        def __conv3d_pt_requant__():
             conv3d = is_op("nn.conv3d")(
                 wildcard(), wildcard()
             )
@@ -113,19 +140,53 @@ class Sauria(ExecModule):
             clip = is_op("clip")(right_shift)
             cast = is_op("cast")(clip)
             return cast
+
+        def __conv3d_pt_fused_mul_add_shift_clip__():
+            conv3d = is_op("nn.conv3d")(
+                wildcard(), wildcard()
+            )
+            conv3d = is_op("cast")(conv3d) | conv3d
+            bias_add = is_op("nn.bias_add")(conv3d, wildcard()) | is_op("add")(conv3d, wildcard())
+            scale = is_op("multiply")(conv3d, wildcard()) | is_op("multiply")(wildcard(), conv3d)
+            bias = is_op("add")(scale, wildcard()) | is_op("add")(wildcard(), scale)
+            right_shift = is_op("right_shift")(bias_add | bias, is_constant())
+            clip = is_op("clip")(right_shift)
+            return clip
+        
+        def __conv2d_pt__():
+            conv2d = is_op("nn.conv2d")(
+                wildcard(), wildcard()
+            )
+            return is_op("cast")(conv2d) 
         
         def only_out_uint8(node):
             return add_checks_get_first_op(node, "cast").attrs.dtype=="uint8"
 
-        return [
+        sauria_patterns_single_op = [
+            PartitioningPattern(
+                name = "sauria_conv2d",
+                pattern = __conv2d_pt__,
+            ),
+            PartitioningPattern(
+                name = "sauria_conv3d",
+                pattern = __conv3d_pt__,
+            ),
+            # this pattern works but its slower than conv3d_pt and the rest done on host so we don't use it for now
             # PartitioningPattern(
-            #     name = "sauria_dense_requant",
-            #     pattern = dense_pt_requant,
-            #     additional_checks = only_out_uint8,
+            #     name = "sauria_conv3d_fused_mul_add_shift_clip",
+            #     pattern = __conv3d_pt_fused_mul_add_shift_clip__,
             # ),
+        ]
+        sauria_patterns_fused_requant = [
+            PartitioningPattern(
+                name = "sauria_dense_requant",
+                pattern = dense_pt_requant,
+                additional_checks = only_out_uint8,
+            ),
             PartitioningPattern(
                 name = "sauria_conv3d_requant",
-                pattern = conv3d_pt_requant,
+                pattern = __conv3d_pt_requant__,
                 additional_checks = only_out_uint8,
             ),
         ]
+        return sauria_patterns_single_op

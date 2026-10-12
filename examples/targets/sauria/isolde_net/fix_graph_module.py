@@ -1,6 +1,15 @@
 import onnx
 from onnx import helper, numpy_helper, TensorProto
-import numpy as np
+from onnx import shape_inference
+
+
+def get_static_dimension(graph, tensor_name, axis):
+    for value_info in list(graph.input) + list(graph.value_info) + list(graph.output):
+        if value_info.name == tensor_name:
+            dimensions = value_info.type.tensor_type.shape.dim
+            if axis < len(dimensions) and dimensions[axis].dim_value:
+                return dimensions[axis].dim_value
+    return None
 
 def extract_conv3d_weights(model_graph, weight_name, bias_name=None):
     """Retrieves weight and bias numpy arrays from graph initializers."""
@@ -28,15 +37,19 @@ def extract_conv3d_weights(model_graph, weight_name, bias_name=None):
 
 def convert_conv3d_to_conv2d_with_pad(onnx_model_path, output_model_path):
     model = onnx.load(onnx_model_path)
+    model = shape_inference.infer_shapes(model)
     graph = model.graph
 
     transformed_nodes = []
     new_initializers = []
+    relocated_cast_outputs = set()
     
     node_id = 0
 
     for node in graph.node:
         if node.op_type != "Conv":
+            if node.op_type == "Cast" and node.output[0] in relocated_cast_outputs:
+                continue
             transformed_nodes.append(node)
             continue
 
@@ -51,6 +64,27 @@ def convert_conv3d_to_conv2d_with_pad(onnx_model_path, output_model_path):
         weight_name = node.input[1]
         bias_name = node.input[2] if len(node.input) > 2 else None
         output_name = node.output[0]
+
+        original_cast = next(
+            (
+                candidate
+                for candidate in graph.node
+                if candidate.op_type == "Cast"
+                and candidate.input
+                and candidate.input[0] == output_name
+            ),
+            None,
+        )
+        cast_name = "FAKE_CAST_TVM_OUT_DTYPE"
+        cast_type = TensorProto.INT32
+        final_output_name = output_name
+        if original_cast is not None:
+            relocated_cast_outputs.add(original_cast.output[0])
+            final_output_name = original_cast.output[0]
+            for attribute in original_cast.attribute:
+                if attribute.name == "to":
+                    cast_type = attribute.i
+                    break
 
         # Retrieve weight array from initializers
         weights, bias, _ = extract_conv3d_weights(graph, weight_name, bias_name)
@@ -90,107 +124,138 @@ def convert_conv3d_to_conv2d_with_pad(onnx_model_path, output_model_path):
         replacement_nodes.append(pad_node)
 
         # ------------------------------------------------------------------
-        # Step 2: Slice along Depth (D) and Apply 2D Convolutions
+        # Step 2: Reconstruct every output-depth position with Conv2D slices.
         # ------------------------------------------------------------------
-        kd_outputs = []
+        input_depth = get_static_dimension(graph, input_name, 2)
+        if input_depth is None:
+            raise ValueError(f"Conv3D input depth is dynamic: {input_name}")
+        padded_depth = input_depth + pad_d_start + pad_d_end
+        output_depth = (
+            (padded_depth - dil_d * (kd - 1) - 1) // stride_d
+        ) + 1
+        depth_outputs = []
 
-        for k in range(kd):
-            # Extract 2D weight slice at index k -> Shape: (out_c, in_c, kh, kw)
-            w2d_slice = weights[:, :, k, :, :]
-            w2d_name = f"{weight_name}_slice_{k}_{node_id}"
-            w2d_init = numpy_helper.from_array(w2d_slice, name=w2d_name)
-            new_initializers.append(w2d_init)
+        for output_depth_index in range(output_depth):
+            kd_outputs = []
+            for k in range(kd):
+                w2d_slice = weights[:, :, k, :, :]
+                w2d_name = f"{weight_name}_slice_{k}_{node_id}"
+                if not any(init.name == w2d_name for init in new_initializers):
+                    new_initializers.append(numpy_helper.from_array(w2d_slice, name=w2d_name))
 
-            # Slice the 5D input across depth for kernel position k
-            sliced_input_name = f"{padded_input_name}_slice_k{k}_{node_id}"
+                sliced_input_name = (
+                    f"{padded_input_name}_out{output_depth_index}_k{k}"
+                )
+                start = output_depth_index * stride_d + k * dil_d
+                start_init = helper.make_tensor(
+                    f"start_{node_id}_{output_depth_index}_{k}",
+                    TensorProto.INT64,
+                    [1],
+                    [start],
+                )
+                end_init = helper.make_tensor(
+                    f"end_{node_id}_{output_depth_index}_{k}",
+                    TensorProto.INT64,
+                    [1],
+                    [start + 1],
+                )
+                axes_init = helper.make_tensor(
+                    f"axes_{node_id}_{output_depth_index}_{k}",
+                    TensorProto.INT64,
+                    [1],
+                    [2],
+                )
+                new_initializers.extend([start_init, end_init, axes_init])
+                replacement_nodes.append(helper.make_node(
+                    "Slice",
+                    inputs=[padded_input_name, start_init.name, end_init.name, axes_init.name],
+                    outputs=[sliced_input_name],
+                    name=f"Slice_D_{node_id}_{output_depth_index}_{k}",
+                ))
 
-            # Slice in this model uses opset-10 form: starts/ends/axes are tensor inputs.
-            start_init = helper.make_tensor(
-                f"start_{k}_{node_id}", TensorProto.INT64, [1], [k * dil_d]
-            )
-            end_init = helper.make_tensor(
-                f"end_{k}_{node_id}", TensorProto.INT64, [1], [(k * dil_d) + 1]
-            )
-            axes_init = helper.make_tensor(
-                f"axes_{k}_{node_id}", TensorProto.INT64, [1], [2]
-            )
-            new_initializers.extend([start_init, end_init, axes_init])
+                squeezed_input_name = f"{sliced_input_name}_4d"
+                replacement_nodes.append(helper.make_node(
+                    "Squeeze",
+                    inputs=[sliced_input_name],
+                    outputs=[squeezed_input_name],
+                    axes=[2],
+                    name=f"Squeeze_D_{node_id}_{output_depth_index}_{k}",
+                ))
 
-            slice_node = helper.make_node(
-                "Slice",
-                inputs=[padded_input_name, start_init.name, end_init.name, axes_init.name],
-                outputs=[sliced_input_name],
-                name=f"Slice_D_{k}_{node_id}"
-            )
-            replacement_nodes.append(slice_node)
+                conv2d_out_name = f"conv2d_out_{node_id}_{output_depth_index}_{k}"
+                replacement_nodes.append(helper.make_node(
+                    "Conv",
+                    inputs=[squeezed_input_name, w2d_name],
+                    outputs=[conv2d_out_name],
+                    strides=[stride_h, stride_w],
+                    pads=[0, 0, 0, 0],
+                    dilations=[dil_h, dil_w],
+                    name=f"Conv2D_{node_id}_{output_depth_index}_{k}",
+                ))
 
-            # Reshape 5D (N, C, 1, H, W) -> 4D (N, C, H, W) for Conv2D execution
-            squeezed_input_name = f"{sliced_input_name}_4d"
-            
-            squeeze_node = helper.make_node(
-                "Squeeze",
-                inputs=[sliced_input_name],
-                outputs=[squeezed_input_name],
+                casted_conv2d_out_name = f"{conv2d_out_name}_{cast_name}"
+                replacement_nodes.append(helper.make_node(
+                    "Cast",
+                    inputs=[conv2d_out_name],
+                    outputs=[casted_conv2d_out_name],
+                    to=cast_type,
+                    name=f"{cast_name}_{node_id}_{output_depth_index}_{k}",
+                ))
+                kd_outputs.append(casted_conv2d_out_name)
+
+            summed_conv_name = f"conv_summed_{node_id}_{output_depth_index}"
+            if len(kd_outputs) == 1:
+                summed_conv_name = kd_outputs[0]
+            else:
+                replacement_nodes.append(helper.make_node(
+                    "Sum",
+                    inputs=kd_outputs,
+                    outputs=[summed_conv_name],
+                    name=f"Sum2D_Slices_{node_id}_{output_depth_index}",
+                ))
+
+            if bias is not None:
+                bias_2d_name = f"{bias_name}_reshaped_{node_id}"
+                if not any(init.name == bias_2d_name for init in new_initializers):
+                    bias_init = numpy_helper.from_array(
+                        bias.reshape(1, -1, 1, 1), name=bias_2d_name
+                    )
+                    new_initializers.append(bias_init)
+                biased_output_name = f"{summed_conv_name}_biased"
+                replacement_nodes.append(helper.make_node(
+                    "Add",
+                    inputs=[summed_conv_name, bias_2d_name],
+                    outputs=[biased_output_name],
+                    name=f"AddBias_{node_id}_{output_depth_index}",
+                ))
+            else:
+                biased_output_name = summed_conv_name
+
+            plane_name = f"{biased_output_name}_5d"
+            replacement_nodes.append(helper.make_node(
+                "Unsqueeze",
+                inputs=[biased_output_name],
+                outputs=[plane_name],
                 axes=[2],
-                name=f"Squeeze_D_{k}_{node_id}"
-            )
-            replacement_nodes.append(squeeze_node)
+                name=f"Unsqueeze_D_{node_id}_{output_depth_index}",
+            ))
+            depth_outputs.append(plane_name)
 
-            # Apply Conv2D with spatial padding set to 0 (handled by explicit Pad node above)
-            conv2d_out_name = f"conv2d_out_k{k}_{node_id}"
-            conv2d_node = helper.make_node(
-                "Conv",
-                inputs=[squeezed_input_name, w2d_name],  # No bias added here (added at end)
-                outputs=[conv2d_out_name],
-                strides=[stride_h, stride_w],
-                pads=[0, 0, 0, 0],  # 2D Padding zeroed out
-                dilations=[dil_h, dil_w],
-                name=f"Conv2D_k{k}_{node_id}"
-            )
-            replacement_nodes.append(conv2d_node)
-            kd_outputs.append(conv2d_out_name)
-
-        # ------------------------------------------------------------------
-        # Step 3: Sum sub-convolution results and add Bias
-        # ------------------------------------------------------------------
-        summed_conv_name = f"conv_summed_{node_id}"
-        if len(kd_outputs) == 1:
-            summed_conv_name = kd_outputs[0]
+        if len(depth_outputs) == 1:
+            replacement_nodes.append(helper.make_node(
+                "Identity",
+                inputs=[depth_outputs[0]],
+                outputs=[final_output_name],
+                name=f"Conv3DToConv2DOutput_{node_id}",
+            ))
         else:
-            sum_node = helper.make_node(
-                "Sum",
-                inputs=kd_outputs,
-                outputs=[summed_conv_name],
-                name=f"Sum2D_Slices_{node_id}"
-            )
-            replacement_nodes.append(sum_node)
-
-        # Re-unsqueeze back to 5D (N, C, 1, H, W)
-        unsqueezed_out_name = f"{summed_conv_name}_5d"
-        unsqueeze_node = helper.make_node(
-            "Unsqueeze",
-            inputs=[summed_conv_name],
-            outputs=[unsqueezed_out_name if bias is not None else output_name],
-            axes=[2],
-            name=f"Unsqueeze_D_{node_id}"
-        )
-        replacement_nodes.append(unsqueeze_node)
-
-        # Add optional bias back to tensor
-        if bias is not None:
-            bias_2d_name = f"{bias_name}_reshaped_{node_id}"
-            # Reshape bias to (1, C, 1, 1, 1) for broadcasting over 5D output
-            bias_reshaped = bias.reshape(1, -1, 1, 1, 1)
-            bias_init = numpy_helper.from_array(bias_reshaped, name=bias_2d_name)
-            new_initializers.append(bias_init)
-
-            bias_add_node = helper.make_node(
-                "Add",
-                inputs=[unsqueezed_out_name, bias_2d_name],
-                outputs=[output_name],
-                name=f"AddBias_{node_id}"
-            )
-            replacement_nodes.append(bias_add_node)
+            replacement_nodes.append(helper.make_node(
+                "Concat",
+                inputs=depth_outputs,
+                outputs=[final_output_name],
+                axis=2,
+                name=f"ConcatDepth_{node_id}",
+            ))
 
         transformed_nodes.extend(replacement_nodes)
         node_id += 1
@@ -206,5 +271,5 @@ def convert_conv3d_to_conv2d_with_pad(onnx_model_path, output_model_path):
     onnx.save(model, output_model_path)
     print(f"Successfully transformed model saved to: {output_model_path}")
 
-# Run conversion
-convert_conv3d_to_conv2d_with_pad("GraphModule.onnx", "model_2d_padded.onnx")
+if __name__ == "__main__":
+    convert_conv3d_to_conv2d_with_pad("GraphModule.onnx", "model_2d_padded.onnx")

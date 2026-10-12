@@ -55,7 +55,7 @@ extern volatile MatchCtx ${name}_ctx_;
 extern volatile MatchCtx* ${name}_ctx;
 
 % for dep_dim in match_node.dependent_dims:
-inline void ${name}_update_${dep_dim.name}(){
+static inline void ${name}_update_${dep_dim.name}(){
     % if dep_dim.dim_dependency.is_idx_floating:
     float idx_float_val_ = 
     % else:
@@ -90,7 +90,7 @@ inline void ${name}_update_${dep_dim.name}(){
     % for loop_idx,lp in enumerate(block.loops):
         extern volatile int ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter;
 
-        inline void ${name}_block_${block_idx}_loop_${lp.name}_set(){
+        static inline void ${name}_block_${block_idx}_loop_${lp.name}_set(){
             ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
             ${name}_${lp.dim.name}->curr_size = ${lp.step};
             ${name}_${lp.dim.name}->curr_max_size = ${lp.step};
@@ -98,7 +98,7 @@ inline void ${name}_update_${dep_dim.name}(){
             ${name}_update_${dep_dim}();
             % endfor
         }
-        inline int ${name}_block_${block_idx}_loop_${lp.name}_reset(){
+        static inline int ${name}_block_${block_idx}_loop_${lp.name}_reset(){
             // ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter = 0;
             ${name}_${lp.dim.name}->global_idx -= ${lp.step*lp.size};
             % for dep_dim in [dim.name for dim in match_node.dims.values() if dim.dim_dependency is not None and lp.dim in dim.dim_dependency.dependent_on_dims]:
@@ -106,7 +106,7 @@ inline void ${name}_update_${dep_dim.name}(){
             % endfor
             return 0;
         }
-        inline void ${name}_block_${block_idx}_loop_${lp.name}_update(){
+        static inline void ${name}_block_${block_idx}_loop_${lp.name}_update(){
             ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter += 1;
             ${name}_${lp.dim.name}->global_idx += ${lp.step};
             // update the current size of the dim
@@ -116,7 +116,7 @@ inline void ${name}_update_${dep_dim.name}(){
             ${name}_update_${dep_dim}();
             % endfor
         }
-        inline int ${name}_block_${block_idx}_loop_${lp.name}_end(){
+        static inline int ${name}_block_${block_idx}_loop_${lp.name}_end(){
             return ${name}_block_${block_idx}_loop_${block.loops[loop_idx].name}_iter < ${lp.size};
         }
 

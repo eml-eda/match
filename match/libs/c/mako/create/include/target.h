@@ -17,10 +17,21 @@
 % endfor
 
 % for exec_module in target.exec_modules:
-    % for mem_idx,memory in enumerate(exec_module.module_memories()[::-1]):
+    <%
+        # A tensor's tiles / pts arrays have one entry per memory of the hierarchy of its
+        # tensor type (Target.memory_hierarchy_for_pt), so a memory index is its level in
+        # the hierarchy of the tensor types it serves, not its position among all memories
+        module_memories = exec_module.module_memories()
+        def mem_level(memory):
+            return max(
+                len(target.host_memories()) + [m for m in module_memories if t_type in m.tensor_types][::-1].index(memory)
+                for t_type in memory.tensor_types
+            )
+    %>
+    % for memory in module_memories[::-1]:
         #ifndef __${memory.name.upper()}__
         #define __${memory.name.upper()}__
-        #define ${memory.name} ${mem_idx+len(target.host_memories())}
+        #define ${memory.name} ${mem_level(memory)}
         #endif
     % endfor
 

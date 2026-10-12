@@ -162,6 +162,12 @@ class MatchTarget(ABC):
         self.timer_start_fn = ""
         self.timer_stop_fn = ""
         self.fix_io_tensors_in_ext_mem = True
+        # External (off-chip) memory available to the graph runtime besides the host memory.
+        # Without it every tensor must stay in the host memory: inputs and outputs are used
+        # in place from the caller's buffers and nothing is ever moved off-chip.
+        self.has_external_memory = True
+        # Size of the external memory in bytes, 0 if unknown/unbounded
+        self.external_memory_bytes = 0
         for exec_module in exec_modules:
             self.add_exec_module(exec_module)
             self.exec_modules_dict[exec_module.name] = exec_module

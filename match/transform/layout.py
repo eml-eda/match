@@ -14,7 +14,7 @@ desired_layouts = {
     "nn.conv1d": ["NWC", "OWI"],
     "nn.conv2d": ["NHWC", "HWIO"],
     "nn.conv2d_transpose": ["NHWC", "HWIO"],
-    "nn.conv3d": ["NDHWC", "DHWIO"],
+    "nn.conv3d": ["NCDHW", "DIHWO"],
     "nn.max_pool2d": ["NHWC"],
     "nn.avg_pool2d": ["NHWC"],
     "nn.global_max_pool2d": ["NHWC"],

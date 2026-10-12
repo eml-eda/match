@@ -25,3 +25,11 @@ To view the application output you can check the screen result with:
 ```
 sudo screen /dev/serial/by-id/usb-Silicon_Labs_CP2105_Dual_USB_to_UART_Bridge_Controller_0109106A-if01-port0 115200
 ```
+
+## Dump Layer Outputs
+
+To run the FP16 ONNX model and save every node output in the selected format:
+```
+python3 dump_layer_outputs.py space_model.onnx space_input.txt space_layer_outputs --output-format txt
+```
+Use `--output-format npy`, `--output-format txt`, or `--output-format hex`. Rank-4 outputs are written in NHWC order. The output directory also contains `metadata.json`, which maps each layer name to its output file, shape, and dtype.

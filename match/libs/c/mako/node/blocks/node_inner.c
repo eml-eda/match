@@ -80,18 +80,20 @@
             void* ${"var_" if tensor.tensor_type=="var" else "out_"}${tensor.name}_pt = (void*) real_args[${tensor_cnt}];\
             <% tensor_cnt += 1 %>
         % endfor
-        % for const_tensor in schedule.tensors.values():
-            % if const_tensor.tensor_type=="const":
-                % if exec_module.separate_build:
-                void* ${name}_${const_tensor.name}_pt = (void*) real_args[${tensor_cnt}];\
-                <% tensor_cnt += 1 %>
-                % else:
-                void* ${name}_${const_tensor.name}_pt = ${name}_${const_tensor.name}_data;\
-                % endif
-            % endif
-        % endfor
+        
     % endif
-
+    
+    ## Const tensor pts must be initialized both in offloaded and non-offloaded execution
+    % for const_tensor in schedule.tensors.values():
+        % if const_tensor.tensor_type=="const":
+            % if exec_module.separate_build:
+            void* ${name}_${const_tensor.name}_pt = (void*) real_args[${tensor_cnt}];\
+            <% tensor_cnt += 1 %>
+            % else:
+            void* ${name}_${const_tensor.name}_pt = ${name}_${const_tensor.name}_data;\
+            % endif
+        % endif
+    % endfor
     MatchCtx* ctx = ${name}_ctx;
 
     <%self:smp_primary_core_region_begin/>
@@ -380,7 +382,7 @@
     <%self:smp_barrier/>
 
     % if platform_apis.init_platform=="":
-        return;
+        return 0;
     % endif
     }
 
